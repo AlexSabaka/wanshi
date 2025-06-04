@@ -38,6 +38,7 @@
     "pdfreader": "^3.0.7",
     "pretty-format": "^29.7.0",
     "readline-sync": "^1.4.10",
+    "tslog": "^4.9.3",
     "typescript": "^5.6.2",
     "zod": "^3.25.48",
     "zod-to-json-schema": "^3.24.5"

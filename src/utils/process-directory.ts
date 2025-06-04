@@ -1,21 +1,19 @@
 import * as fs from "fs";
-import { glob } from "glob";
 import * as path from "path";
-import {
-  KnowledgeGraph,
-  KnowledgeGraphConverter,
-  ProcessingOptions,
-} from "./types";
-import { default_system_prompt } from "./system_prompt_template_v2";
-import { Logger } from "./Logger";
+import { glob } from "glob";
+import { KnowledgeGraphConverter } from "./KnowledgeGraphConverter";
+import { KnowledgeGraph } from "../types/KnowledgeGraph";
+import { ProcessingOptions } from "../types/ProcessingOptions";
+import { default_system_prompt } from "../prompts/system-prompt-template-v3";
 import { PdfReader } from "pdfreader";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import ollama, { ChatResponse } from "ollama";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { mergeKnowledgeGraphs } from "./mergeKnowledgeGraphs";
-import { user_prompt_template } from "./user_prompt_template";
-import { KnowledgeGraphSearch } from "./knowledge_search";
+import { mergeKnowledgeGraphs } from "./knowledge-merging";
+import { user_prompt_template } from "../prompts/user-prompt-template";
+import { KnowledgeGraphSearch } from "./KnowledgeGraphSearch";
+import { logger } from "../Logger";
 
 const KnowledgeGraphSchema = z.object({
   entities: z.array(
@@ -45,7 +43,7 @@ async function readImageFile(filePath: string): Promise<Buffer> {
   return fs.readFileSync(filePath);
 }
 
-async function readPdfFile(filePath: string, logger: Logger): Promise<string> {
+async function readPdfFile(filePath: string): Promise<string> {
   try {
     new PdfReader().parseFileItems(filePath, (err, item) => {
       if (err) logger.error("error:" + err);
@@ -76,17 +74,14 @@ function getFileType(filePath: string): "text" | "image" | "pdf" | "unknown" {
 
 export async function generateKnowledgeGraph(
   content: string,
-  systemPrompt: string,
-  model: string,
-  host: string,
-  images?: Buffer[],
-  logger?: Logger
+  options: ProcessingOptions,
+  images?: Buffer[]
 ): Promise<KnowledgeGraph> {
   try {
     const messages: any[] = [
       {
         role: "system",
-        content: systemPrompt,
+        content: options.system,
       },
       {
         role: "user",
@@ -106,17 +101,18 @@ export async function generateKnowledgeGraph(
     }
 
     const response = await ollama.chat({
-      model: model,
+      model: options.model,
       messages: messages,
       format: zodToJsonSchema(KnowledgeGraphSchema),
       options: {
-        temperature: 0.1,
-        num_ctx: 8192,
+        temperature: Number(options.temperature || 0.2), 
+        num_ctx: Number(options.contextLength || 8192), 
         // num_predict: 2048,
         // num_gpu: 4,
         // num_thread: 8,
         // use_mmap: true,
-        // seed: 1234,
+        seed: Number(options.seed || NaN), 
+        repeat_penalty: Number(options.repeatPenalty || 0.6) 
       },
     });
 
@@ -130,22 +126,22 @@ export async function generateKnowledgeGraph(
 
     logger?.info(`Received LLM response stats: ${response_stats(response)}`);
 
-    let jsonResponse = response.message.content.trim();
-    logger?.debug(`Raw LLM response: ${jsonResponse}`);
+    let responseContent = response.message.content.trim();
+    logger?.debug(`Raw LLM response: ${responseContent}`);
 
-    if (jsonResponse.startsWith("```")) {
-      jsonResponse = jsonResponse.slice(
-        jsonResponse.indexOf("\n"),
-        jsonResponse.lastIndexOf("\n")
+    if (responseContent.startsWith("```")) {
+      responseContent = responseContent.slice(
+        responseContent.indexOf("\n"),
+        responseContent.lastIndexOf("\n")
       );
     }
 
     let parsed = undefined;
     try {
       // Parse JSON response
-      parsed = JSON.parse(jsonResponse);
+      parsed = JSON.parse(responseContent);
     } catch (err: any) {
-      fs.appendFileSync("./failed-responses.log", jsonResponse + "\n\n\n\n\n");
+      fs.appendFileSync("./failed-responses.log", responseContent + "\n\n\n\n\n");
       throw err;
     }
 
@@ -206,7 +202,6 @@ async function chunkText(
 // Updated processFile function with chunking support
 export async function processFile(
   filePath: string,
-  logger: Logger,
   chunkingOptions?: ChunkingOptions
 ): Promise<{ content: string; images?: Buffer[]; chunks?: ProcessedChunk[] }> {
   const fileType = getFileType(filePath);
@@ -228,7 +223,7 @@ export async function processFile(
       break;
 
     case "pdf":
-      baseResult = { content: await readPdfFile(filePath, logger) };
+      baseResult = { content: await readPdfFile(filePath) };
       break;
 
     default:
@@ -270,7 +265,6 @@ export async function processFile(
 export async function processDirectory(
   options: ProcessingOptions
 ): Promise<void> {
-  const logger = new Logger(options.logLevel, options.logFile, options.silent);
 
   // Set up chunking options
   const chunkingOptions: ChunkingOptions = {
@@ -304,12 +298,14 @@ export async function processDirectory(
 
     const knowledgeGraphs: KnowledgeGraph[] = [];
 
+    options.system ??= default_system_prompt(options.input, options.filter)
+
     // Process each file
     for (const file of files) {
       try {
         logger.info(`Processing: ${file}`);
 
-        const processedFile = await processFile(file, logger, chunkingOptions);
+        const processedFile = await processFile(file, chunkingOptions);
 
         if (
           !processedFile.content.trim() &&
@@ -321,9 +317,34 @@ export async function processDirectory(
 
         const searcher = new KnowledgeGraphSearch(
           options.embeddingsModel,
-          options.host,
-          logger
+          options.host
         );
+
+        const retrieve_and_generate = async (processedFile: any, file: string): Promise<KnowledgeGraph> => {
+          const context = options.enableRetrieval ?
+            await searcher.searchByFileContent(
+              processedFile.content,
+              file,
+              knowledgeGraphs,
+              { limit: options.retrievalLimit, includeObservations: true }
+            )
+            :
+            undefined;
+
+          const kg = await generateKnowledgeGraph(
+            user_prompt_template(file, processedFile, processedFile.chunkIndex + 1, context),
+            options,
+            processedFile.images
+          );
+
+          kg.entities.forEach((entity) => {
+              entity.files = [file];
+              entity.chunk = processedFile.chunkIndex + 1;
+              entity.totalChunks = processedFile.totalChunks;
+            });
+
+          return kg;
+        };
 
         // Process chunks if available, otherwise process the whole file
         if (processedFile.chunks && processedFile.chunks.length > 1) {
@@ -332,34 +353,8 @@ export async function processDirectory(
           );
 
           for (const chunk of processedFile.chunks) {
-            const context = await searcher.searchByFileContent(
-              chunk.content,
-              file,
-              knowledgeGraphs,
-              { limit: 5, includeObservations: true }
-            );
 
-            const kg = await generateKnowledgeGraph(
-              user_prompt_template(
-                file,
-                processedFile,
-                chunk.chunkIndex + 1,
-                context
-              ),
-              options.system ?? default_system_prompt(options.input),
-              options.model,
-              options.host,
-              chunk.images,
-              logger
-            );
-
-            // Add chunk metadata to entities
-            kg.entities.forEach((entity) => {
-              entity.files = [file];
-              entity.chunk = chunk.chunkIndex + 1;
-              entity.totalChunks = chunk.totalChunks;
-            });
-
+            const kg = await retrieve_and_generate(chunk, file);
             knowledgeGraphs.push(kg);
 
             // Write intermediate results for debugging
@@ -377,24 +372,8 @@ export async function processDirectory(
             );
           }
         } else {
-          const context = await searcher.searchByFileContent(
-            processedFile.content,
-            file,
-            knowledgeGraphs,
-            { limit: 5, includeObservations: true }
-          );
 
-          const kg = await generateKnowledgeGraph(
-            user_prompt_template(file, processedFile, undefined, context),
-            options.system ?? default_system_prompt(options.input),
-            options.model,
-            options.host,
-            processedFile.images,
-            logger
-          );
-
-          kg.entities.forEach((entity) => (entity.files = [file]));
-
+          const kg = await retrieve_and_generate(processedFile, file);
           knowledgeGraphs.push(kg);
 
           // Write intermediate results for debugging
@@ -418,8 +397,7 @@ export async function processDirectory(
       observationSimilarityThreshold:
         options.observationSimilarityThreshold ?? 0.8,
       model: options.embeddingsModel,
-      host: options.host,
-      logger,
+      host: options.host
     });
 
     // Save to output file

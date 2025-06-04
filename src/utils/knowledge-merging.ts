@@ -1,110 +1,17 @@
-import { KnowledgeGraph, Entity, Relation, MergeOptions } from "./types";
+import { MergeOptions } from "../types/MergeOptions";
+import { KnowledgeGraph, Entity, Relation } from "../types/KnowledgeGraph";
+import { logger } from "./../Logger";
 
-import ollama from "ollama";
-import { Logger } from "./Logger";
-
-// Calculate string similarity using Jaro-Winkler algorithm
-export function jaroWinklerSimilarity(s1: string, s2: string): number {
-  const s1Lower = s1.toLowerCase();
-  const s2Lower = s2.toLowerCase();
-
-  if (s1Lower === s2Lower) return 1.0;
-
-  const len1 = s1Lower.length;
-  const len2 = s2Lower.length;
-
-  if (len1 === 0 || len2 === 0) return 0.0;
-
-  const matchWindow = Math.floor(Math.max(len1, len2) / 2) - 1;
-  if (matchWindow < 0) return 0.0;
-
-  const s1Matches = new Array(len1).fill(false);
-  const s2Matches = new Array(len2).fill(false);
-
-  let matches = 0;
-  let transpositions = 0;
-
-  // Find matches
-  for (let i = 0; i < len1; i++) {
-    const start = Math.max(0, i - matchWindow);
-    const end = Math.min(i + matchWindow + 1, len2);
-
-    for (let j = start; j < end; j++) {
-      if (s2Matches[j] || s1Lower[i] !== s2Lower[j]) continue;
-      s1Matches[i] = s2Matches[j] = true;
-      matches++;
-      break;
-    }
-  }
-
-  if (matches === 0) return 0.0;
-
-  // Find transpositions
-  let k = 0;
-  for (let i = 0; i < len1; i++) {
-    if (!s1Matches[i]) continue;
-    while (!s2Matches[k]) k++;
-    if (s1Lower[i] !== s2Lower[k]) transpositions++;
-    k++;
-  }
-
-  const jaro =
-    (matches / len1 +
-      matches / len2 +
-      (matches - transpositions / 2) / matches) /
-    3;
-
-  // Winkler prefix bonus
-  let prefix = 0;
-  for (let i = 0; i < Math.min(len1, len2, 4); i++) {
-    if (s1Lower[i] === s2Lower[i]) prefix++;
-    else break;
-  }
-
-  return jaro + 0.1 * prefix * (1 - jaro);
-}
-
-// Get embedding for text using Ollama
-async function getEmbedding(
-  text: string,
-  model: string,
-  host: string
-): Promise<number[]> {
-  try {
-    const response = await ollama.embeddings({
-      model: model,
-      prompt: text,
-    });
-    return response.embedding;
-  } catch (error) {
-    throw new Error(`Failed to get embedding: ${error}`);
-  }
-}
-
-// Calculate cosine similarity between two vectors
-export function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-}
+import { jaroWinklerSimilarity } from "./jaroWinklerSimilarity";
+import { cosineSimilarity } from "./cosineSimilarity";
+import { getEmbedding } from "./getEmbeddings";
 
 // Deduplicate observations using embeddings
 async function deduplicateObservations(
   observations: string[],
   threshold: number,
   model: string,
-  host: string,
-  logger?: Logger
+  host: string
 ): Promise<string[]> {
   if (observations.length <= 1) return observations;
 
@@ -188,13 +95,13 @@ export async function mergeKnowledgeGraphs(
   graphs: KnowledgeGraph[],
   options: MergeOptions
 ): Promise<KnowledgeGraph> {
-  options.logger?.info(
+  logger?.info(
     `Starting hierarchical merge of ${graphs.length} knowledge graphs`
   );
-  options.logger?.info(
+  logger?.info(
     `Entity similarity threshold: ${options.entitySimilarityThreshold}`
   );
-  options.logger?.info(
+  logger?.info(
     `Observation similarity threshold: ${options.observationSimilarityThreshold}`
   );
 
@@ -220,33 +127,33 @@ export async function mergeKnowledgeGraphs(
     }
   }
 
-  options.logger?.info(`Step 1: Grouped into ${graphsByFile.size} files`);
+  logger?.info(`Step 1: Grouped into ${graphsByFile.size} files`);
 
   // Step 2: Merge entities within each file
   const mergedByFile = new Map<string, KnowledgeGraph>();
 
   for (const [file, fileGraphs] of graphsByFile) {
-    options.logger?.debug(
+    logger?.debug(
       `Step 2: Merging ${fileGraphs.length} entities in file: ${file}`
     );
 
     const fileMerged = await mergeWithinFile(fileGraphs, file, options);
     mergedByFile.set(file, fileMerged);
 
-    options.logger?.debug(
+    logger?.debug(
       `File ${file}: ${fileMerged.entities.length} entities, ${fileMerged.relations.length} relations`
     );
   }
 
   // Step 3: Global merge across files
-  options.logger?.info(
+  logger?.info(
     `Step 3: Global merge across ${mergedByFile.size} files`
   );
 
   const globalGraphs = Array.from(mergedByFile.values());
   const finalResult = await mergeGlobally(globalGraphs, options);
 
-  options.logger?.info(
+  logger?.info(
     `Hierarchical merge complete: ${finalResult.entities.length} entities, ${finalResult.relations.length} relations`
   );
 
@@ -269,7 +176,7 @@ async function mergeWithinFile(
     0.6
   );
 
-  options.logger?.debug(
+  logger?.debug(
     `Within-file similarity threshold for ${fileName}: ${withinFileSimilarityThreshold}`
   );
 
@@ -285,7 +192,7 @@ async function mergeWithinFile(
       if (similarEntityName) {
         // Merge with existing similar entity
         const existing = entityMap.get(similarEntityName)!;
-        options.logger?.debug(
+        logger?.debug(
           `[${fileName}] Merging entity "${entity.name}" with existing "${similarEntityName}"`
         );
 
@@ -301,8 +208,7 @@ async function mergeWithinFile(
             allObservations,
             Math.min(options.observationSimilarityThreshold * 0.8, 0.7), // More aggressive deduplication
             options.model,
-            options.host,
-            options.logger
+            options.host
           );
         }
 
@@ -385,7 +291,7 @@ async function mergeGlobally(
   // Use the original similarity threshold for cross-file merging
   const globalSimilarityThreshold = options.entitySimilarityThreshold;
 
-  options.logger?.debug(
+  logger?.debug(
     `Global similarity threshold: ${globalSimilarityThreshold}`
   );
 
@@ -401,7 +307,7 @@ async function mergeGlobally(
       if (similarEntityName) {
         // Merge with existing similar entity from different file
         const existing = entityMap.get(similarEntityName)!;
-        options.logger?.debug(
+        logger?.debug(
           `[Global] Merging entity "${entity.name}" (${entity.files[0]}) with existing "${similarEntityName}" (${existing.files[0]})`
         );
 
@@ -416,8 +322,7 @@ async function mergeGlobally(
             allObservations,
             options.observationSimilarityThreshold, // Use original threshold
             options.model,
-            options.host,
-            options.logger
+            options.host
           );
         }
 
@@ -500,11 +405,11 @@ async function mergeGlobally(
   );
 
   if (crossFileEntities.length > 0) {
-    options.logger?.info(
+    logger?.info(
       `Found ${crossFileEntities.length} entities appearing across multiple files:`
     );
     crossFileEntities.forEach(([entityName, files]) => {
-      options.logger?.debug(`  ${entityName}: ${Array.from(files).join(", ")}`);
+      logger?.debug(`  ${entityName}: ${Array.from(files).join(", ")}`);
     });
   }
 

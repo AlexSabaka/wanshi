@@ -1,8 +1,10 @@
 import path from "path";
 import ollama from "ollama";
-import { Logger } from "./Logger";
-import { cosineSimilarity, jaroWinklerSimilarity } from "./mergeKnowledgeGraphs";
-import { Entity, KnowledgeGraph, Relation } from "./types";
+import { cosineSimilarity } from "./cosineSimilarity";
+import { jaroWinklerSimilarity } from "./jaroWinklerSimilarity";
+import { Entity, KnowledgeGraph, Relation } from "../types/KnowledgeGraph";
+import { logger } from "../Logger";
+import { getEmbedding } from "./getEmbeddings";
 
 // Enhanced search with multiple strategies
 export class KnowledgeGraphSearch {
@@ -11,7 +13,6 @@ export class KnowledgeGraphSearch {
   constructor(
     private model: string,
     private host: string,
-    private logger?: Logger
   ) {}
 
   // Strategy 1: Content-based search using file content directly
@@ -25,7 +26,7 @@ export class KnowledgeGraphSearch {
       includeObservations?: boolean;
     } = {}
   ): Promise<KnowledgeGraph> {
-    this.logger?.debug(`Searching knowledge graphs for context relevant to: ${fileName}`);
+    logger?.debug(`Searching knowledge graphs for context relevant to: ${fileName}`);
     
     // Extract key terms from file content (simple but effective)
     const keyTerms = this.extractKeyTerms(fileContent, fileName);
@@ -225,7 +226,7 @@ export class KnowledgeGraphSearch {
     try {
       // Create embedding for file content (truncate if too long)
       const truncatedContent = content.slice(0, 2000); // Prevent context overflow
-      const contentEmbedding = await this.getEmbedding(truncatedContent);
+      const contentEmbedding = await getEmbedding(truncatedContent, this.model, this.host);
       
       const scoredEntities: Array<Entity & { similarityScore: number }> = [];
       
@@ -233,7 +234,7 @@ export class KnowledgeGraphSearch {
         for (const entity of graph.entities) {
           // Create entity text for embedding
           const entityText = `${entity.name} ${entity.entityType} ${(entity.observations || []).join(' ')}`;
-          const entityEmbedding = await this.getEmbedding(entityText);
+          const entityEmbedding = await getEmbedding(entityText, this.model, this.host);
           
           const similarity = cosineSimilarity(contentEmbedding, entityEmbedding);
           
@@ -264,28 +265,8 @@ export class KnowledgeGraphSearch {
       };
       
     } catch (error) {
-      this.logger?.warn(`Embedding search failed: ${error}`);
+      logger?.warn(`Embedding search failed: ${error}`);
       return { entities: [], relations: [] };
-    }
-  }
-
-  private async getEmbedding(text: string): Promise<number[]> {
-    // Check cache first
-    if (this.embeddingCache.has(text)) {
-      return this.embeddingCache.get(text)!;
-    }
-    
-    try {
-      const response = await ollama.embeddings({
-        model: this.model,
-        prompt: text,
-        // options: { host: this.host }
-      });
-      
-      this.embeddingCache.set(text, response.embedding);
-      return response.embedding;
-    } catch (error) {
-      throw new Error(`Failed to get embedding: ${error}`);
     }
   }
 

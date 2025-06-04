@@ -4,9 +4,9 @@ import { Command } from "commander";
 import * as info from "../package.json";
 import * as path from "path";
 import * as chokidar from "chokidar";
-import { Logger } from "./Logger";
-import { processDirectory } from "./processDirectory";
-import { ProcessingOptions } from "./types";
+import { logger } from "./Logger"
+import { processDirectory } from "./utils/process-directory";
+import { ProcessingOptions } from "./types/ProcessingOptions";
 
 
 const program = new Command();
@@ -27,6 +27,9 @@ program
   .option("-d, --debug", "debug mode", false)
   .option("-S, --silent", "silent mode", false)
   .option("--context-length <number>", "model context length, should be long enough to fit system prompt, file content (chunk), response", "8192")
+  .option("--repeat-penalty <number>", "repeat penalty (higher value promotes more diverse results)", "0.3")
+  .option("--retrieval-limit <number>", "context retrieval limit", "3")
+  .option("--disable-retrieval", "disable context retrieval", false)
   .option("--temperature <number>", "model temperature", "0.1")
   .option("--seed <number>", "model seed", "")
   .option("--embeddings-model <name>", "embeddings model used for observations similarity merging", "mxbai-embed-large:335m")
@@ -39,11 +42,6 @@ program
   .version(info.version)
   .action(async (options: ProcessingOptions) => {
     if (options.watch) {
-      const logger = new Logger(
-        !!options.debug ? "debug" : options.logLevel,
-        options.logFile,
-        options.silent
-      );
       logger.info("Watch mode enabled - monitoring for file changes...");
 
       const watcher = chokidar.watch(path.join(options.input, options.filter), {
