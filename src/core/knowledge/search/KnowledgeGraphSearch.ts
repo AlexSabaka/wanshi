@@ -1,19 +1,20 @@
 import path from "path";
-import ollama from "ollama";
-import { cosineSimilarity } from "./cosineSimilarity";
-import { jaroWinklerSimilarity } from "./jaroWinklerSimilarity";
-import { Entity, KnowledgeGraph, Relation } from "../types/KnowledgeGraph";
-import { logger } from "../Logger";
-import { getEmbedding } from "./getEmbeddings";
+import { cosineSimilarity } from "../../../shared/utils/cosineSimilarity";
+import { jaroWinklerSimilarity } from "../../../shared/utils/jaroWinklerSimilarity";
+import { Entity, KnowledgeGraph, Relation } from "../../../types/KnowledgeGraph";
+import { logger } from "../../../shared/logger";
+import { EmbeddingService } from "../../llm/EmbeddingService";
 
 // Enhanced search with multiple strategies
 export class KnowledgeGraphSearch {
-  private embeddingCache = new Map<string, number[]>();
+  private embeddingService: EmbeddingService;
   
   constructor(
     private model: string,
     private host: string,
-  ) {}
+  ) {
+    this.embeddingService = new EmbeddingService({ model, host });
+  }
 
   // Strategy 1: Content-based search using file content directly
   async searchByFileContent(
@@ -226,7 +227,7 @@ export class KnowledgeGraphSearch {
     try {
       // Create embedding for file content (truncate if too long)
       const truncatedContent = content.slice(0, 2000); // Prevent context overflow
-      const contentEmbedding = await getEmbedding(truncatedContent, this.model, this.host);
+      const contentEmbedding = await this.embeddingService.embed(truncatedContent);
       
       const scoredEntities: Array<Entity & { similarityScore: number }> = [];
       
@@ -234,7 +235,7 @@ export class KnowledgeGraphSearch {
         for (const entity of graph.entities) {
           // Create entity text for embedding
           const entityText = `${entity.name} ${entity.entityType} ${(entity.observations || []).join(' ')}`;
-          const entityEmbedding = await getEmbedding(entityText, this.model, this.host);
+          const entityEmbedding = await this.embeddingService.embed(entityText);
           
           const similarity = cosineSimilarity(contentEmbedding, entityEmbedding);
           

@@ -1,10 +1,9 @@
-import { MergeOptions } from "../types/MergeOptions";
-import { KnowledgeGraph, Entity, Relation } from "../types/KnowledgeGraph";
-import { logger } from "./../Logger";
-
-import { jaroWinklerSimilarity } from "./jaroWinklerSimilarity";
-import { cosineSimilarity } from "./cosineSimilarity";
-import { getEmbedding } from "./getEmbeddings";
+import { MergeOptions } from "../../../types/MergeOptions";
+import { KnowledgeGraph, Entity, Relation } from "../../../types/KnowledgeGraph";
+import { logger } from "../../../shared/logger";
+import { jaroWinklerSimilarity } from "../../../shared/utils/jaroWinklerSimilarity";
+import { cosineSimilarity } from "../../../shared/utils/cosineSimilarity";
+import { EmbeddingService } from "../../llm/EmbeddingService";
 
 // Deduplicate observations using embeddings
 async function deduplicateObservations(
@@ -17,12 +16,15 @@ async function deduplicateObservations(
 
   logger?.debug(`Deduplicating ${observations.length} observations`);
 
+  // Create embedding service for this operation
+  const embeddingService = new EmbeddingService({ model, host });
+
   // Get embeddings for all observations
   const observationData: Array<{ text: string; embedding: number[] }> = [];
 
   for (const obs of observations) {
     try {
-      const embedding = await getEmbedding(obs, model, host);
+      const embedding = await embeddingService.embed(obs);
       observationData.push({ text: obs, embedding });
     } catch (error) {
       logger?.warn(`Failed to get embedding for observation: ${obs}`);
@@ -344,8 +346,8 @@ async function mergeGlobally(
         entityFileMap.get(similarEntityName)!.add(entity.files[0] || "unknown");
 
         // Update file information to include multiple files
-        const files = Array.from(entityFileMap.get(similarEntityName)!);
-        existing.files[0] = files.length === 1 ? files[0] : files.join(",");
+        // const files = Array.from(entityFileMap.get(similarEntityName)!);
+        // existing.files[0] = files.length === 1 ? files[0] : files.join(",");
 
         // Merge chunk information (keep ranges)
         if (entity.chunk !== undefined) {

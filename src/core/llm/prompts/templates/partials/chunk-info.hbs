@@ -1,0 +1,14 @@
+{{#when totalChunks ">" 1}}
+## Chunk Information
+
+This is chunk **{{chunkIndex}}** of **{{totalChunks}}** from the file {{fileName}}.
+
+{{#when chunkIndex "==" 1}}
+This is the first chunk of the file.
+{{/when}}
+{{#when chunkIndex "==" totalChunks}}
+This is the last chunk of the file.
+{{/when}}
+
+Please ensure entity names are consistent with any previously processed chunks from this file.
+{{/when}}

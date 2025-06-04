@@ -4,6 +4,7 @@ export interface ProcessingOptions {
   filter: string;
   output: string;
   model: string;
+  description: string;
   chunkSize: number;
   temperature: number;
   repeatPenalty: number;
@@ -11,8 +12,10 @@ export interface ProcessingOptions {
   overlapSize: number;
   retrievalLimit: number;
   enableRetrieval: boolean;
+  disableRetrieval: boolean;
   seed?: number;
   enableChunking: boolean;
+  disableChunking: boolean;
   embeddingsModel: string;
   entitySimilarityThreshold?: number;
   observationSimilarityThreshold?: number;

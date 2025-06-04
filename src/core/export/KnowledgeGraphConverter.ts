@@ -1,8 +1,7 @@
-import { KnowledgeGraph, Entity, Relation } from "../types/KnowledgeGraph";
-import { MCPKnowledgeGraph } from "../types/MCPKnowledgeGraph";
+import { MCPKnowledgeGraph } from "../../types/MCPKnowledgeGraph";
+import { KnowledgeGraph, Entity, Relation } from "../../types/KnowledgeGraph";
 
 // Conversion utilities
-
 
 export class KnowledgeGraphConverter {
   // Convert our format to MCP format

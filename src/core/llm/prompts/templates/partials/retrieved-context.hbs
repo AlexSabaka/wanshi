@@ -1,0 +1,18 @@
+{{#if retrievedEntities}}
+## Related Context
+
+The following entities were found in previously processed files that may be relevant:
+
+{{#each retrievedEntities}}
+### {{name}}
+- **Type**: {{entityType}}
+- **File**: {{file}}
+{{#if observations}}
+- **Key Facts**:
+{{#each observations}}
+  - {{this}}
+{{/each}}
+{{/if}}
+
+{{/each}}
+{{/if}}

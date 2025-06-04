@@ -8,9 +8,8 @@
   },
   "scripts": {
     "start": "ts-node ./src/index.ts",
-    "dev": "nodemon --watch . --exec ts-node -- ./src/index.ts",
-    "build": "tsc",
-    "test": "./node_modules/.bin/jest"
+    "test": "ts-node ./src/index.ts -D -m qwen2.5-coder:1.5b --embeddings-model mxbai-embed-large:335m --context-length 12565 -i ./src -o ./output/this_qc2515_mcp.json --export-format mcp-jsonl",
+    "build": "tsc"
   },
   "author": "Alex Sabaka",
   "license": "GPL-2.0-only",
@@ -31,7 +30,9 @@
     "commander": "^12.1.0",
     "dree": "^5.1.5",
     "glob": "^11.0.2",
+    "handlebars": "^4.7.8",
     "highlight.js": "^11.10.0",
+    "minimatch": "^10.0.1",
     "ollama": "^0.5.16",
     "pdf-parser": "^1.0.5",
     "pdf-text-reader": "^5.1.0",

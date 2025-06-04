@@ -1,0 +1,20 @@
+Analyze the following content and extract entities and their relationships:
+
+**File**: {{fileName}}
+{{#when totalChunks ">" 1}}**Chunk**: {{chunkIndex}} of {{totalChunks}}{{/when}}
+
+{{#if retrievedEntities}}
+## Previously Identified Context
+
+{{#each retrievedEntities}}
+- **{{name}}** ({{entityType}}): {{truncate (join observations "; ") 200}}
+{{/each}}
+{{/if}}
+
+## Content to Analyze
+
+```{{fileExtension}}
+{{#if chunkContent}}{{chunkContent}}{{else}}{{fileContent}}{{/if}}
+```
+
+Please extract all entities and relationships from this content, following the guidelines provided in the system prompt.
