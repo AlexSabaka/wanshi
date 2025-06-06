@@ -1,8 +1,9 @@
 import * as chokidar from 'chokidar';
 import * as path from 'path';
-import { DirectoryProcessor } from '../../core/DirectoryProcessor';
-import { ProcessingOptions } from '../../types/ProcessingOptions';
 import { logger } from '../../shared/logger';
+import { ContainerFactory, DIContainer } from '../../core/di';
+import { DirectoryProcessor } from '../../core/DirectoryProcessor';
+import { ProcessingOptions } from '../../types';
 
 /**
  * Watch command - monitors directory for changes and regenerates knowledge graph
@@ -16,7 +17,7 @@ export async function watchCommand(options: ProcessingOptions): Promise<void> {
   });
 
   let processing = false;
-  const processor = new DirectoryProcessor(options);
+  const processor = new DirectoryProcessor(ContainerFactory.createContainer({ processingOptions: options }));
 
   const processWithDebounce = async () => {
     if (processing) return;

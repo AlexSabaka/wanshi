@@ -1,5 +1,3 @@
-
-
 export interface Entity {
   name: string;
   files: string[];

@@ -1,20 +1,13 @@
-import { FileReaderFactory, FileReadResult } from './readers';
-import { TextChunker, ChunkingOptions, ProcessedChunk } from './chunking';
+import { FileReaderFactory } from './readers';
 import { logger } from '../../shared/logger';
 import * as path from 'path';
-
-export interface ProcessedFile {
-  filePath: string;
-  content: string;
-  chunks?: ProcessedChunk[];
-  images?: Buffer[];
-  metadata?: Record<string, any>;
-}
+import { ChunkingOptions, IFileProcessor, ProcessedFile } from '../../types';
+import { TextChunker } from './chunking';
 
 /**
  * Main file processor that coordinates reading and chunking
  */
-export class FileProcessor {
+export class FileProcessor implements IFileProcessor {
   private textChunker: TextChunker;
 
   constructor() {
@@ -35,7 +28,7 @@ export class FileProcessor {
     if (!reader) {
       logger.warn(`No reader available for file: ${filePath}`);
       return {
-        filePath,
+        path: filePath,
         content: '',
         metadata: { 
           error: 'No reader available',
@@ -51,23 +44,20 @@ export class FileProcessor {
       // Process chunks if needed
       if (chunkingOptions?.enabled && readResult.content.length > chunkingOptions.maxChunkSize) {
         const chunks = await this.textChunker.chunk(readResult.content, chunkingOptions);
-        
-        // Attach images only to the first chunk
-        if (readResult.images && chunks.length > 0) {
-          chunks[0].metadata = {
-            ...chunks[0].metadata,
-            hasImages: true,
-            imageCount: readResult.images.length
-          };
-        }
 
         logger.info(`File ${filePath} chunked into ${chunks.length} parts`);
 
         return {
-          filePath,
+          path: filePath,
           content: readResult.content,
           chunks,
-          images: readResult.images,
+          images: readResult.images?.map(buffer => {
+            return {
+              path: filePath,
+              caption: '',
+              base64: buffer.toString('base64'),
+            };
+          }),
           metadata: {
             ...readResult.metadata,
             chunked: true,
@@ -78,9 +68,15 @@ export class FileProcessor {
 
       // Return unchunked result
       return {
-        filePath,
+        path: filePath,
         content: readResult.content,
-        images: readResult.images,
+        images: readResult.images?.map(buffer => {
+          return {
+            path: filePath,
+            caption: '',
+            base64: buffer.toString('base64'),
+          };
+        }),
         metadata: {
           ...readResult.metadata,
           chunked: false

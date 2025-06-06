@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import { OllamaService, LLMMessage } from '../llm/OllamaService';
 import { PromptManager, PromptContext } from '../llm/prompts/PromptManager';
-import { ProcessedFile } from '../processor/FileProcessor';
-import { KnowledgeGraph } from '../../types/KnowledgeGraph';
+import { ProcessedFile, KnowledgeGraph, ProcessedImage } from '../../types';
 import { logger } from '../../shared/logger';
 
 // Define the schema for knowledge graph extraction
@@ -50,7 +49,7 @@ export class KnowledgeGraphBuilder {
     systemPrompt: string,
     retrievedContext?: any
   ): Promise<KnowledgeGraph[]> {
-    logger.info(`Building knowledge graph for: ${processedFile.filePath}`);
+    logger.info(`Building knowledge graph for: ${processedFile.path}`);
 
     const graphs: KnowledgeGraph[] = [];
 
@@ -58,19 +57,19 @@ export class KnowledgeGraphBuilder {
     if (processedFile.chunks && processedFile.chunks.length > 0) {
       for (const chunk of processedFile.chunks) {
         const kg = await this.buildFromChunk(
-          processedFile.filePath,
+          processedFile.path,
           chunk.content,
           systemPrompt,
-          chunk.chunkIndex,
+          chunk.index,
           chunk.totalChunks,
           retrievedContext,
-          chunk.metadata?.hasImages ? processedFile.images : undefined
+          processedFile?.images
         );
 
         // Add metadata to entities
         kg.entities.forEach(entity => {
-          entity.files = [processedFile.filePath];
-          entity.chunk = chunk.chunkIndex;
+          entity.files = [processedFile.path];
+          entity.chunk = chunk.index;
           entity.totalChunks = chunk.totalChunks;
         });
 
@@ -79,7 +78,7 @@ export class KnowledgeGraphBuilder {
     } else {
       // Process entire file
       const kg = await this.buildFromContent(
-        processedFile.filePath,
+        processedFile.path,
         processedFile.content,
         systemPrompt,
         retrievedContext,
@@ -88,7 +87,7 @@ export class KnowledgeGraphBuilder {
 
       // Add metadata to entities
       kg.entities.forEach(entity => {
-        entity.files = [processedFile.filePath];
+        entity.files = [processedFile.path];
       });
 
       graphs.push(kg);
@@ -107,7 +106,7 @@ export class KnowledgeGraphBuilder {
     chunkIndex: number,
     totalChunks: number,
     retrievedContext?: any,
-    images?: Buffer[]
+    images?: ProcessedImage[]
   ): Promise<KnowledgeGraph> {
     logger.debug(`Building KG for chunk ${chunkIndex}/${totalChunks} of ${filePath}`);
 
@@ -132,7 +131,7 @@ export class KnowledgeGraphBuilder {
     content: string,
     systemPrompt: string,
     retrievedContext?: any,
-    images?: Buffer[]
+    images?: ProcessedImage[]
   ): Promise<KnowledgeGraph> {
     logger.debug(`Building KG for entire file: ${filePath}`);
 
@@ -153,7 +152,7 @@ export class KnowledgeGraphBuilder {
   private async generateKnowledgeGraph(
     systemPrompt: string,
     userPrompt: string,
-    images?: Buffer[]
+    images?: ProcessedImage[]
   ): Promise<KnowledgeGraph> {
     const messages: LLMMessage[] = [
       {
@@ -163,9 +162,7 @@ export class KnowledgeGraphBuilder {
       {
         role: 'user',
         content: userPrompt,
-        ...(images && { 
-          images: images.map(img => img.toString('base64')) 
-        })
+        images: images?.map(img => img.base64 ?? '')
       }
     ];
 

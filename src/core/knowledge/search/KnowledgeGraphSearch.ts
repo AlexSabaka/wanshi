@@ -1,8 +1,7 @@
 import path from "path";
-import { cosineSimilarity } from "../../../shared/utils/cosineSimilarity";
-import { jaroWinklerSimilarity } from "../../../shared/utils/jaroWinklerSimilarity";
-import { Entity, KnowledgeGraph, Relation } from "../../../types/KnowledgeGraph";
+import { cosineSimilarity, jaroWinklerSimilarity } from "../../../shared/utils";
 import { logger } from "../../../shared/logger";
+import { Entity, KnowledgeGraph, Relation } from "../../../types/KnowledgeGraph";
 import { EmbeddingService } from "../../llm/EmbeddingService";
 
 // Enhanced search with multiple strategies

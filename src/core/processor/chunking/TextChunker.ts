@@ -1,18 +1,6 @@
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { logger } from '../../../shared/logger';
-
-export interface ChunkingOptions {
-  maxChunkSize: number;
-  overlapSize: number;
-  enabled: boolean;
-}
-
-export interface ProcessedChunk {
-  content: string;
-  chunkIndex: number;
-  totalChunks: number;
-  metadata?: Record<string, any>;
-}
+import { ChunkingOptions, ProcessedChunk } from "../../../types";
 
 /**
  * Smart text chunking service using LangChain's RecursiveCharacterTextSplitter
@@ -41,8 +29,10 @@ export class TextChunker {
     if (!options.enabled || text.length <= options.maxChunkSize) {
       return [{
         content: text,
-        chunkIndex: 0,
-        totalChunks: 1
+        index: 1,
+        totalChunks: 1,
+        startOffset: 0,
+        endOffset: text.length,
       }];
     }
 
@@ -60,13 +50,10 @@ export class TextChunker {
 
     return chunks.map((chunk, index) => ({
       content: chunk,
-      chunkIndex: index,
+      index: index,
       totalChunks: chunks.length,
-      metadata: {
-        startChar: this.calculateStartPosition(chunks, index, options.overlapSize),
-        endChar: this.calculateEndPosition(chunks, index, options.overlapSize),
-        hasOverlap: index > 0
-      }
+      startOffset: this.calculateStartPosition(chunks, index, options.overlapSize),
+      endOffset: this.calculateEndPosition(chunks, index, options.overlapSize)
     }));
   }
 

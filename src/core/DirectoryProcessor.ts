@@ -1,102 +1,49 @@
 import { glob } from 'glob';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ChunkingOptions, FileProcessor } from './processor';
-import { EmbeddingService, OllamaService, PromptManager } from './llm';
 import { logger } from '../shared/logger';
 import { KnowledgeGraph } from '../types/KnowledgeGraph';
 import { ProcessingOptions } from '../types/ProcessingOptions';
-import { KnowledgeGraphConverter } from './export';
-import { KnowledgeGraphBuilder, KnowledgeGraphSearch, mergeKnowledgeGraphs } from './knowledge';
-
+import { DIContainer, TYPES } from './di';
+import {
+  IFileProcessor,
+  IKnowledgeGraphBuilder,
+  IKnowledgeGraphSearch,
+  IKnowledgeGraphMerger,
+  IKnowledgeGraphExporter,
+  IDirectoryProcessor,
+  ChunkingOptions,
+  ProcessedFile,
+  MergeOptions
+} from '../types';
+import { PromptManager } from './llm';
 
 /**
- * Main orchestrator for processing directories and generating knowledge graphs
+ * Refactored DirectoryProcessor using dependency injection
+ * Focuses on orchestration while delegating business logic to services
  */
-export class DirectoryProcessor {
-  private fileProcessor: FileProcessor;
-  private ollamaService: OllamaService;
-  private embeddingService: EmbeddingService;
-  private promptManager: PromptManager;
-  private knowledgeGraphBuilder: KnowledgeGraphBuilder;
-  private knowledgeGraphSearch: KnowledgeGraphSearch;
-
-  constructor(options: ProcessingOptions) {
-    // Initialize services
-    this.fileProcessor = new FileProcessor();
-    
-    this.ollamaService = new OllamaService({
-      model: options.model,
-      host: options.host,
-      temperature: options.temperature,
-      contextLength: options.contextLength,
-      repeatPenalty: options.repeatPenalty,
-      seed: options.seed
-    });
-
-    this.embeddingService = new EmbeddingService({
-      model: options.embeddingsModel || 'mxbai-embed-large:335m',
-      host: options.host
-    });
-
-    this.promptManager = new PromptManager();
-    
-    this.knowledgeGraphBuilder = new KnowledgeGraphBuilder({
-      ollamaService: this.ollamaService,
-      promptManager: this.promptManager
-    });
-
-    this.knowledgeGraphSearch = new KnowledgeGraphSearch(
-      options.embeddingsModel || 'mxbai-embed-large:335m',
-      options.host
-    );
-
-    // Set custom system prompt if provided
-    if (options.system) {
-      this.promptManager.setCustomSystemPrompt(options.system);
-    }
-  }
+export class DirectoryProcessor implements IDirectoryProcessor {
+  constructor(private container: DIContainer) {}
 
   /**
    * Process a directory and generate knowledge graphs
    */
   async processDirectory(options: ProcessingOptions): Promise<void> {
     logger.info(`Starting knowledge graph generation`);
-    logger.info(`Input: ${options.input}`);
-    logger.info(`Filter: ${options.filter}`);
-    logger.info(`Output: ${options.output}`);
-    logger.info(`Model: ${options.model}`);
+    logger.info(`Input: ${options.input}, Filter: ${options.filter}, Output: ${options.output}, Model: ${options.model}`);
 
     try {
-      // Find files
+      // Orchestrate the workflow
       const files = await this.findFiles(options.input, options.filter);
-      
-      if (files.length === 0) {
-        logger.warn(`No files found matching pattern: ${options.filter}`);
-        return;
-      }
+      this.validateFilesFound(files, options.filter);
 
-      logger.info(`Found ${files.length} files to process`);
-
-      // Process files and generate knowledge graphs
       const knowledgeGraphs = await this.processFiles(files, options);
-
-      // Merge all knowledge graphs
-      logger.info(`Merging ${knowledgeGraphs.length} knowledge graphs`);
       const finalKG = await this.mergeGraphs(knowledgeGraphs, options);
-
-      // Export the final knowledge graph
       await this.exportKnowledgeGraph(finalKG, options);
 
-      logger.info(`Knowledge graph saved to: ${options.output}`);
-      logger.info(
-        `Final graph: ${finalKG.entities.length} entities, ${finalKG.relations.length} relations`
-      );
+      this.logSuccess(finalKG, options.output);
     } catch (error) {
-      logger.error(`Failed to process directory: ${error}`);
-      if (options.debug) {
-        console.error(error);
-      }
+      this.handleError(error, options.debug);
       throw error;
     }
   }
@@ -110,6 +57,18 @@ export class DirectoryProcessor {
   }
 
   /**
+   * Validate that files were found
+   */
+  private validateFilesFound(files: string[], filter: string): void {
+    if (files.length === 0) {
+      const message = `No files found matching pattern: ${filter}`;
+      logger.warn(message);
+      throw new Error(message);
+    }
+    logger.info(`Found ${files.length} files to process`);
+  }
+
+  /**
    * Process multiple files and generate knowledge graphs
    */
   private async processFiles(
@@ -117,52 +76,21 @@ export class DirectoryProcessor {
     options: ProcessingOptions
   ): Promise<KnowledgeGraph[]> {
     const knowledgeGraphs: KnowledgeGraph[] = [];
-
-    // Set up chunking options
-    const chunkingOptions: ChunkingOptions = {
-      maxChunkSize: Number(options.chunkSize || 2000),
-      overlapSize: Number(options.overlapSize || 100),
-      enabled: !options.disableChunking
-    };
-
-    // Get system prompt
-    const systemPrompt = await this.promptManager.getSystemPrompt(options.input, options.filter, options.description);
-
+    const chunkingOptions = this.createChunkingOptions(options);
+    
+    const fileProcessor = await this.container.resolve<IFileProcessor>(TYPES.FileProcessor);
+    const kgBuilder = await this.container.resolve<IKnowledgeGraphBuilder>(TYPES.KnowledgeGraphBuilder);
+    
     for (const file of files) {
       try {
-        logger.info(`Processing: ${file}`);
-
-        // Process the file
-        const processedFile = await this.fileProcessor.processFile(file, chunkingOptions);
-
-        if (!processedFile.content.trim() && (!processedFile.images || processedFile.images.length === 0)) {
-          logger.warn(`No content extracted from: ${file}`);
-          continue;
-        }
-
-        // Get retrieval context if enabled
-        const retrievalContext = options.disableRetrieval ? undefined : 
-          await this.getRetrievalContext(processedFile.content, file, knowledgeGraphs, options);
-
-        // Build knowledge graphs for this file
-        const fileGraphs = await this.knowledgeGraphBuilder.build(
-          processedFile,
-          systemPrompt,
-          retrievalContext
-        );
-
+        const fileGraphs = await this.processFile(file, chunkingOptions, options, fileProcessor, kgBuilder, knowledgeGraphs);
         knowledgeGraphs.push(...fileGraphs);
 
-        // Write intermediate results for debugging
         if (options.debug) {
           await this.writeIntermediateResults(knowledgeGraphs, options.output);
         }
-
       } catch (error) {
-        logger.error(`Failed to process file ${file}: ${error}`);
-        if (options.debug) {
-          console.error(error);
-        }
+        this.handleFileError(file, error, options.debug);
       }
     }
 
@@ -170,20 +98,84 @@ export class DirectoryProcessor {
   }
 
   /**
-   * Get retrieval context for a file
+   * Process a single file
+   */
+  private async processFile(
+    file: string,
+    chunkingOptions: ChunkingOptions,
+    options: ProcessingOptions,
+    fileProcessor: IFileProcessor,
+    kgBuilder: IKnowledgeGraphBuilder,
+    existingGraphs: KnowledgeGraph[]
+  ): Promise<KnowledgeGraph[]> {
+    logger.info(`Processing: ${file}`);
+
+    const processedFile = await fileProcessor.processFile(file, chunkingOptions);
+    this.validateProcessedFile(processedFile, file);
+
+    const retrievalContext = await this.getRetrievalContext(
+      processedFile,
+      file,
+      existingGraphs,
+      options
+    );
+
+    const promptManager = await this.container.resolve(TYPES.PromptManager) as PromptManager;
+    const systemPrompt = await promptManager.getSystemPrompt(options.input, options.filter, options.description);
+
+    return await kgBuilder.build(processedFile, systemPrompt, retrievalContext);
+  }
+
+  /**
+   * Create chunking options from processing options
+   */
+  private createChunkingOptions(options: ProcessingOptions): ChunkingOptions {
+    return {
+      maxChunkSize: Number(options.chunkSize || 2000),
+      overlapSize: Number(options.overlapSize || 100),
+      enabled: this.shouldEnableChunking(options)
+    };
+  }
+
+  /**
+   * Determine if chunking should be enabled
+   */
+  private shouldEnableChunking(options: ProcessingOptions): boolean {
+    // Fix the conflicting boolean pairs issue
+    if (options.chunking === 'disabled') return false;
+    if (options.chunking === 'enabled') return true;
+    return true; // Auto (anyway true)
+  }
+
+  /**
+   * Validate processed file content
+   */
+  private validateProcessedFile(processedFile: ProcessedFile, filePath: string): void {
+    const hasContent = processedFile.content?.trim();
+    const hasImages = processedFile.images && processedFile.images.length > 0;
+    
+    if (!hasContent && !hasImages) {
+      logger.warn(`No content extracted from: ${filePath}`);
+      throw new Error(`No content extracted from file: ${filePath}`);
+    }
+  }
+
+  /**
+   * Get retrieval context for improved processing
    */
   private async getRetrievalContext(
-    content: string,
+    processedFile: ProcessedFile,
     filePath: string,
     existingGraphs: KnowledgeGraph[],
     options: ProcessingOptions
   ): Promise<any> {
-    if (!options.enableRetrieval || existingGraphs.length === 0) {
+    if (!this.shouldUseRetrieval(options) || existingGraphs.length === 0) {
       return undefined;
     }
 
-    return await this.knowledgeGraphSearch.searchByFileContent(
-      content,
+    const searchService = await this.container.resolve<IKnowledgeGraphSearch>(TYPES.KnowledgeGraphSearch);
+    return await searchService.searchByFileContent(
+      processedFile.content,
       filePath,
       existingGraphs,
       { 
@@ -194,18 +186,34 @@ export class DirectoryProcessor {
   }
 
   /**
+   * Determine if retrieval should be used
+   */
+  private shouldUseRetrieval(options: ProcessingOptions): boolean {
+    // Fix the conflicting boolean pairs issue
+    if (options.retrieval === 'disabled') return false;
+    if (options.retrieval === 'enabled') return true;
+    return true; // Auto to true
+  }
+
+  /**
    * Merge multiple knowledge graphs
    */
   private async mergeGraphs(
     graphs: KnowledgeGraph[],
     options: ProcessingOptions
   ): Promise<KnowledgeGraph> {
-    return await mergeKnowledgeGraphs(graphs, {
+    logger.info(`Merging ${graphs.length} knowledge graphs`);
+    
+    const merger = await this.container.resolve<IKnowledgeGraphMerger>(TYPES.KnowledgeGraphMerger);
+    
+    const mergeOptions: MergeOptions = {
       entitySimilarityThreshold: options.entitySimilarityThreshold || 0.9,
       observationSimilarityThreshold: options.observationSimilarityThreshold || 0.9,
       model: options.embeddingsModel || 'mxbai-embed-large:335m',
       host: options.host
-    });
+    };
+
+    return await merger.merge(graphs, mergeOptions);
   }
 
   /**
@@ -215,40 +223,44 @@ export class DirectoryProcessor {
     knowledgeGraph: KnowledgeGraph,
     options: ProcessingOptions
   ): Promise<void> {
-    const outputDir = path.dirname(options.output);
+    await this.ensureOutputDirectory(options.output);
+    
+    const exporter = await this.container.resolve<IKnowledgeGraphExporter>(TYPES.KnowledgeGraphExporter);
+    const exportFormat = options.exportFormat || 'json';
+    
+    if (!exporter.isFormatSupported(exportFormat)) {
+      throw new Error(`Unsupported export format: ${exportFormat}. Supported: ${exporter.getSupportedFormats().join(', ')}`);
+    }
+
+    const outputContent = exporter.export(knowledgeGraph, exportFormat);
+    const outputPath = this.getOutputPath(options.output, exportFormat);
+    
+    await fs.promises.writeFile(outputPath, outputContent);
+  }
+
+  /**
+   * Ensure output directory exists
+   */
+  private async ensureOutputDirectory(outputPath: string): Promise<void> {
+    const outputDir = path.dirname(outputPath);
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
+  }
 
-    const exportFormat = options.exportFormat || 'json';
-    let outputContent: string;
-    let outputPath = options.output;
-
-    switch (exportFormat) {
+  /**
+   * Get the final output path with correct extension
+   */
+  private getOutputPath(originalPath: string, format: string): string {
+    switch (format) {
       case 'jsonl':
-        outputContent = KnowledgeGraphConverter.toJSONL(knowledgeGraph);
-        if (!outputPath.endsWith('.jsonl')) {
-          outputPath = outputPath.replace(/\.[^.]+$/, '.jsonl');
-        }
-        break;
-
+        return originalPath.endsWith('.jsonl') ? originalPath : originalPath.replace(/\.[^.]+$/, '.jsonl');
       case 'mcp-jsonl':
-        outputContent = KnowledgeGraphConverter.toMCPJSONL(knowledgeGraph);
-        if (!outputPath.endsWith('.jsonl')) {
-          outputPath = outputPath.replace(/\.[^.]+$/, '.mcp.jsonl');
-        }
-        break;
-
+        return originalPath.endsWith('.jsonl') ? originalPath : originalPath.replace(/\.[^.]+$/, '.mcp.jsonl');
       case 'json':
       default:
-        outputContent = JSON.stringify(knowledgeGraph, null, 2);
-        if (!outputPath.endsWith('.json')) {
-          outputPath = outputPath.replace(/\.[^.]+$/, '.json');
-        }
-        break;
+        return originalPath.endsWith('.json') ? originalPath : originalPath.replace(/\.[^.]+$/, '.json');
     }
-
-    await fs.promises.writeFile(outputPath, outputContent);
   }
 
   /**
@@ -259,9 +271,36 @@ export class DirectoryProcessor {
     outputPath: string
   ): Promise<void> {
     const tmpPath = outputPath + '.tmp';
-    await fs.promises.writeFile(
-      tmpPath,
-      JSON.stringify(graphs, null, 2)
+    await fs.promises.writeFile(tmpPath, JSON.stringify(graphs, null, 2));
+  }
+
+  /**
+   * Handle file processing errors
+   */
+  private handleFileError(file: string, error: any, debug: boolean): void {
+    logger.error(`Failed to process file ${file}: ${error.message || error}`);
+    if (debug) {
+      console.error(error);
+    }
+  }
+
+  /**
+   * Handle general processing errors
+   */
+  private handleError(error: any, debug: boolean): void {
+    logger.error(`Failed to process directory: ${error.message || error}`);
+    if (debug) {
+      console.error(error);
+    }
+  }
+
+  /**
+   * Log successful completion
+   */
+  private logSuccess(knowledgeGraph: KnowledgeGraph, outputPath: string): void {
+    logger.info(`Knowledge graph saved to: ${outputPath}`);
+    logger.info(
+      `Final graph: ${knowledgeGraph.entities.length} entities, ${knowledgeGraph.relations.length} relations`
     );
   }
 }

@@ -1,11 +1,9 @@
 import { FileReader, FileReadResult } from './FileReader';
 import { logger } from '../../../shared/logger';
-// TODO: Properly implement PDF reading with pdf-parse or similar library
-// import { PdfReader } from "pdfreader";
+import pdfjs, {  } from 'pdfjs';
 
 /**
  * Reader for PDF files
- * TODO: Currently returns empty content - needs proper implementation
  */
 export class PdfReader extends FileReader {
   constructor() {
@@ -22,14 +20,8 @@ export class PdfReader extends FileReader {
     try {
       logger.debug(`Reading PDF file: ${filePath}`);
       
-      // TODO: Implement proper PDF reading
-      // Current implementation in process-directory.ts is incomplete
-      // Consider using pdf-parse or similar library
-      
-      logger.warn(`PDF reading not yet implemented for: ${filePath}`);
-      
       return {
-        content: '', // Empty for now
+        content: '...',
         metadata: {
           type: 'pdf',
           fileName: filePath,

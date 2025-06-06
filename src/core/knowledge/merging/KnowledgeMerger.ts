@@ -1,8 +1,6 @@
-import { MergeOptions } from "../../../types/MergeOptions";
-import { KnowledgeGraph, Entity, Relation } from "../../../types/KnowledgeGraph";
+import { MergeOptions, KnowledgeGraph, Entity, Relation } from "../../../types";
 import { logger } from "../../../shared/logger";
-import { jaroWinklerSimilarity } from "../../../shared/utils/jaroWinklerSimilarity";
-import { cosineSimilarity } from "../../../shared/utils/cosineSimilarity";
+import { jaroWinklerSimilarity , cosineSimilarity } from "../../../shared/utils";
 import { EmbeddingService } from "../../llm/EmbeddingService";
 
 // Deduplicate observations using embeddings

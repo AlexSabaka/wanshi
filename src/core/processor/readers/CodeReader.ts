@@ -3,14 +3,12 @@ import { FileReader, FileReadResult } from './FileReader';
 import { logger } from '../../../shared/logger';
 
 /**
- * Reader for plain text files
+ * Reader for code text files
  */
-export class TextReader extends FileReader {
+export class CodeReader extends FileReader {
   constructor() {
     super([
-      '.txt', '.md', '.markdown', '.rst', '.asciidoc',
-
-            '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+      '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
       '.py', '.pyw', '.pyi', '.pyc', '.pyd', '.pyo',
       '.java', '.class', '.jar',
       '.c', '.cpp', '.cc', '.cxx', '.h', '.hpp', '.hxx',
@@ -50,25 +48,30 @@ export class TextReader extends FileReader {
       'Cargo.toml', 'Cargo.lock',
       'go.mod', 'go.sum',
       '.proto', '.graphql', '.gql'
-
     ]);
   }
 
   getName(): string {
-    return 'TextReader';
+    return 'CodeReader';
   }
 
   async read(filePath: string): Promise<FileReadResult> {
     await this.validateFile(filePath);
     
     try {
-      logger.debug(`Reading text file: ${filePath}`);
+      logger.debug(`Reading code file: ${filePath}`);
       const content = await fs.promises.readFile(filePath, 'utf-8');
-      
+
+      // TODO: Implement proper reading
+      // Analyze content for code language 
+      // Analyze file structure according to language
+      // Generate a document outline with classes/methods/structs/functions/variable/etc
+
       return {
         content,
         metadata: {
-          type: 'text',
+          type: 'code',
+          language: 'lang',
           encoding: 'utf-8',
           size: content.length
         }

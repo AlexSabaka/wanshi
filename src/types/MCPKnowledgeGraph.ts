@@ -1,6 +1,4 @@
 // MCP-compatible interfaces
-
-
 export interface MCPEntity {
   name: string;
   entityType: string;

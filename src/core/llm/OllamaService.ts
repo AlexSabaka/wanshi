@@ -58,6 +58,12 @@ export class OllamaService {
           model: this.options.model,
           messages: ollamaMessages,
           format: jsonSchema,
+          think: false,
+          options: {
+            num_ctx: Number(this.options.contextLength || 8192),
+            // temperature: 0.1,
+            // repeat_penalty: 0.5,
+          }
           // options: {
           //   temperature: Number(this.options.temperature),
           //   num_ctx: Number(this.options.contextLength),

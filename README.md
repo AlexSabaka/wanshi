@@ -7,6 +7,7 @@ An advanced CLI tool that analyzes files, extracts meaningful entities and relat
 ## 🎯 Project Goals
 
 **Primary Objective**: Create the most intelligent file-to-knowledge-graph converter that:
+
 - ✅ **Zero Hallucination**: Only extracts factually verifiable information
 - ✅ **Semantic Understanding**: Goes beyond syntax to capture meaning and relationships  
 - ✅ **Scalable Processing**: Handles large codebases with smart chunking and caching
@@ -14,6 +15,7 @@ An advanced CLI tool that analyzes files, extracts meaningful entities and relat
 - ✅ **Production Ready**: Reliable, fast, and integrates with existing workflows
 
 **Secondary Objectives**:
+
 - 🔗 **MCP Integration**: Compatible with Claude Desktop and Anthropic MCP protocol
 - 🎛️ **Quality Metrics**: Comprehensive evaluation system for continuous improvement
 - 🧪 **Research Ready**: Support for LoRa fine-tuning and model improvement
@@ -22,6 +24,7 @@ An advanced CLI tool that analyzes files, extracts meaningful entities and relat
 ## 🚀 Key Features
 
 ### 🔥 Core Capabilities
+
 - **Multi-format Processing**: Text, code, PDFs, images with smart content extraction
 - **Hierarchical Merging**: File-level → entity-level → global-level intelligent merging
 - **Smart Chunking**: Content-aware splitting with overlap for large files
@@ -29,6 +32,7 @@ An advanced CLI tool that analyzes files, extracts meaningful entities and relat
 - **Quality Evaluation**: Comprehensive metrics for factual accuracy and semantic quality
 
 ### 🎛️ Advanced Features
+
 - **MCP Compatibility**: Works with Claude Desktop and server-memory tools
 - **Multiple Export Formats**: JSON, JSONL, MCP-compatible formats
 - **Vector Search**: ChromaDB and Neo4j integration for semantic retrieval
@@ -36,6 +40,7 @@ An advanced CLI tool that analyzes files, extracts meaningful entities and relat
 - **Watch Mode**: Real-time knowledge graph updates as files change
 
 ### 🧠 Intelligence Features
+
 - **Zero Hallucination**: Strict factual grounding with source verification
 - **Entity Deduplication**: Smart similarity matching with configurable thresholds
 - **Observation Ranking**: Embedding-based duplicate detection and relevance scoring
@@ -107,62 +112,7 @@ kg-gen -i ./project \
 ### CLI Options
 
 ```bash
-Options:
-  -i, --input <path>              input directory (default: ".")
-  -f, --filter <filter>           files filter (default: "**/*")
-  -o, --output <path>             output knowledge graph file (default: "knowledge-graph.json")
-  -m, --model <name>              LLM to use with Ollama (default: "llama3.2")
-  -s, --system <prompt>           LLM system prompt
-  -h, --host <url>                Ollama host URL (default: "http://localhost:11434")
-  -L, --log-level <level>         log level (default: "info")
-  -l, --log-file <path>           log file
-  -w, --watch                     watch for changes and update knowledge graph
-  -d, --debug                     debug mode
-  -S, --silent                    silent mode
-  -c, --chunk-size <size>         maximum chunk size in characters (default: "4000")
-  --overlap-size <size>           overlap size between chunks (default: "200")
-  --disable-chunking              disable text chunking
-  --entity-similarity <threshold> entity name similarity threshold 0-1 (default: "0.8")
-  --observation-similarity <threshold> observation deduplication threshold 0-1 (default: "0.85")
-  --export-format <format>        export format: json|jsonl|mcp-jsonl (default: "json")
-  --vector-store <type>           vector store: none|chroma|neo4j (default: "none")
-  --chroma-host <url>             ChromaDB host (default: "http://localhost:8000")
-  --neo4j-uri <uri>               Neo4j connection URI (default: "bolt://localhost:7687")
-  --reranker <model>              reranker model (default: "none")
-  --cache-dir <path>              embeddings cache directory (default: "./.kg-cache")
-  --retrieval-limit <num>         context retrieval limit (default: "10")
-  -V, --version                   output the version number
-  -h, --help                      display help for command
-```
-
-## 🏗️ Project Structure
-
-```
-knowledge-graph-generator/
-├── src/
-│   ├── cli/                    # Command-line interface
-│   ├── processor/              # Core processing logic
-│   │   ├── chunking.ts         # Smart text chunking
-│   │   ├── merging.ts          # Hierarchical graph merging
-│   │   └── fileProcessor.ts    # File content extraction
-│   ├── search/                 # Context retrieval
-│   │   ├── KnowledgeGraphSearch.ts
-│   │   └── RetrievalPipeline.ts
-│   ├── vector/                 # Vector database integration
-│   │   ├── ChromaDBService.ts
-│   │   └── Neo4jStore.ts
-│   ├── cache/                  # Embeddings caching
-│   │   ├── FileEmbeddingCache.ts
-│   │   └── LRUCache.ts
-│   ├── evaluation/             # Quality metrics
-│   │   ├── QualityEvaluator.ts
-│   │   └── metrics.ts
-│   ├── types/                  # TypeScript interfaces
-│   └── utils/                  # Utilities and helpers
-├── prompts/                    # System prompt templates
-├── tests/                      # Test suite
-├── docs/                       # Documentation
-└── examples/                   # Usage examples
+TODO: Add actual help output later
 ```
 
 ## 🔬 Quality Metrics
@@ -170,25 +120,30 @@ knowledge-graph-generator/
 The system includes comprehensive quality evaluation:
 
 ### Structural Metrics
+
 - Entity and relation counts
 - Graph density and connectivity
 - Type distributions
 
-### Semantic Metrics  
+### Semantic Metrics
+
 - Entity name quality (naming conventions, descriptiveness)
 - Observation specificity (detailed vs. trivial facts)
 - Domain coverage (how well it captures file content)
 
 ### Factual Metrics
+
 - Hallucination detection (ungrounded claims)
 - Source grounding (facts verifiable in source)
 - Factual consistency (no contradictions)
 
 ### Consistency Metrics
+
 - Cross-file consistency (entity naming)
 - Type consistency (similar entities, similar types)
 
 ### Composite Score
+
 - Overall quality score (0-100)
 - Specific recommendations for improvement
 - Training data generation for LoRa fine-tuning
@@ -196,6 +151,7 @@ The system includes comprehensive quality evaluation:
 ## 📊 Output Formats
 
 ### Standard JSON
+
 ```json
 {
   "entities": [
@@ -219,53 +175,11 @@ The system includes comprehensive quality evaluation:
 ```
 
 ### MCP-Compatible JSONL
+
 ```jsonl
 {"type": "entity", "name": "example_function", "entityType": "function", "observations": ["Processes user input"]}
 {"type": "relation", "from": "example_function", "to": "user_input", "relationType": "processes"}
 ```
-
-## 🛠️ Development Roadmap
-
-### ✅ Completed (Phase 1)
-- [x] Core CLI interface with comprehensive options
-- [x] Multi-format file processing (text, PDF, images)
-- [x] Smart text chunking with overlap
-- [x] Hierarchical merging algorithm
-- [x] MCP compatibility layer
-- [x] Quality evaluation system
-- [x] Context-aware processing
-
-### 🚧 In Progress (Phase 2)
-- [ ] Comprehensive testing suite
-- [ ] File-based embeddings caching
-- [ ] Performance benchmarking
-- [ ] Documentation improvements
-
-### 📋 Planned (Phase 3-5)
-
-#### Phase 3: Vector Database Integration
-- [ ] ChromaDB integration for semantic search
-- [ ] Incremental indexing for large codebases
-- [ ] Vector-based context retrieval
-- [ ] Hybrid search (vector + metadata)
-
-#### Phase 4: Advanced Retrieval
-- [ ] Cross-encoder reranking models
-- [ ] Quality-aware context selection
-- [ ] Neo4j integration for graph traversal
-- [ ] Hybrid vector + graph search
-
-#### Phase 5: Production Features
-- [ ] Embeddings caching with LRU
-- [ ] Performance monitoring and metrics
-- [ ] LoRa fine-tuning dataset generation
-- [ ] Advanced CLI features and integrations
-
-### 🔬 Research Goals
-- [ ] LoRa fine-tuning adapters for knowledge extraction
-- [ ] Comparative analysis with other extraction methods
-- [ ] Domain-specific prompt optimization
-- [ ] Multi-modal knowledge graph generation
 
 ## 🧪 Testing
 
@@ -283,15 +197,10 @@ npm run benchmark
 npm run test:coverage
 ```
 
-### Test Categories
-- **Unit Tests**: Individual components and functions
-- **Integration Tests**: End-to-end processing workflows  
-- **Quality Tests**: Evaluation metrics and scoring
-- **Performance Tests**: Speed and memory usage benchmarks
-
 ## 🔧 Configuration
 
 ### Environment Variables
+
 ```bash
 # Ollama configuration
 OLLAMA_HOST=http://localhost:11434
@@ -312,128 +221,22 @@ ENTITY_SIMILARITY_THRESHOLD=0.8
 OBSERVATION_SIMILARITY_THRESHOLD=0.85
 ```
 
-### Configuration File (kg-config.json)
-```json
-{
-  "llm": {
-    "model": "llama3.2",
-    "host": "http://localhost:11434",
-    "temperature": 0.1
-  },
-  "processing": {
-    "chunkSize": 4000,
-    "overlapSize": 200,
-    "enableChunking": true
-  },
-  "merging": {
-    "entitySimilarityThreshold": 0.8,
-    "observationSimilarityThreshold": 0.85
-  },
-  "vectorStore": {
-    "type": "chroma",
-    "host": "http://localhost:8000",
-    "collection": "knowledge_graphs"
-  },
-  "cache": {
-    "enabled": true,
-    "directory": "./.kg-cache",
-    "maxSizeMB": 1024
-  }
-}
-```
+## 🤖 Local LLM Requirements & Leaderboard
 
-## 🤖 LLM Requirements
-
-### Supported Models
-- **Llama 3.2** (recommended): Best balance of quality and speed
-- **Mistral 7B**: Good for code understanding
-- **CodeLlama**: Specialized for programming languages
-- **Qwen 2.5**: Excellent for research documents
-
-### Model Requirements
-- **Context Window**: Minimum 8k tokens (12k+ recommended)
-- **Instruction Following**: Must support system prompts
-- **JSON Output**: Reliable structured output generation
-- **Local Deployment**: Works with Ollama, LMStudio, etc.
-
-### Performance Notes
-- Larger models (70B+) provide better entity extraction quality
-- Smaller models (7B-13B) are faster but may miss subtle relationships
-- Code-specialized models excel at programming language analysis
-- Fine-tuned models show 15-30% improvement in domain-specific tasks
+TODO: Add benchmarking table. Currently tested qwen2.5-coder:1.5b, qwen3:0.6b, qwen3:1.7b, gemma3:1b, gemma3:4b
 
 ## 🔗 Integration Examples
 
-### Claude Desktop (MCP)
-```bash
-# Generate MCP-compatible memory file
-kg-gen -i ./project --export-format mcp-jsonl -o memory.jsonl
-
-# Configure in Claude Desktop settings
-{
-  "mcpServers": {
-    "memory": {
-      "command": "npx",
-      "args": ["@modelcontextprotocol/server-memory", "memory.jsonl"]
-    }
-  }
-}
-```
-
-### CI/CD Pipeline
-```yaml
-# .github/workflows/knowledge-graph.yml
-name: Update Knowledge Graph
-on:
-  push:
-    branches: [main]
-jobs:
-  update-kg:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Generate Knowledge Graph
-        run: |
-          npx kg-gen -i ./src -o docs/knowledge-graph.json
-          git add docs/knowledge-graph.json
-          git commit -m "Update knowledge graph" || exit 0
-          git push
-```
-
-### API Integration
-```javascript
-// Use as Node.js library
-import { processDirectory, mergeKnowledgeGraphs } from 'kg-gen';
-
-const options = {
-  input: './src',
-  model: 'llama3.2',
-  entitySimilarityThreshold: 0.8
-};
-
-const knowledgeGraph = await processDirectory(options);
-console.log(`Generated ${knowledgeGraph.entities.length} entities`);
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+TODO: Add examples later
 
 ### Development Setup
+
 ```bash
 git clone https://github.com/yourusername/knowledge-graph-generator
 cd knowledge-graph-generator
 npm install
 npm run dev
 ```
-
-### Areas for Contribution
-- 🐛 **Bug Fixes**: Improve reliability and error handling
-- 🚀 **Performance**: Optimize processing speed and memory usage  
-- 🧠 **Intelligence**: Enhance extraction quality and accuracy
-- 🔧 **Features**: Add new file formats, export options, integrations
-- 📖 **Documentation**: Improve guides, examples, and API docs
-- 🧪 **Testing**: Expand test coverage and quality metrics
 
 ## 📄 License
 
@@ -446,13 +249,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - **ChromaDB** and **Neo4j** for vector and graph database capabilities
 - **LangChain** for text splitting and processing utilities
 - **Open Source Community** for the amazing tools and libraries that make this possible
-
-## 📞 Support
-
-- 📖 **Documentation**: [docs/](docs/)
-- 🐛 **Issues**: [GitHub Issues](   )
-- 💬 **Discussions**: [GitHub Discussions](   )
-- 📧 **Email**: [Author](   )
 
 ---
 
