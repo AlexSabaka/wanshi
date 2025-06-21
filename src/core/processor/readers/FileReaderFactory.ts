@@ -1,16 +1,13 @@
 import { FileReader } from './FileReader';
-import { TextReader } from './TextReader';
-import { ImageReader } from './ImageReader';
-import { PdfReader } from './PdfReader';
-import { logger } from '../../../shared/logger';
-import { HtmlReader } from './HtmlReader';
-import { OfficeReader } from './OfficeReader';
+import { Logger } from '../../../shared';
 
 /**
  * Factory for creating appropriate file readers based on file type
  */
 export class FileReaderFactory {
   private readers: FileReader[] = [];
+
+  constructor(private logger: Logger) { }
 
   /**
    * Get appropriate reader for a file
@@ -20,12 +17,12 @@ export class FileReaderFactory {
   getReader(filePath: string): FileReader | null {
     for (const reader of this.readers) {
       if (reader.canRead(filePath)) {
-        logger.debug(`Using ${reader.getName()} for file: ${filePath}`);
+        this.logger.debug(`Using ${reader.getName()} for file: ${filePath}`);
         return reader;
       }
     }
     
-    logger.warn(`No reader found for file: ${filePath}`);
+    this.logger.warn(`No reader found for file: ${filePath}`);
     return null;
   }
 
@@ -35,7 +32,7 @@ export class FileReaderFactory {
    */
   registerReader(reader: FileReader): void {
     this.readers.push(reader);
-    logger.info(`Registered custom reader: ${reader.getName()}`);
+    this.logger.info(`Registered custom reader: ${reader.getName()}`);
   }
 
   /**

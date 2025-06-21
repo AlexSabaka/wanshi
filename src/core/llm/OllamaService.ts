@@ -1,7 +1,7 @@
 import ollama, { ChatResponse, ChatRequest } from "ollama";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import { llmLogger, logger } from "../../shared/logger";
+import { Logger } from "../../shared";
 
 export interface LLMOptions {
   model: string;
@@ -23,8 +23,10 @@ export interface LLMMessage {
  */
 export class OllamaService {
   private options: LLMOptions;
+  private logger: Logger;
 
-  constructor(options: LLMOptions) {
+  constructor(options: LLMOptions, logger: Logger) {
+    this.logger = logger;
     this.options = {
       temperature: 0.1,
       contextLength: 8192,
@@ -71,7 +73,7 @@ export class OllamaService {
 
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
-        logger.debug(
+        this.logger.debug(
           `Generating structured output (attempt ${attempt + 1}/${retries})`
         );
 
@@ -81,7 +83,7 @@ export class OllamaService {
 
         // Parse the response
         const responseContent = response.message.content.trim();
-        logger.debug(
+        this.logger.debug(
           `Raw LLM response: ${responseContent.substring(0, 200)}...`
         );
 
@@ -100,7 +102,7 @@ export class OllamaService {
         const validated = schema.parse(parsed);
         return validated;
       } catch (error) {
-        logger.error(`LLM generation attempt ${attempt + 1} failed: ${error}`);
+        this.logger.error(`LLM generation attempt ${attempt + 1} failed: ${error}`);
 
         if (attempt === retries - 1) {
           throw new Error(
@@ -120,7 +122,7 @@ export class OllamaService {
    * Generate a simple text completion
    */
   async generate(messages: LLMMessage[]): Promise<string> {
-    logger.debug(`Generating text completion`);
+    this.logger.debug(`Generating text completion`);
 
     const ollamaMessages = messages.map((msg) => ({
       role: msg.role,
@@ -148,7 +150,7 @@ export class OllamaService {
    */
   async generateEmbeddings(text: string | string[]): Promise<number[][]> {
     const texts = Array.isArray(text) ? text : [text];
-    logger.debug(`Generating embeddings for ${texts.length} texts`);
+    this.logger.debug(`Generating embeddings for ${texts.length} texts`);
 
     const embeddings: number[][] = [];
 
@@ -171,7 +173,7 @@ export class OllamaService {
       const models = await ollama.list();
       return models.models.some((m) => m.name === modelName);
     } catch (error) {
-      logger.error(`Failed to check model availability: ${error}`);
+      this.logger.error(`Failed to check model availability: ${error}`);
       return false;
     }
   }
@@ -181,13 +183,13 @@ export class OllamaService {
    */
   async ensureModel(modelName: string): Promise<void> {
     if (await this.isModelAvailable(modelName)) {
-      logger.info(`Model ${modelName} is already available`);
+      this.logger.info(`Model ${modelName} is already available`);
       return;
     }
 
-    logger.info(`Pulling model ${modelName}...`);
+    this.logger.info(`Pulling model ${modelName}...`);
     await ollama.pull({ model: modelName });
-    logger.info(`Model ${modelName} pulled successfully`);
+    this.logger.info(`Model ${modelName} pulled successfully`);
   }
 
   /**
@@ -203,10 +205,7 @@ export class OllamaService {
         response.total_duration,
     };
 
-    // llmLogger.info(stats);
-    // llmLogger.info(response.message);
-
-    logger.info(`LLM stats: ${JSON.stringify(stats)}`);
+    this.logger.info(`LLM stats: ${JSON.stringify(stats)}`);
   }
 
   /**

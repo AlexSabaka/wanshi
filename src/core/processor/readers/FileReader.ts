@@ -1,14 +1,29 @@
 import { Buffer } from 'buffer';
 import * as path from 'path';
-import { logger } from '../../../shared/logger';
+import { Logger } from '../../../shared';
+import { TextChunker } from '../chunking';
 
 /**
  * Result of file reading operation
  */
 export interface FileReadResult {
-  content: string;
-  images?: Buffer[];
+  chunks: ChunkResult[];
   metadata?: Record<string, any>;
+}
+
+export interface ChunkResult {
+  content: string;
+  images?: ImageResult[];
+  index: number;
+  totalChunks: number;
+  startOffset: number;
+  endOffset: number;
+}
+
+export interface ImageResult {
+  path?: string;
+  alt?: string;
+  buffer?: Buffer;
 }
 
 /**
@@ -17,8 +32,12 @@ export interface FileReadResult {
  */
 export abstract class FileReader {
   protected readonly supportedExtensions: string[];
+  protected readonly chunker: TextChunker;
+  protected readonly logger: Logger;
 
-  constructor(supportedExtensions: string[]) {
+  constructor(supportedExtensions: string[], chunker: TextChunker, logger: Logger) {
+    this.logger = logger;
+    this.chunker = chunker;
     this.supportedExtensions = supportedExtensions.map(ext => ext.toLowerCase());
   }
 

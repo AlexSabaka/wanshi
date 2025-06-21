@@ -1,13 +1,14 @@
+import { Logger } from "../../../shared";
+import { TextChunker } from "../chunking";
 import { FileReader, FileReadResult } from "./FileReader";
-import { logger } from "../../../shared/logger";
 import PDFParser from "pdf2json";
 
 /**
  * Reader for PDF files
  */
 export class PdfReader extends FileReader {
-  constructor() {
-    super([".pdf"]);
+  constructor(chunker: TextChunker, logger: Logger) {
+    super([".pdf"], chunker, logger);
   }
 
   getName(): string {
@@ -18,21 +19,29 @@ export class PdfReader extends FileReader {
     await this.validateFile(filePath);
 
     try {
-      logger.debug(`Reading PDF file: ${filePath}`);
+      this.logger.debug(`Reading PDF file: ${filePath}`);
 
       const content = await this.readPdfPages(filePath);
+      const chunks = content.map((page, index) => {
+        const startOffset = content.slice(0, index).reduce((acc, curr) => acc + curr.length, 0);
+        return {
+          content: page,
+          startOffset: startOffset,
+          endOffset: startOffset + page.length,
+          index: index + 1,
+          totalChunks: content.length
+        };
+      });
 
       return {
-        // TODO: How to return pages? chunks? joined?
-        content: content.join("\n\n"),
+        chunks: chunks,
         metadata: {
           type: "pdf",
           fileName: filePath,
-          status: "not_implemented",
         },
       };
     } catch (error) {
-      logger.error(`Failed to read PDF file ${filePath}: ${error}`);
+      this.logger.error(`Failed to read PDF file ${filePath}: ${error}`);
       throw new Error(`Failed to read PDF file: ${error}`);
     }
   }

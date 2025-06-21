@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { PromptTemplateEngine, TemplateContext } from './PromptTemplateEngine';
-import { logger } from '../../../shared/logger';
+import { Logger } from '../../../shared';
 
 export interface PromptContext {
   input: string;
@@ -21,9 +21,11 @@ export class PromptManager {
   private systemPromptVersion: string = 'v4';
   private customSystemPrompt?: string;
   private templatesDir: string;
+  private logger: Logger;
 
-  constructor(templatesDir?: string) {
-    this.templateEngine = new PromptTemplateEngine();
+  constructor(logger: Logger, templatesDir?: string) {
+    this.logger = logger;
+    this.templateEngine = new PromptTemplateEngine(logger);
     this.templatesDir = templatesDir || path.join(__dirname, 'templates');
     this.initializeTemplates();
   }
@@ -35,9 +37,9 @@ export class PromptManager {
     try {
       const partialsDir = path.join(this.templatesDir, 'partials');
       await this.templateEngine.registerPartials(partialsDir);
-      logger.info('Prompt templates initialized');
+      this.logger.info('Prompt templates initialized');
     } catch (error) {
-      logger.error(`Failed to initialize templates: ${error}`);
+      this.logger.error(`Failed to initialize templates: ${error}`);
     }
   }
 
@@ -46,7 +48,7 @@ export class PromptManager {
    */
   setCustomSystemPrompt(prompt: string): void {
     this.customSystemPrompt = prompt;
-    logger.info('Using custom system prompt');
+    this.logger.info('Using custom system prompt');
   }
 
   /**
@@ -75,7 +77,7 @@ export class PromptManager {
 
       return await this.templateEngine.renderFile(templatePath, enhancedContext);
     } catch (error) {
-      logger.error(`Failed to render system prompt: ${error}`);
+      this.logger.error(`Failed to render system prompt: ${error}`);
       // Fallback to a basic prompt
       return this.getFallbackSystemPrompt(input, filter);
     }
@@ -114,7 +116,7 @@ export class PromptManager {
 
       return await this.templateEngine.renderFile(templatePath, enhancedContext);
     } catch (error) {
-      logger.error(`Failed to render user prompt: ${error}`);
+      this.logger.error(`Failed to render user prompt: ${error}`);
       // Fallback to basic prompt
       return this.getFallbackUserPrompt(context);
     }
@@ -125,7 +127,7 @@ export class PromptManager {
    */
   setSystemPromptVersion(version: string): void {
     this.systemPromptVersion = version;
-    logger.info(`Using system prompt version: ${version}`);
+    this.logger.info(`Using system prompt version: ${version}`);
   }
 
   /**
@@ -169,7 +171,7 @@ export class PromptManager {
       const enhancedContext = await this.templateEngine.enhanceContext(context);
       return this.templateEngine.render(template, enhancedContext);
     } catch (error) {
-      logger.error(`Failed to render custom template: ${error}`);
+      this.logger.error(`Failed to render custom template: ${error}`);
       throw error;
     }
   }

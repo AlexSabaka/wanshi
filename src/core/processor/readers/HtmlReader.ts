@@ -1,8 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { FileReader, FileReadResult } from './FileReader';
-import { logger } from '../../../shared/logger';
+import { FileReader, FileReadResult, ImageResult } from './FileReader';
 import { HtmlToTextOptions } from 'html-to-text';
+import { Logger } from '../../../shared';
+import { TextChunker } from '../chunking';
 
 /**
  * Features:
@@ -16,8 +17,8 @@ import { HtmlToTextOptions } from 'html-to-text';
  * Supported formats: .html, .htm, .xhtml
  */
 export class HtmlReader extends FileReader {
-  constructor() {
-    super(['.html', '.htm', '.xhtml']);
+  constructor(chunker: TextChunker, logger: Logger) {
+    super(['.html', '.htm', '.xhtml'], chunker, logger);
   }
 
   getName(): string {
@@ -28,7 +29,7 @@ export class HtmlReader extends FileReader {
     await this.validateFile(filePath);
     
     try {
-      logger.debug(`Extracting content from HTML file: ${filePath}`);
+      this.logger.debug(`Extracting content from HTML file: ${filePath}`);
       
       const startTime = Date.now();
       const rawHtml = await fs.promises.readFile(filePath, 'utf-8');
@@ -91,19 +92,35 @@ export class HtmlReader extends FileReader {
         status: 'success'
       };
 
-      logger.debug(`Successfully processed HTML file ${filePath} in ${processingTime}ms`);
+      this.logger.debug(`Successfully processed HTML file ${filePath} in ${processingTime}ms`);
 
       return {
-        content: content,
-        images: images.length > 0 ? images : undefined,
+        chunks: [
+          {
+            content: content,
+            index: 1,
+            totalChunks: 1,
+            startOffset: 0,
+            endOffset: content.length,
+            images: images.length > 0 ? images : undefined,
+          },
+        ],
         metadata: metadata
       };
 
     } catch (error: any) {
-      logger.error(`Failed to read HTML file ${filePath}: ${error.message}`);
+      this.logger.error(`Failed to read HTML file ${filePath}: ${error.message}`);
       
       return {
-        content: '',
+        chunks: [
+          {
+            content: '',
+            index: 1,
+            totalChunks: 1,
+            startOffset: 0,
+            endOffset: 0,
+          },
+        ],
         metadata: {
           type: 'html_document',
           description: 'HTML Document',
@@ -195,7 +212,7 @@ export class HtmlReader extends FileReader {
       };
 
     } catch (error: any) {
-      logger.warn(`Cheerio parsing failed: ${error.message}`);
+      this.logger.warn(`Cheerio parsing failed: ${error.message}`);
       return {
         title: '',
         description: '',
@@ -259,7 +276,7 @@ export class HtmlReader extends FileReader {
       };
 
     } catch (error: any) {
-      logger.warn(`html-to-text parsing failed: ${error.message}`);
+      this.logger.warn(`html-to-text parsing failed: ${error.message}`);
       return {
         text: '',
         cleanText: ''
@@ -270,7 +287,7 @@ export class HtmlReader extends FileReader {
   /**
    * Extract images with metadata
    */
-  private extractImages($: any): Buffer[] {
+  private extractImages($: any): ImageResult[] {
     // For this implementation, we're not extracting actual image data
     // In a real scenario, you'd fetch the images and convert to buffers
     // This is a placeholder that shows how to extract image metadata

@@ -1,1 +1,2 @@
-export { DIContainer, ContainerFactory, ContainerConfig, TYPES } from './Container';
+export * from './ContainerFactory';
+export * from './DIContainer';

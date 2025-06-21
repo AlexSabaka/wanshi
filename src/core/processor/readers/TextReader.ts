@@ -1,12 +1,13 @@
 import * as fs from 'fs';
 import { FileReader, FileReadResult } from './FileReader';
-import { logger } from '../../../shared/logger';
+import { Logger } from '../../../shared';
+import { TextChunker } from '../chunking';
 
 /**
  * Reader for plain text files
  */
 export class TextReader extends FileReader {
-  constructor() {
+  constructor(chunker: TextChunker, logger: Logger) {
     super([
       '.txt', '.md', '.markdown', '.rst', '.asciidoc',
       '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
@@ -49,8 +50,7 @@ export class TextReader extends FileReader {
       'Cargo.toml', 'Cargo.lock',
       'go.mod', 'go.sum',
       '.proto', '.graphql', '.gql'
-
-    ]);
+    ], chunker, logger);
   }
 
   getName(): string {
@@ -61,11 +61,12 @@ export class TextReader extends FileReader {
     await this.validateFile(filePath);
     
     try {
-      logger.debug(`Reading text file: ${filePath}`);
+      this.logger.debug(`Reading text file: ${filePath}`);
       const content = await fs.promises.readFile(filePath, 'utf-8');
+      const chunks = await this.chunker.chunk(content);
       
       return {
-        content,
+        chunks,
         metadata: {
           type: 'text',
           encoding: 'utf-8',
@@ -73,7 +74,7 @@ export class TextReader extends FileReader {
         }
       };
     } catch (error) {
-      logger.error(`Failed to read text file ${filePath}: ${error}`);
+      this.logger.error(`Failed to read text file ${filePath}: ${error}`);
       throw new Error(`Failed to read text file: ${error}`);
     }
   }

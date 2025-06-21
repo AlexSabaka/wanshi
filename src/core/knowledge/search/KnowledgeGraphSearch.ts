@@ -1,18 +1,16 @@
 import path from "path";
+import { EmbeddingService } from "../../llm/";
 import { cosineSimilarity, jaroWinklerSimilarity } from "../../../shared/utils";
-import { logger } from "../../../shared/logger";
-import { Entity, KnowledgeGraph, Relation } from "../../../types/KnowledgeGraph";
-import { EmbeddingService } from "../../llm/EmbeddingService";
+import { IKnowledgeGraphSearch, Entity, KnowledgeGraph, Relation } from "../../../types";
+import { Logger } from "../../../shared";
 
 // Enhanced search with multiple strategies
-export class KnowledgeGraphSearch {
-  private embeddingService: EmbeddingService;
-  
+export class KnowledgeGraphSearch implements IKnowledgeGraphSearch {
+ 
   constructor(
-    private model: string,
-    private host: string,
+    private embeddingService: EmbeddingService,
+    private logger: Logger,
   ) {
-    this.embeddingService = new EmbeddingService({ model, host });
   }
 
   // Strategy 1: Content-based search using file content directly
@@ -26,7 +24,7 @@ export class KnowledgeGraphSearch {
       includeObservations?: boolean;
     } = {}
   ): Promise<KnowledgeGraph> {
-    logger?.debug(`Searching knowledge graphs for context relevant to: ${fileName}`);
+    this.logger.debug(`Searching knowledge graphs for context relevant to: ${fileName}`);
     
     // Extract key terms from file content (simple but effective)
     const keyTerms = this.extractKeyTerms(fileContent, fileName);
@@ -265,7 +263,7 @@ export class KnowledgeGraphSearch {
       };
       
     } catch (error) {
-      logger?.warn(`Embedding search failed: ${error}`);
+      this.logger.warn(`Embedding search failed: ${error}`);
       return { entities: [], relations: [] };
     }
   }

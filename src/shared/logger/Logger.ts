@@ -1,15 +1,9 @@
-import { appendFileSync } from "fs";
-import { Logger as TSLogger } from "tslog";
 
-export const logger = new TSLogger<any>({
-  name: "kg-gen",
-});
-
-export const llmLogger = new TSLogger<any>({
-  name: "ollama",
-  attachedTransports: [
-    (logObj) => {
-      appendFileSync("./ollama_messages.log.jsonl", JSON.stringify(logObj) + "\n");
-    },
-  ],
-});
+export interface Logger {
+  trace(...args: unknown[]): any;
+  debug(...args: unknown[]): any;
+  info(...args: unknown[]): any;
+  warn(...args: unknown[]): any;
+  error(...args: unknown[]): any;
+  fatal(...args: unknown[]): any;
+}

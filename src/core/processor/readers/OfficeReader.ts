@@ -1,22 +1,23 @@
 import { FileReader, FileReadResult } from "./FileReader";
-import { logger } from "../../../shared/logger";
 import path from "path";
 import * as officeParser from "officeparser";
 import fs from "fs/promises";
+import { Logger } from "../../../shared";
+import { TextChunker } from "../chunking";
 
 /**
  * Reader for Microsoft Office documents using officeparser
- * 
+ *
  * Supported formats: .docx, .pptx, .xlsx, .odt, .odp, .ods
- * 
- * NOTE: This implementation only extracts text content. 
+ *
+ * NOTE: This implementation only extracts text content.
  * Images and rich metadata are not supported by the underlying officeparser library.
- * 
+ *
  * npm install officeparser
  */
 export class OfficeReader extends FileReader {
-  constructor() {
-    super([".docx", ".pptx", ".xlsx", ".odt", ".odp", ".ods"]);
+  constructor(chunker: TextChunker, logger: Logger) {
+    super([".docx", ".pptx", ".xlsx", ".odt", ".odp", ".ods"], chunker, logger);
   }
 
   getName(): string {
@@ -27,7 +28,7 @@ export class OfficeReader extends FileReader {
     await this.validateFile(filePath);
 
     try {
-      logger.debug(`Reading Office file: ${filePath}`);
+      this.logger.debug(`Reading Office file: ${filePath}`);
 
       // Get file stats for basic metadata
       const stats = await fs.stat(filePath);
@@ -37,7 +38,7 @@ export class OfficeReader extends FileReader {
       const config = {
         newlineDelimiter: "\n",
         ignoreNotes: false, // Include notes in parsed text
-        outputErrorToConsole: false
+        outputErrorToConsole: false,
       };
 
       // Extract text content using officeparser
@@ -58,23 +59,42 @@ export class OfficeReader extends FileReader {
         // Note: officeparser doesn't provide document metadata like author, title, etc.
         // These would need to be extracted using format-specific libraries
         extractedTextLength: content.length,
-        hasContent: content.trim().length > 0
+        hasContent: content.trim().length > 0,
       };
 
-      logger.debug(`Successfully extracted ${content.length} characters from ${filePath}`);
+      this.logger.debug(
+        `Successfully extracted ${content.length} characters from ${filePath}`
+      );
 
       return {
-        content: content,
+        chunks: [
+          {
+            content: content,
+            startOffset: 0,
+            endOffset: content.length,
+            index: 1,
+            totalChunks: 1,
+          },
+        ],
         // images: undefined, // officeparser doesn't extract images
-        metadata: metadata
+        metadata: metadata,
       };
-
     } catch (error: any) {
-      logger.error(`Failed to read Office file ${filePath}: ${error.message}`);
-      
+      this.logger.error(
+        `Failed to read Office file ${filePath}: ${error.message}`
+      );
+
       // Return error result instead of throwing
       return {
-        content: "",
+        chunks: [
+          {
+            content: "",
+            startOffset: 0,
+            endOffset: 0,
+            index: 1,
+            totalChunks: 1,
+          },
+        ],
         metadata: {
           type: this.getDocumentType(path.extname(filePath).toLowerCase()),
           description: this.matchExtensionToDescription(path.extname(filePath)),
@@ -82,8 +102,8 @@ export class OfficeReader extends FileReader {
           filePath: filePath,
           status: "error",
           error: error.message,
-          errorType: error.name
-        }
+          errorType: error.name,
+        },
       };
     }
   }
@@ -91,14 +111,14 @@ export class OfficeReader extends FileReader {
   private getDocumentType(ext: string): string {
     const types: { [key: string]: string } = {
       ".docx": "word_document",
-      ".doc": "word_document_legacy", 
+      ".doc": "word_document_legacy",
       ".pptx": "powerpoint_presentation",
       ".ppt": "powerpoint_presentation_legacy",
       ".xlsx": "excel_spreadsheet",
-      ".xls": "excel_spreadsheet_legacy", 
+      ".xls": "excel_spreadsheet_legacy",
       ".odt": "openoffice_text",
       ".odp": "openoffice_presentation",
-      ".ods": "openoffice_spreadsheet"
+      ".ods": "openoffice_spreadsheet",
     };
     return types[ext] || "unknown_office_document";
   }
@@ -107,13 +127,13 @@ export class OfficeReader extends FileReader {
     const descriptions: { [key: string]: string } = {
       ".docx": "Microsoft Word Document",
       ".doc": "Microsoft Word 2003 Document",
-      ".pptx": "Microsoft PowerPoint Presentation", 
+      ".pptx": "Microsoft PowerPoint Presentation",
       ".ppt": "Microsoft PowerPoint 2003 Presentation",
       ".xlsx": "Microsoft Excel Spreadsheet",
       ".xls": "Microsoft Excel 2003 Spreadsheet",
       ".odt": "OpenDocument Text Document",
       ".odp": "OpenDocument Presentation",
-      ".ods": "OpenDocument Spreadsheet"
+      ".ods": "OpenDocument Spreadsheet",
     };
     return descriptions[ext] || "Unknown Office Document";
   }

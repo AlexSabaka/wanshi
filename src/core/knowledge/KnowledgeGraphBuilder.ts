@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { OllamaService, LLMMessage } from '../llm/OllamaService';
 import { PromptManager, PromptContext } from '../llm/prompts/PromptManager';
 import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder } from '../../types';
-import { logger } from '../../shared/logger';
+import { Logger } from '../../shared';
 
 // Define the schema for knowledge graph extraction
 const KnowledgeGraphSchema = z.object({
@@ -35,10 +35,12 @@ export interface BuilderOptions {
 export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   private ollamaService: OllamaService;
   private promptManager: PromptManager;
+  private logger: Logger;
 
-  constructor(options: BuilderOptions) {
+  constructor(options: BuilderOptions, logger: Logger) {
     this.ollamaService = options.ollamaService;
     this.promptManager = options.promptManager;
+    this.logger = logger;
   }
 
   /**
@@ -49,22 +51,22 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     systemPrompt: string,
     retrievedContext?: any
   ): Promise<KnowledgeGraph[]> {
-    logger.info(`Building knowledge graph for: ${processedFile.path}`);
+    this.logger.info(`Building knowledge graph for: ${processedFile.path}`);
 
     const graphs: KnowledgeGraph[] = [];
 
     // Process chunks if available
-    if (processedFile.chunks && processedFile.chunks.length > 0) {
+    if (processedFile.chunks.length > 1) {
       for (const chunk of processedFile.chunks) {
         const kg = await this.buildFromChunk(
           processedFile.path,
           chunk.content,
-          processedFile.content,
+          '', // TODO: What to do here? Do I need fileContent?
           systemPrompt,
           chunk.index,
           chunk.totalChunks,
           retrievedContext,
-          processedFile?.images
+          chunk.images
         );
 
         // Add metadata to entities
@@ -76,14 +78,15 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
 
         graphs.push(kg);
       }
-    } else {
+    } else if (processedFile.chunks.length === 1) {
+      const { content, images } = processedFile.chunks[0];
       // Process entire file
       const kg = await this.buildFromContent(
         processedFile.path,
-        processedFile.content,
+        content,
         systemPrompt,
         retrievedContext,
-        processedFile.images
+        images
       );
 
       // Add metadata to entities
@@ -110,7 +113,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     retrievedContext?: any,
     images?: ProcessedImage[]
   ): Promise<KnowledgeGraph> {
-    logger.debug(`Building KG for chunk ${chunkIndex}/${totalChunks} of ${filePath}`);
+    this.logger.debug(`Building KG for chunk ${chunkIndex}/${totalChunks} of ${filePath}`);
 
     const userPrompt = await this.promptManager.getUserPrompt({
       input: '',
@@ -136,7 +139,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     retrievedContext?: any,
     images?: ProcessedImage[]
   ): Promise<KnowledgeGraph> {
-    logger.debug(`Building KG for entire file: ${filePath}`);
+    this.logger.debug(`Building KG for entire file: ${filePath}`);
 
     const userPrompt = await this.promptManager.getUserPrompt({
       input: '',
@@ -180,11 +183,11 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       result.entities ??= [];
       result.relations ??= [];
 
-      logger.debug(`Generated KG with ${result.entities.length} entities and ${result.relations.length} relations`);
+      this.logger.debug(`Generated KG with ${result.entities.length} entities and ${result.relations.length} relations`);
 
       return result as KnowledgeGraph;
     } catch (error) {
-      logger.error(`Failed to generate knowledge graph: ${error}`);
+      this.logger.error(`Failed to generate knowledge graph: ${error}`);
       
       // Return empty graph on failure
       return {

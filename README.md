@@ -166,7 +166,6 @@ TODO: Add examples later
 git clone https://github.com/alex_sabaka/kg-gen
 cd kg-gen
 npm install
-npm run dev
 ```
 
 ## 📄 License

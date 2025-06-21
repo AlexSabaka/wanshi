@@ -1,11 +1,12 @@
 import { FileReader, FileReadResult } from "./FileReader";
-import { logger } from "../../../shared/logger";
 import path from "path";
 import fs from "fs/promises";
 import ffmpeg from "fluent-ffmpeg";
 import { nodewhisper } from "nodejs-whisper";
 import { promisify } from "util";
 import { stat } from "fs/promises";
+import { Logger } from "../../../shared";
+import { TextChunker } from "../chunking";
 
 /**
  * Reader for audio/video files with speech transcription
@@ -31,21 +32,29 @@ export class AudioReader extends FileReader {
     options: AudioProcessingOptions = {
       modelName: "medium",
       language: "auto",
+      translate: false,
     },
-    tempDir = "./temp"
+    tempDir = "./temp",
+    chunker: TextChunker,
+    logger: Logger
   ) {
-    super([
-      ".mp3",
-      ".mp4",
-      ".wav",
-      ".ogg",
-      ".m4a",
-      ".flac",
-      ".aac",
-      ".webm",
-      ".mkv",
-      ".avi",
-    ]);
+    super(
+      [
+        ".mp3",
+        ".mp4",
+        ".wav",
+        ".ogg",
+        ".m4a",
+        ".flac",
+        ".aac",
+        ".webm",
+        ".mkv",
+        ".mov",
+        ".avi",
+      ],
+      chunker,
+      logger
+    );
     this.tempDir = tempDir;
     this.options = options;
     this.ensureTempDir();
@@ -59,7 +68,7 @@ export class AudioReader extends FileReader {
     await this.validateFile(filePath);
 
     try {
-      logger.debug(`Reading audio/video file: ${filePath}`);
+      this.logger.debug(`Reading audio/video file: ${filePath}`);
 
       const stats = await stat(filePath);
       const ext = path.extname(filePath).toLowerCase();
@@ -102,19 +111,21 @@ export class AudioReader extends FileReader {
         hasTranscription: transcriptionResult.content.trim().length > 0,
       };
 
-      logger.debug(
+      this.logger.debug(
         `Successfully transcribed ${filePath}: ${transcriptionResult.content.length} characters`
       );
 
       return {
-        content: transcriptionResult.content,
+        chunks: await this.chunker.chunk(transcriptionResult.content),
         metadata: metadata,
       };
     } catch (error: any) {
-      logger.error(`Failed to read audio file ${filePath}: ${error.message}`);
+      this.logger.error(
+        `Failed to read audio file ${filePath}: ${error.message}`
+      );
 
       return {
-        content: "",
+        chunks: [],
         metadata: {
           type: this.getMediaType(path.extname(filePath).toLowerCase()),
           description: this.getMediaDescription(path.extname(filePath)),
@@ -177,7 +188,7 @@ export class AudioReader extends FileReader {
         comment: metadata.format.tags?.comment || "",
       };
     } catch (error: any) {
-      logger.warn(`Could not extract audio metadata: ${error.message}`);
+      this.logger.warn(`Could not extract audio metadata: ${error.message}`);
       return {
         duration: 0,
         bitrate: 0,
@@ -199,20 +210,22 @@ export class AudioReader extends FileReader {
     if (ext === ".wav") {
       const metadata = await this.extractAudioMetadata(filePath);
       if (metadata.audioSampleRate === 16000 && metadata.audioChannels <= 2) {
-        logger.debug(
+        this.logger.debug(
           "WAV file already in optimal format, skipping preprocessing"
         );
         return filePath;
       }
     }
 
-    const outputPath = path.join(
-      this.tempDir,
-      `${path.basename(filePath, ext)}_processed_${Date.now()}.wav`
+    const outputPath = path.resolve(
+      path.join(
+        this.tempDir,
+        `${path.basename(filePath, ext)}_processed_${Date.now()}.wav`
+      )
     );
 
     return new Promise((resolve, reject) => {
-      logger.debug(`Converting ${filePath} to WAV format for Whisper`);
+      this.logger.debug(`Converting ${filePath} to WAV format for Whisper`);
 
       ffmpeg(filePath)
         .audioFrequency(16000) // Whisper loves 16kHz
@@ -220,11 +233,11 @@ export class AudioReader extends FileReader {
         .audioCodec("pcm_s16le") // Uncompressed PCM
         .format("wav")
         .on("start", (commandLine) => {
-          logger.debug(`FFmpeg process started: ${commandLine}`);
+          this.logger.debug(`FFmpeg process started: ${commandLine}`);
         })
         .on("progress", (progress) => {
           if (progress.percent) {
-            logger.debug(
+            this.logger.debug(
               `Audio conversion progress: ${Math.round(progress.percent)}%`
             );
           }
@@ -235,7 +248,7 @@ export class AudioReader extends FileReader {
           reject(error);
         })
         .on("end", () => {
-          logger.debug(`Audio conversion completed: ${outputPath}`);
+          this.logger.debug(`Audio conversion completed: ${outputPath}`);
           resolve(outputPath);
         })
         .save(outputPath);
@@ -252,7 +265,7 @@ export class AudioReader extends FileReader {
     const startTime = Date.now();
 
     try {
-      logger.debug(
+      this.logger.debug(
         `Transcribing with Whisper model: ${this.options.modelName}`
       );
 
@@ -260,14 +273,19 @@ export class AudioReader extends FileReader {
         modelName: this.options.modelName,
         removeWavFileAfterTranscription: false, // We'll handle cleanup ourselves
         autoDownloadModelName: this.options.modelName,
+        // logger: {
+        //   debug: (...args: any[]) => this.logger.debug(args),
+        //   error: (...args: any[]) => this.logger.error(args),
+        //   log: (...args: any[]) => this.logger.info(args),
+        // },
         whisperOptions: {
           language: this.options.language, // Auto-detect language
           outputInText: true,
-          outputInJson: true, // Get detailed results
-          outputInSrt: true, // Get timestamps
-          wordTimestamps: true, // Word-level timestamps
-          translateToEnglish: false, // Keep original language
-          splitOnWord: true,
+          outputInJson: false, // Get detailed results
+          outputInSrt: false, // Get timestamps
+          wordTimestamps: false, // Word-level timestamps
+          translateToEnglish: this.options.translate,
+          splitOnWord: false,
         },
       };
 
@@ -281,8 +299,7 @@ export class AudioReader extends FileReader {
         whisperModel: this.options.modelName,
         detectedLanguage: (content as any).language || "unknown",
         transcriptionConfidence: (content as any).confidence || null,
-        wordCount: content.split(/\s+/).filter((word) => word.length > 0)
-          .length,
+        wordCount: content.split(/\s+/).filter((word) => word.length > 0).length,
         hasTimestamps: options.whisperOptions.wordTimestamps,
         processingTimeMs: processingTime,
       };
@@ -312,10 +329,10 @@ export class AudioReader extends FileReader {
         processedPath.includes(this.tempDir)
       ) {
         await fs.unlink(processedPath);
-        logger.debug(`Cleaned up temporary file: ${processedPath}`);
+        this.logger.debug(`Cleaned up temporary file: ${processedPath}`);
       }
     } catch (error) {
-      logger.warn(
+      this.logger.warn(
         `Could not clean up temporary file ${processedPath}: ${error}`
       );
     }
@@ -328,7 +345,9 @@ export class AudioReader extends FileReader {
     try {
       await fs.mkdir(this.tempDir, { recursive: true });
     } catch (error) {
-      logger.warn(`Could not create temp directory ${this.tempDir}: ${error}`);
+      this.logger.warn(
+        `Could not create temp directory ${this.tempDir}: ${error}`
+      );
     }
   }
 
@@ -386,6 +405,7 @@ export interface WhisperConfig {
 export interface AudioProcessingOptions {
   modelName: string;
   language: string;
+  translate: boolean;
 }
 
 /**

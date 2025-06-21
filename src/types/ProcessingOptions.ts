@@ -17,14 +17,14 @@ export interface ProcessingOptions {
   temperature: number;
   repeatPenalty: number;
   contextLength: number;
-  seed?: number;
+  seed: number | undefined;
   system: string;
   embeddingsModel: string;
 
   // Text Processing
+  chunking: ChunkingMode;
   chunkSize: number;
   overlapSize: number;
-  chunking: ChunkingMode;
 
   // Documents Processing
   docling: boolean;
@@ -35,22 +35,36 @@ export interface ProcessingOptions {
   asr: SpeechRecognitionMode;
   whisperModel: string;
   language: string;
-
+  translate: boolean;
 
   // Context Retrieval
   retrieval: RetrievalMode;
   retrievalLimit: number;
 
   // Knowledge Graph Merging
-  entitySimilarityThreshold?: number;
-  observationSimilarityThreshold?: number;
-  enableSimilarityMerging?: boolean;
+  entitySimilarityThreshold: number;
+  observationSimilarityThreshold: number;
+  enableSimilarityMerging: boolean;
 
   // Export Options
   exportFormat?: ExportFormat;
 
+  // Dot Export Options
+  dotOptions: {
+    layout?: "dot" | "neato" | "fdp" | "sfdp" | "circo" | "twopi";
+    rankdir?: "TB" | "BT" | "LR" | "RL";
+    nodeShape?: string;
+    edgeStyle?: string;
+    colorScheme?: "default" | "scientific" | "code" | "minimal";
+    includeObservations?: boolean;
+    maxObservationsPerNode?: number;
+    clusterByEntityType?: boolean;
+    clusterByFile?: boolean;
+    showLegend?: boolean;
+  };
+
   // Logging & Debug
-  logLevel: 'debug' | 'info' | 'warning' | 'error';
+  logLevel: "debug" | "info" | "warning" | "error";
   logFile: string;
   debug: boolean;
   silent: boolean;
@@ -62,19 +76,19 @@ export interface ProcessingOptions {
 /**
  * Chunking behavior options
  */
-export type ExportFormat = 'json' | 'jsonl' | 'mcp-jsonl' | 'dot';
+export type ExportFormat = "json" | "jsonl" | "mcp-jsonl" | "dot";
 
 /**
  * Chunking behavior options
  */
-export type ChunkingMode = 'enabled' | 'disabled' | 'auto';
+export type ChunkingMode = "enabled" | "disabled" | "auto";
 
 /**
  * Context retrieval behavior options
  */
-export type RetrievalMode = 'enabled' | 'disabled' | 'auto';
+export type RetrievalMode = "enabled" | "disabled" | "auto";
 
 /**
  * Automatic Speech Recognition mode options
  */
-export type SpeechRecognitionMode = 'enabled' | 'disabled' | 'auto';
+export type SpeechRecognitionMode = "enabled" | "disabled" | "auto";

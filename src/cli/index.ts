@@ -4,8 +4,8 @@ import { Command } from "commander";
 import * as info from "../../package.json";
 import { processCommand, watchCommand } from "./commands";
 import { ProcessingOptions } from "../types/ProcessingOptions";
-import { logger } from "../shared/logger";
-import { readConfigurationFile } from "../shared/utils";
+import { ContainerFactory, TYPES } from "../core/di";
+import { readConfigurationFile, Logger, LoggerFactory } from "../shared";
 
 const program = new Command();
 
@@ -75,6 +75,11 @@ program
     "set speech recognition language (default: auto)",
     "auto"
   )
+  .option(
+    "--translate",
+    "translate to english (default: false)",
+    false
+  )
 
   // Enable Docling PDF/DOC/DOCX/PPT/PPTX Processing
   .option("--docling", "use docling for PDF/DOC/DOCX/PPT/PPTX documents processing (default: false)", false)
@@ -107,7 +112,7 @@ program
   // Export Options
   .option(
     "--export-format <format>",
-    "export format (json|jsonl|mcp-jsonl)",
+    "export format (json|jsonl|mcp-jsonl|dot)",
     "json"
   )
 
@@ -124,41 +129,32 @@ program
   .action(async (options: ProcessingOptions) => {
     // Read configuration file if present
     if (options.config) {
-      logger.info(`Reading processing configuration file from ${options.config}`);
+      const tempLogger = LoggerFactory.createLogger(options);
+
+      tempLogger.info(`Reading processing configuration file from ${options.config}`);
       const configOptions = await readConfigurationFile(options.config);
 
-      logger.debug(`Configuration file contents:`, configOptions);
+      tempLogger.debug(`Configuration file contents:`, configOptions);
 
-      logger.warn(`Merging configuration file options with CLI arguments`);
+      tempLogger.warn(`Merging configuration file options with CLI arguments`);
       options = {
         ...options,
         ...configOptions,
       };
     }
 
-    // Configure logger
-    if (options.silent) {
-      logger.settings.minLevel = 3;
-    } else if (options.debug) {
-      logger.settings.minLevel = 0;
-    } else {
-      logger.settings.minLevel =
-        options.logLevel === "debug"
-          ? 0
-          : options.logLevel === "info"
-          ? 1
-          : options.logLevel === "warning"
-          ? 2
-          : options.logLevel === "error"
-          ? 3
-          : 99;
-    }
+    // Initialize DI container
+    const container = ContainerFactory.createContainer({
+      processingOptions: options,
+    });
+
+    const logger = await container.resolve<Logger>(TYPES.Logger);
 
     try {
       if (options.watch) {
-        await watchCommand(options);
+        await watchCommand(container);
       } else {
-        await processCommand(options);
+        await processCommand(container);
       }
     } catch (error) {
       logger.error(`Command failed: ${error}`);

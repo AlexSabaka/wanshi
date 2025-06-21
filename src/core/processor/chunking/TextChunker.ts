@@ -1,6 +1,6 @@
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { logger } from '../../../shared/logger';
 import { ChunkingOptions, ProcessedChunk } from "../../../types";
+import { Logger } from "../../../shared";
 
 /**
  * Smart text chunking service using LangChain's RecursiveCharacterTextSplitter
@@ -19,14 +19,15 @@ export class TextChunker {
     "",      // Character level as last resort
   ];
 
+  constructor(private options: ChunkingOptions, private logger: Logger) { }
+
   /**
    * Chunk text into smaller pieces with overlap
    */
   async chunk(
-    text: string, 
-    options: ChunkingOptions
+    text: string
   ): Promise<ProcessedChunk[]> {
-    if (!options.enabled || text.length <= options.maxChunkSize) {
+    if (!this.options.enabled || text.length <= this.options.maxChunkSize) {
       return [{
         content: text,
         index: 1,
@@ -36,24 +37,24 @@ export class TextChunker {
       }];
     }
 
-    logger.debug(`Chunking text of length ${text.length} with max size ${options.maxChunkSize}`);
+    this.logger.debug(`Chunking text of length ${text.length} with max size ${this.options.maxChunkSize}`);
 
     const splitter = new RecursiveCharacterTextSplitter({
-      chunkSize: options.maxChunkSize,
-      chunkOverlap: options.overlapSize,
+      chunkSize: this.options.maxChunkSize,
+      chunkOverlap: this.options.overlapSize,
       separators: this.defaultSeparators,
     });
 
     const chunks = await splitter.splitText(text);
     
-    logger.info(`Split text into ${chunks.length} chunks`);
+    this.logger.info(`Split text into ${chunks.length} chunks`);
 
     return chunks.map((chunk, index) => ({
       content: chunk,
       index: index + 1,
       totalChunks: chunks.length,
-      startOffset: this.calculateStartPosition(chunks, index, options.overlapSize),
-      endOffset: this.calculateEndPosition(chunks, index, options.overlapSize)
+      startOffset: this.calculateStartPosition(chunks, index, this.options.overlapSize),
+      endOffset: this.calculateEndPosition(chunks, index, this.options.overlapSize)
     }));
   }
 

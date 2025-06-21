@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { minimatch } from 'minimatch';
-import { logger } from '../logger';
+import { Logger } from '../logger';
 
 export interface DirectoryTreeOptions {
   filter?: string;
@@ -25,7 +25,8 @@ export class DirectoryTreeGenerator {
    */
   static async generateTree(
     dirPath: string,
-    options: DirectoryTreeOptions = {}
+    options: DirectoryTreeOptions = {},
+    logger: Logger,
   ): Promise<TreeNode[]> {
     const {
       filter = '**/*',
@@ -34,7 +35,7 @@ export class DirectoryTreeGenerator {
       includeHidden = false
     } = options;
 
-    return this.buildTree(dirPath, filter, excludePatterns, includeHidden, 0, maxDepth);
+    return this.buildTree(dirPath, filter, excludePatterns, includeHidden, 0, maxDepth, logger);
   }
 
   /**
@@ -42,9 +43,10 @@ export class DirectoryTreeGenerator {
    */
   static async generateTextTree(
     dirPath: string,
-    options: DirectoryTreeOptions = {}
+    options: DirectoryTreeOptions = {},
+    logger: Logger,
   ): Promise<string> {
-    const tree = await this.generateTree(dirPath, options);
+    const tree = await this.generateTree(dirPath, options, logger);
     return this.treeToText(tree, '', true);
   }
 
@@ -57,7 +59,8 @@ export class DirectoryTreeGenerator {
     excludePatterns: string[],
     includeHidden: boolean,
     currentDepth: number,
-    maxDepth: number
+    maxDepth: number,
+    logger: Logger,
   ): Promise<TreeNode[]> {
     if (currentDepth >= maxDepth) {
       return [];
@@ -89,7 +92,8 @@ export class DirectoryTreeGenerator {
             excludePatterns,
             includeHidden,
             currentDepth + 1,
-            maxDepth
+            maxDepth,
+            logger
           );
 
           // Only include directory if it has matching children or matches filter itself
@@ -120,7 +124,7 @@ export class DirectoryTreeGenerator {
       });
 
     } catch (error) {
-      logger.error(`Failed to read directory ${dirPath}: ${error}`);
+      logger?.error(`Failed to read directory ${dirPath}: ${error}`);
       return [];
     }
   }

@@ -1,21 +1,22 @@
-import { MergeOptions, KnowledgeGraph, Entity, Relation } from "../../../types";
-import { logger } from "../../../shared/logger";
+import { KnowledgeGraph, Entity, Relation, ProcessingOptions } from "../../../types";
 import { jaroWinklerSimilarity , cosineSimilarity } from "../../../shared/utils";
-import { EmbeddingService } from "../../llm/EmbeddingService";
+import { EmbeddingService } from "../../llm";
+import { Logger } from "../../../shared";
+
+// Default similarity thresholds for entities and observation merging
+const DefaultSimilarityThreshold = 0.7;
+const DefaultObservationThreshold = 0.7;
 
 // Deduplicate observations using embeddings
 async function deduplicateObservations(
   observations: string[],
   threshold: number,
-  model: string,
-  host: string
+  embeddingService: EmbeddingService,
+  logger: Logger,
 ): Promise<string[]> {
   if (observations.length <= 1) return observations;
 
   logger?.debug(`Deduplicating ${observations.length} observations`);
-
-  // Create embedding service for this operation
-  const embeddingService = new EmbeddingService({ model, host });
 
   // Get embeddings for all observations
   const observationData: Array<{ text: string; embedding: number[] }> = [];
@@ -93,7 +94,9 @@ function findSimilarEntity(
 
 export async function mergeKnowledgeGraphs(
   graphs: KnowledgeGraph[],
-  options: MergeOptions
+  options: Partial<ProcessingOptions>,
+  embeddingService: EmbeddingService,
+  logger: Logger,
 ): Promise<KnowledgeGraph> {
   logger?.info(
     `Starting hierarchical merge of ${graphs.length} knowledge graphs`
@@ -137,7 +140,7 @@ export async function mergeKnowledgeGraphs(
       `Step 2: Merging ${fileGraphs.length} entities in file: ${file}`
     );
 
-    const fileMerged = await mergeWithinFile(fileGraphs, file, options);
+    const fileMerged = await mergeWithinFile(fileGraphs, file, options, embeddingService, logger);
     mergedByFile.set(file, fileMerged);
 
     logger?.debug(
@@ -151,7 +154,7 @@ export async function mergeKnowledgeGraphs(
   );
 
   const globalGraphs = Array.from(mergedByFile.values());
-  const finalResult = await mergeGlobally(globalGraphs, options);
+  const finalResult = await mergeGlobally(globalGraphs, options, embeddingService, logger);
 
   logger?.info(
     `Hierarchical merge complete: ${finalResult.entities.length} entities, ${finalResult.relations.length} relations`
@@ -164,7 +167,9 @@ export async function mergeKnowledgeGraphs(
 async function mergeWithinFile(
   fileGraphs: KnowledgeGraph[],
   fileName: string,
-  options: MergeOptions
+  options: Partial<ProcessingOptions>,
+  embeddingService: EmbeddingService,
+  logger: Logger,
 ): Promise<KnowledgeGraph> {
   const entityMap = new Map<string, Entity>();
   const relationSet = new Set<string>();
@@ -172,7 +177,7 @@ async function mergeWithinFile(
 
   // Use stricter similarity threshold for same-file merging (entities are more likely to be related)
   const withinFileSimilarityThreshold = Math.min(
-    options.entitySimilarityThreshold * 0.7,
+    (options.entitySimilarityThreshold || DefaultSimilarityThreshold) * 0.7,
     0.6
   );
 
@@ -206,9 +211,9 @@ async function mergeWithinFile(
         if (allObservations.length > 0) {
           existing.observations = await deduplicateObservations(
             allObservations,
-            Math.min(options.observationSimilarityThreshold * 0.8, 0.7), // More aggressive deduplication
-            options.model,
-            options.host
+            Math.min((options.observationSimilarityThreshold || DefaultObservationThreshold) * 0.8, 0.7), // More aggressive deduplication
+            embeddingService,
+            logger
           );
         }
 
@@ -279,7 +284,9 @@ async function mergeWithinFile(
 // Global merge across different files using more relaxed similarity
 async function mergeGlobally(
   fileGraphs: KnowledgeGraph[],
-  options: MergeOptions
+  options: Partial<ProcessingOptions>,
+  embeddingService: EmbeddingService,
+  logger: Logger,
 ): Promise<KnowledgeGraph> {
   const entityMap = new Map<string, Entity>();
   const relationSet = new Set<string>();
@@ -301,7 +308,7 @@ async function mergeGlobally(
       const similarEntityName = findSimilarEntity(
         entity.name,
         entityMap,
-        globalSimilarityThreshold
+        globalSimilarityThreshold || DefaultSimilarityThreshold
       );
 
       if (similarEntityName) {
@@ -320,9 +327,9 @@ async function mergeGlobally(
         if (allObservations.length > 0) {
           existing.observations = await deduplicateObservations(
             allObservations,
-            options.observationSimilarityThreshold, // Use original threshold
-            options.model,
-            options.host
+            options.observationSimilarityThreshold || DefaultObservationThreshold, // Use original threshold
+            embeddingService,
+            logger,
           );
         }
 
@@ -376,10 +383,10 @@ async function mergeGlobally(
         findSimilarEntity(
           relation.from,
           entityMap,
-          globalSimilarityThreshold
+          globalSimilarityThreshold || DefaultSimilarityThreshold
         ) || relation.from;
       const toEntity =
-        findSimilarEntity(relation.to, entityMap, globalSimilarityThreshold) ||
+        findSimilarEntity(relation.to, entityMap, globalSimilarityThreshold || DefaultSimilarityThreshold) ||
         relation.to;
 
       // Only keep relations where both entities exist in final graph

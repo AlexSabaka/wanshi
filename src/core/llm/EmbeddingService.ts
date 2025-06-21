@@ -1,5 +1,5 @@
 import ollama from 'ollama';
-import { logger } from '../../shared/logger';
+import { Logger } from '../../shared';
 
 export interface EmbeddingOptions {
   model: string;
@@ -12,10 +12,12 @@ export interface EmbeddingOptions {
 export class EmbeddingService {
   private options: EmbeddingOptions;
   private cache: Map<string, number[]>;
+  private logger: Logger;
 
-  constructor(options: EmbeddingOptions) {
+  constructor(options: EmbeddingOptions, logger: Logger) {
     this.options = options;
     this.cache = new Map();
+    this.logger = logger;
   }
 
   /**
@@ -25,11 +27,11 @@ export class EmbeddingService {
     // Check cache first
     const cached = this.cache.get(text);
     if (cached) {
-      logger.debug(`Using cached embedding for text: ${text.substring(0, 50)}...`);
+      this.logger.debug(`Using cached embedding for text: ${text.substring(0, 50)}...`);
       return cached;
     }
 
-    logger.debug(`Generating embedding for text: ${text.substring(0, 50)}...`);
+    this.logger.debug(`Generating embedding for text: ${text.substring(0, 50)}...`);
     
     try {
       const response = await ollama.embeddings({
@@ -42,7 +44,7 @@ export class EmbeddingService {
       
       return response.embedding;
     } catch (error) {
-      logger.error(`Failed to generate embedding: ${error}`);
+      this.logger.error(`Failed to generate embedding: ${error}`);
       throw new Error(`Failed to generate embedding: ${error}`);
     }
   }
@@ -51,7 +53,7 @@ export class EmbeddingService {
    * Generate embeddings for multiple texts
    */
   async embedBatch(texts: string[]): Promise<number[][]> {
-    logger.debug(`Generating embeddings for ${texts.length} texts`);
+    this.logger.debug(`Generating embeddings for ${texts.length} texts`);
     
     const embeddings: number[][] = [];
     
@@ -73,7 +75,7 @@ export class EmbeddingService {
    */
   clearCache(): void {
     this.cache.clear();
-    logger.debug('Embedding cache cleared');
+    this.logger.debug('Embedding cache cleared');
   }
 
   /**

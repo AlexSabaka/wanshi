@@ -2,8 +2,8 @@ import Handlebars from 'handlebars';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DirectoryTreeGenerator } from '../../../shared/utils/directoryTree';
-import { logger } from '../../../shared/logger';
 import { DocumentOutlineGenerator } from '../../../shared/utils/documentOutline';
+import { Logger } from '../../../shared';
 
 export interface TemplateContext {
   // File-specific context
@@ -40,8 +40,10 @@ export class PromptTemplateEngine {
   private handlebars: typeof Handlebars;
   private templateCache: Map<string, HandlebarsTemplateDelegate>;
   private partialsRegistered: boolean = false;
+  private logger: Logger;
 
-  constructor() {
+  constructor(logger: Logger) {
+    this.logger = logger;
     this.handlebars = Handlebars.create();
     this.templateCache = new Map();
     this.registerHelpers();
@@ -125,13 +127,13 @@ export class PromptTemplateEngine {
           const partialContent = await fs.promises.readFile(partialPath, 'utf-8');
           
           this.handlebars.registerPartial(partialName, partialContent);
-          logger.debug(`Registered partial: ${partialName}`);
+          this.logger.debug(`Registered partial: ${partialName}`);
         }
       }
       
       this.partialsRegistered = true;
     } catch (error) {
-      logger.error(`Failed to register partials: ${error}`);
+      this.logger.error(`Failed to register partials: ${error}`);
     }
   }
 
@@ -139,7 +141,7 @@ export class PromptTemplateEngine {
    * Compile a template from string
    */
   compile(templateString: string): HandlebarsTemplateDelegate {
-    return this.handlebars.compile(templateString);
+    return this.handlebars.compile(templateString, { noEscape: true });
   }
 
   /**
@@ -194,10 +196,11 @@ export class PromptTemplateEngine {
             filter: enhanced.filter,
             excludePatterns: ['node_modules/**', '.git/**', 'dist/**', 'build/**'],
             maxDepth: 5
-          }
+          },
+          this.logger
         );
       } catch (error) {
-        logger.error(`Failed to generate directory tree: ${error}`);
+        this.logger.error(`Failed to generate directory tree: ${error}`);
       }
     }
 
@@ -210,7 +213,7 @@ export class PromptTemplateEngine {
           ['node_modules/**', '.git/**', 'dist/**', 'build/**']
         );
       } catch (error) {
-        logger.error(`Failed to get file list: ${error}`);
+        this.logger.error(`Failed to get file list: ${error}`);
       }
     }
 
@@ -224,7 +227,7 @@ export class PromptTemplateEngine {
       try {
         enhanced.fileOutline = await DocumentOutlineGenerator.generateOutlineFromContent(enhanced.fileContent, enhanced.fileExtension.slice(1));
       } catch (error: any) {
-        logger.warn(`Cannot generate document outline from file content: ${error.message}`);
+        this.logger.warn(`Cannot generate document outline from file content: ${error.message}`);
       }
     }
 

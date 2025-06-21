@@ -19,12 +19,3 @@ export interface IKnowledgeGraphExporter {
    */
   getSupportedFormats(): ExportFormat[];
 }
-
-/**
- * Interface for Knowledge Graph Converter (static methods wrapper)
- */
-export interface IKnowledgeGraphConverter {
-  toJSON(knowledgeGraph: KnowledgeGraph): string;
-  toJSONL(knowledgeGraph: KnowledgeGraph): string;
-  toMCPJSONL(knowledgeGraph: KnowledgeGraph): string;
-}

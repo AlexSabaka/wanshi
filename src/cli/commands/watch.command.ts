@@ -1,13 +1,16 @@
-import * as chokidar from 'chokidar';
-import * as path from 'path';
-import { logger } from '../../shared/logger';
-import { ContainerFactory, DIContainer, TYPES } from '../../core/di';
-import { IDirectoryProcessor, ProcessingOptions } from '../../types';
+import * as chokidar from "chokidar";
+import * as path from "path";
+import { DIContainer, TYPES } from "../../core/di";
+import { IDirectoryProcessor, ProcessingOptions } from "../../types";
+import { Logger } from "../../shared";
 
 /**
  * Watch command - monitors directory for changes and regenerates knowledge graph
  */
-export async function watchCommand(options: ProcessingOptions): Promise<void> {
+export async function watchCommand(container: DIContainer): Promise<void> {
+  const options = await container.resolve<ProcessingOptions>(TYPES.ProcessingOptions);
+  const logger = await container.resolve<Logger>(TYPES.Logger);
+
   logger.info("Watch mode enabled - monitoring for file changes...");
 
   const watcher = chokidar.watch(path.join(options.input, options.filter), {
@@ -17,8 +20,10 @@ export async function watchCommand(options: ProcessingOptions): Promise<void> {
 
   let processing = false;
 
-    const container = ContainerFactory.createContainer({ processingOptions: options });
-    const processor = await container.resolve<IDirectoryProcessor>(TYPES.DirectoryProcessor);
+
+  const processor = await container.resolve<IDirectoryProcessor>(
+    TYPES.DirectoryProcessor
+  );
   const processWithDebounce = async () => {
     if (processing) return;
     processing = true;

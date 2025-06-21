@@ -8,8 +8,8 @@
   },
   "scripts": {
     "start": "ts-node ./src/index.ts",
-    "test": "ts-node ./src/index.ts --config ./test_configs/single-long-md-config.yml",
-    "t3-test": "ts-node ./t3.ts",
+    "test": "ts-node ./src/index.ts --config /Users/oleksii/Downloads/33/config.yml",
+    "t3-test": "ts-node ./t4.ts",
     "build": "tsc"
   },
   "author": "Alex Sabaka",

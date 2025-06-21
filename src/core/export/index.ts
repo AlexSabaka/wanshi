@@ -1,1 +1,2 @@
-export * from './KnowledgeGraphConverter';
+export * from "./strategies";
+export * from "./KnowledgeGraphExportService";
