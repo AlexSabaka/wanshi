@@ -1,0 +1,18 @@
+import { DIContainer, TYPES } from '../../core/di';
+import { Logger } from '../../shared';
+import { IDirectoryProcessor, ProcessingOptions } from '../../types';
+
+/**
+ * Process command - handles one-time directory processing
+ */
+export async function exportCommand(container: DIContainer): Promise<void> {
+  const logger = await container.resolve<Logger>(TYPES.Logger);
+  const options = await container.resolve<ProcessingOptions>(TYPES.ProcessingOptions);
+
+  try {
+    // TODO: DO something
+  } catch (error) {
+    logger.error(`Process command failed: ${error}`);
+    throw error;
+  }
+}

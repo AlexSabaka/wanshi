@@ -4,6 +4,8 @@ import { FileReader, FileReadResult, ImageResult } from './FileReader';
 import { HtmlToTextOptions } from 'html-to-text';
 import { Logger } from '../../../shared';
 import { TextChunker } from '../chunking';
+import languageEncoding from "detect-file-encoding-and-language";
+import { Iconv } from 'iconv';
 
 /**
  * Features:
@@ -18,7 +20,7 @@ import { TextChunker } from '../chunking';
  */
 export class HtmlReader extends FileReader {
   constructor(chunker: TextChunker, logger: Logger) {
-    super(['.html', '.htm', '.xhtml'], chunker, logger);
+    super(['.html', '.htm', '.xhtml', '.php'], chunker, logger);
   }
 
   getName(): string {
@@ -32,7 +34,10 @@ export class HtmlReader extends FileReader {
       this.logger.debug(`Extracting content from HTML file: ${filePath}`);
       
       const startTime = Date.now();
-      const rawHtml = await fs.promises.readFile(filePath, 'utf-8');
+      const encoding = await languageEncoding(filePath);
+      const conv = new Iconv(encoding.encoding || 'utf-8', 'utf-8');
+      const rawBuffer = await fs.promises.readFile(filePath);
+      const rawHtml = conv.convert(rawBuffer).toString('utf-8');
       const stats = await fs.promises.stat(filePath);
       
       // Parse with multiple approaches for comprehensive extraction

@@ -1,4 +1,3 @@
-
 /**
  * Represents a processed file with its content
  */

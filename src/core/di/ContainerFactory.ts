@@ -1,4 +1,3 @@
-import { logger } from "handlebars";
 import { Logger } from "../../shared";
 import { ProcessingOptions } from "../../types";
 import {
@@ -6,20 +5,11 @@ import {
   IPromptManager,
   IKnowledgeGraphMerger,
 } from "../../types";
-import {
-  TextReader,
-  ImageReader,
-  PdfReader,
-  FileReaderFactory,
-  HtmlReader,
-  OfficeReader,
-  AudioReader,
-  DoclingReader,
-  TextChunker,
-} from "../processor";
 import { DIContainer } from "./DIContainer";
 import { EmbeddingService } from "../llm";
-import { MarkdownReader } from "../processor/readers/MarkdownReader";
+import { FileReaderFactory, TextChunker } from "../processor";
+import { IContentClassifier } from "../processor/classifier";
+import { LlmContentClassifier } from "../processor/classifier/LlmContentClassifier";
 
 /**
  * Service identifiers for dependency injection
@@ -32,6 +22,7 @@ export const TYPES = {
   FileDiscoveryService: Symbol.for("FileDiscoveryService"),
   FileReaderFactory: Symbol.for("FileReaderFactory"),
   FileProcessor: Symbol.for("FileProcessor"),
+  ContentClassifier: Symbol.for("ContentClassifier"),
   TextChunker: Symbol.for("TextChunker"),
   KnowledgeGraphBuilder: Symbol.for("KnowledgeGraphBuilder"),
   KnowledgeGraphSearch: Symbol.for("KnowledgeGraphSearch"),
@@ -100,6 +91,7 @@ export class ContainerFactory {
         {
           model: options.model,
           host: options.host,
+          images: options.images !== "disabled",
           temperature: options.temperature,
           contextLength: options.contextLength,
           repeatPenalty: options.repeatPenalty,
@@ -169,8 +161,19 @@ export class ContainerFactory {
 
     // Register File REader Factory
     container.register(TYPES.FileReaderFactory, async (c) => {
-      const { FileReaderFactory } = await import(
-        "../processor/readers/FileReaderFactory"
+      const {
+        FileReaderFactory,
+        AudioReader,
+        MarkdownReader,
+        DoclingReader,
+        HtmlReader,
+        ImageReader,
+        OfficeReader,
+        TextReader,
+        PdfReader,
+        RtfReader
+      } = await import(
+        "../processor/readers"
       );
       const options = await c.resolve<ProcessingOptions>(
         TYPES.ProcessingOptions
@@ -179,14 +182,13 @@ export class ContainerFactory {
       const chunker = await c.resolve<TextChunker>(TYPES.TextChunker);
       const factory = new FileReaderFactory(logger);
 
-      factory.registerReader(new TextReader(chunker, logger));
-
       if (options.docling) {
         logger.info(`Using docling document reading pipeline`);
         factory.registerReader(
           new DoclingReader(undefined, undefined, undefined, "./temp", chunker, logger)
         );
       } else {
+        factory.registerReader(new RtfReader(chunker, logger));
         factory.registerReader(new MarkdownReader(chunker, logger));
         factory.registerReader(new HtmlReader(chunker, logger));
         factory.registerReader(new ImageReader(chunker, logger));
@@ -194,6 +196,8 @@ export class ContainerFactory {
         factory.registerReader(new PdfReader(chunker, logger));
       }
 
+      factory.registerReader(new TextReader(chunker, logger));
+      
       if (options.asr !== "disabled") {
         logger.info(`Using automatic speech recognition pipeline`);
         factory.registerReader(
@@ -213,14 +217,38 @@ export class ContainerFactory {
       return factory;
     });
 
+    // Register Content Classifier
+    container.register<IContentClassifier | undefined>(TYPES.ContentClassifier, async (c) => {
+      const {
+        HeuristicContentClassifier,
+        BertContentClassifier
+      } = await import("../processor/classifier");
+      const options = await c.resolve<ProcessingOptions>(
+        TYPES.ProcessingOptions
+      );
+      const logger = await c.resolve<Logger>(TYPES.Logger);
+      switch (options.classifier) {
+        case "bert": return new BertContentClassifier(logger);
+        case "heuristic": return new HeuristicContentClassifier(logger);
+        case "llm": return new LlmContentClassifier(logger);
+        default: return undefined;
+      }
+    });
+
     // Register File Processor
     container.register(TYPES.FileProcessor, async (c) => {
-      const { FileProcessor } = await import("../processor/FileProcessor");
+      const { FileProcessor } = await import("../processor");
       const factory = await c.resolve<FileReaderFactory>(
         TYPES.FileReaderFactory
       );
+      const options = await c.resolve<ProcessingOptions>(
+        TYPES.ProcessingOptions
+      );
+      const classifier = await c.resolve<IContentClassifier | undefined>(
+        TYPES.ContentClassifier
+      );
       const logger = await c.resolve<Logger>(TYPES.Logger);
-      return new FileProcessor(factory, logger);
+      return new FileProcessor(factory, classifier, options.images !== "disabled", logger);
     });
 
     // Register Knowledge Graph Builder

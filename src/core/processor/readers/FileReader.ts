@@ -46,7 +46,7 @@ export abstract class FileReader {
    */
   canRead(filePath: string): boolean {
     const ext = path.extname(filePath).toLowerCase();
-    return this.supportedExtensions.includes(ext);
+    return this.supportedExtensions.some(e => ext.startsWith(e));
   }
 
   /**
@@ -65,7 +65,7 @@ export abstract class FileReader {
   protected async validateFile(filePath: string): Promise<void> {
     if (!this.canRead(filePath)) {
       throw new Error(
-        `${this.getName()} does not support file extension: ${path.extname(filePath)}`
+        `${this.getName()} does not support file extension: ${path.extname(filePath)}, supported extensions are ${this.supportedExtensions.join(', ')}`
       );
     }
   }

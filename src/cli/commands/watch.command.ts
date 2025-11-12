@@ -13,7 +13,7 @@ export async function watchCommand(container: DIContainer): Promise<void> {
 
   logger.info("Watch mode enabled - monitoring for file changes...");
 
-  const watcher = chokidar.watch(path.join(options.input, options.filter), {
+  const watcher = chokidar.watch(options.filter.map(f => path.join(options.input, f)), {
     ignored: /^\./,
     persistent: true,
   });

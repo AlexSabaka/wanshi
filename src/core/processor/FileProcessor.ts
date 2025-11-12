@@ -1,8 +1,14 @@
 import * as path from "path";
-import { ChunkingOptions, IFileProcessor, ProcessedChunk, ProcessedFile, ProcessedImage } from "../../types";
-import { TextChunker } from "./chunking";
-import { FileReaderFactory } from "./readers";
+import {
+  ClassificationResult,
+  IFileProcessor,
+  ProcessedChunk,
+  ProcessedFile,
+  ProcessedImage,
+} from "../../types";
+import { FileReaderFactory, FileReadResult } from "./readers";
 import { Logger } from "../../shared";
+import { IContentClassifier } from "./classifier/IContentTypeClassifier";
 
 /**
  * Main file processor that coordinates reading and chunking
@@ -10,19 +16,26 @@ import { Logger } from "../../shared";
 export class FileProcessor implements IFileProcessor {
   private readonly readerFactory: FileReaderFactory;
   private readonly logger: Logger;
+  private readonly attachImages: boolean;
+  private readonly classifier?: IContentClassifier;
 
-  constructor(readerFactory: FileReaderFactory, logger: Logger) {
+  constructor(
+    readerFactory: FileReaderFactory,
+    classifier: IContentClassifier | undefined,
+    attachImages: boolean,
+    logger: Logger
+  ) {
     this.readerFactory = readerFactory;
     this.logger = logger;
+    this.attachImages = attachImages;
+    this.classifier = classifier;
   }
 
   /**
    * Process a single file - read and optionally chunk it
    */
-  async processFile(
-    filePath: string,
-  ): Promise<ProcessedFile> {
-    this.logger.info(`Processing file: ${filePath}`);
+  async processFile(filePath: string): Promise<ProcessedFile> {
+    this.logger.info(`Processing fi0le: ${filePath}`);
 
     // Get appropriate reader
     const reader = this.readerFactory.getReader(filePath);
@@ -42,7 +55,7 @@ export class FileProcessor implements IFileProcessor {
       // Read the file
       const readResult = await reader.read(filePath);
 
-      // Return unchunked result
+      // Return results
       return {
         path: filePath,
         chunks: readResult.chunks.map((chunk) => {
@@ -52,17 +65,20 @@ export class FileProcessor implements IFileProcessor {
             totalChunks: chunk.totalChunks,
             startOffset: chunk.startOffset,
             endOffset: chunk.endOffset,
-            images: chunk.images?.map((image) => {
-              return {
-                path: image.path,
-                caption: image.alt,
-                base64: image.buffer?.toString("base64"),
-              } as ProcessedImage;
+            ...(this.attachImages && {
+              images: chunk.images?.map((image) => {
+                return {
+                  path: image.path,
+                  caption: image.alt,
+                  base64: image.buffer?.toString("base64"),
+                } as ProcessedImage;
+              }),
             }),
           } as ProcessedChunk;
         }),
         metadata: {
           ...readResult.metadata,
+          ...{ classes: await this.classifyContent(filePath, readResult) },
           chunked: false,
         },
       };
@@ -70,6 +86,55 @@ export class FileProcessor implements IFileProcessor {
       this.logger.error(`Failed to process file ${filePath}: ${error}`);
       throw new Error(`Failed to process file ${filePath}: ${error}`);
     }
+  }
+
+  private async classifyContent(filePath: string, readResult: FileReadResult) {
+    let classes: ClassificationResult[] | undefined = undefined;
+    try {
+      if (this.classifier) {
+        const results = await Promise.all(
+          readResult.chunks.map((chunk) =>
+            this.classifier?.classify(chunk.content, filePath)
+          )
+        );
+        const mergeClassificationResults = (
+          a: ClassificationResult[],
+          b: ClassificationResult[]
+        ): ClassificationResult[] => {
+          const uniqueClasses = Array.from(
+            new Set([...a.map((c) => c.class), ...b.map((c) => c.class)])
+          );
+          const merged = uniqueClasses.map((cls) => {
+            const resultsByClass = [
+              ...a.filter((x) => x.class === cls),
+              ...b.filter((x) => x.class === cls),
+            ];
+            const confidenceSum = resultsByClass.reduce(
+              (acc, curr) => acc + curr.confidence,
+              0
+            );
+            return {
+              class: cls,
+              confidence: confidenceSum / resultsByClass.length,
+            } as ClassificationResult;
+          });
+          return merged;
+        };
+
+        classes = results
+          .reduce<ClassificationResult[]>(
+            (acc, curr) => mergeClassificationResults(acc, curr || []),
+            []
+          )
+          .sort((a, b) => b.confidence - a.confidence);
+
+        // classes = await this.classifier?.classify(readResult.chunks[0].content, filePath);
+      }
+    } catch (error) {
+      this.logger.error("Unable to classify file content.", error);
+    }
+
+    return classes;
   }
 
   /**

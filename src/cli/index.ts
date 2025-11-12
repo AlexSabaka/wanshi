@@ -17,7 +17,8 @@ program
 
   // Core Processing
   .option("-i, --input <path>", "input directory (default: pwd)", ".")
-  .option("-f, --filter <filter>", "files filter (default: **/*)", "**/*")
+  .option("-f, --filter <filter>", "include files by filter (default: **/*)", "**/*")
+  .option("-e, --exclude <filter...>", "exclude files by filter(s) (default: empty)")
   .option(
     "-o, --output <path>",
     "output knowledge graph file",
@@ -83,6 +84,10 @@ program
 
   // Enable Docling PDF/DOC/DOCX/PPT/PPTX Processing
   .option("--docling", "use docling for PDF/DOC/DOCX/PPT/PPTX documents processing (default: false)", false)
+
+
+  // Enable Image Processing
+  .option("--images", "enable image processing (disabled|auto|enabled)", "auto")
 
   // Context Retrieval
   .option(

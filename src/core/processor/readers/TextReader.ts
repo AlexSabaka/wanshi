@@ -9,7 +9,7 @@ import { TextChunker } from '../chunking';
 export class TextReader extends FileReader {
   constructor(chunker: TextChunker, logger: Logger) {
     super([
-      '.txt', '.md', '.markdown', '.rst', '.asciidoc',
+      '.txt', '.rst', '.asciidoc', '.csv', '',
       '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
       '.py', '.pyw', '.pyi', '.pyc', '.pyd', '.pyo',
       '.java', '.class', '.jar',

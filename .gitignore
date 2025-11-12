@@ -134,9 +134,9 @@ dist
 
 # Misc
 .tmp/
-examples/*.js*
-examples/*/*.js*
-
+examples/
 output/
 test_configs/
 temp/
+test_content_classes/
+doc-classifier/

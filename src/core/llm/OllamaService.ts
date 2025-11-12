@@ -1,4 +1,4 @@
-import ollama, { ChatResponse, ChatRequest } from "ollama";
+import ollama, { ChatResponse, ChatRequest, Message } from "ollama";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { Logger } from "../../shared";
@@ -6,6 +6,7 @@ import { Logger } from "../../shared";
 export interface LLMOptions {
   model: string;
   host: string;
+  images: boolean;
   temperature?: number;
   contextLength?: number;
   repeatPenalty?: number;
@@ -45,11 +46,7 @@ export class OllamaService {
   ): Promise<T> {
     const jsonSchema = zodToJsonSchema(schema);
     // Convert our messages to Ollama format
-    const ollamaMessages = messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-      ...(msg.images && { images: msg.images }),
-    }));
+    const ollamaMessages = await this.toOllamaMessages(messages);
 
     // Ollama options
     const chatRequest = {
@@ -59,17 +56,11 @@ export class OllamaService {
       think: false,
       options: {
         num_ctx: Number(this.options.contextLength || 8192),
-        // temperature: 0.1,
-        // repeat_penalty: 0.5,
         // temperature: Number(this.options.temperature),
         // repeat_penalty: Number(this.options.repeatPenalty),
         // seed: Number(this.options.seed),
       },
     };
-
-    // llmLogger.info(`Request options`, { ...chatRequest, messages: undefined });
-
-    // ollamaMessages.forEach((m) => llmLogger.info(m));
 
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
@@ -102,7 +93,9 @@ export class OllamaService {
         const validated = schema.parse(parsed);
         return validated;
       } catch (error) {
-        this.logger.error(`LLM generation attempt ${attempt + 1} failed: ${error}`);
+        this.logger.error(
+          `LLM generation attempt ${attempt + 1} failed: ${error}`
+        );
 
         if (attempt === retries - 1) {
           throw new Error(
@@ -118,51 +111,28 @@ export class OllamaService {
     throw new Error("Should not reach here");
   }
 
-  /**
-   * Generate a simple text completion
-   */
-  async generate(messages: LLMMessage[]): Promise<string> {
-    this.logger.debug(`Generating text completion`);
+  private async toOllamaMessages(messages: LLMMessage[]): Promise<Message[]> {
+    const modelCaps = await this.getModelCapabilities(this.options.model);
+    const supportsVision = modelCaps.includes("vision");
+
+    if (this.options.images && !supportsVision) {
+      this.logger.warn("Model does not supports vision. Skipping images.");
+    }
+
+    const images = this.options.images && supportsVision;
 
     const ollamaMessages = messages.map((msg) => ({
       role: msg.role,
       content: msg.content,
-      ...(msg.images && { images: msg.images }),
+      ...(images && msg.images && { images: msg.images }),
     }));
 
-    const response = await ollama.chat({
-      model: this.options.model,
-      messages: ollamaMessages,
-      options: {
-        temperature: this.options.temperature,
-        num_ctx: this.options.contextLength,
-        repeat_penalty: this.options.repeatPenalty,
-        ...(this.options.seed && { seed: this.options.seed }),
-      },
-    });
-
-    this.logResponseStats(response);
-    return response.message.content;
+    return ollamaMessages;
   }
 
-  /**
-   * Generate embeddings for text
-   */
-  async generateEmbeddings(text: string | string[]): Promise<number[][]> {
-    const texts = Array.isArray(text) ? text : [text];
-    this.logger.debug(`Generating embeddings for ${texts.length} texts`);
-
-    const embeddings: number[][] = [];
-
-    for (const t of texts) {
-      const response = await ollama.embeddings({
-        model: this.options.model,
-        prompt: t,
-      });
-      embeddings.push(response.embedding);
-    }
-
-    return embeddings;
+  async getModelCapabilities(modelName: string): Promise<string[]> {
+    const modelInfo = await ollama.show({ model: modelName });
+    return modelInfo.capabilities;
   }
 
   /**
@@ -176,20 +146,6 @@ export class OllamaService {
       this.logger.error(`Failed to check model availability: ${error}`);
       return false;
     }
-  }
-
-  /**
-   * Pull a model if not available
-   */
-  async ensureModel(modelName: string): Promise<void> {
-    if (await this.isModelAvailable(modelName)) {
-      this.logger.info(`Model ${modelName} is already available`);
-      return;
-    }
-
-    this.logger.info(`Pulling model ${modelName}...`);
-    await ollama.pull({ model: modelName });
-    this.logger.info(`Model ${modelName} pulled successfully`);
   }
 
   /**

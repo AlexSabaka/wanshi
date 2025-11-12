@@ -168,18 +168,19 @@ export class DoclingReader extends FileReader {
 
     try {
       // Build Docling command
+      this.pythonExecutable = "docling";
       const doclingArgs = [
-        "-m",
-        "docling.cli.main", // Use CLI module
+        // "-m",
+        // "docling.cli.main", // Use CLI module
         filePath, // Input file
-        "--format",
+        "--to",
         "json", // Output as JSON for structured parsing
         "--output",
         outputPath, // Output file
-        "--max-pages",
-        this.maxPages.toString(),
-        "--max-file-size",
-        this.maxFileSize.toString(),
+        // "--max-pages",
+        // this.maxPages.toString(),
+        // "--max-file-size",
+        // this.maxFileSize.toString(),
       ];
 
       this.logger.debug(
@@ -205,6 +206,8 @@ export class DoclingReader extends FileReader {
         doclingOutput,
         result.stdout
       );
+
+      fs.writeFile("debug_output_text.txt", processedResult.content);
 
       // Cleanup
       await this.cleanup(outputPath);

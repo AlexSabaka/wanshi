@@ -7,7 +7,8 @@ export interface ProcessingOptions {
 
   // Core Processing
   input: string;
-  filter: string;
+  filter: string[];
+  exclude: string[];
   output: string;
   description: string;
 
@@ -29,7 +30,11 @@ export interface ProcessingOptions {
   // Documents Processing
   docling: boolean;
 
-  // TODO: Image Processing configs
+  // Image Processing
+  images: ImageProcessingMode;
+
+  // [EXPERIMENTAL] Content Classification
+  classifier: ContentClassifierMode;
 
   // Automatic Speech Recognition Processing
   asr: SpeechRecognitionMode;
@@ -92,3 +97,7 @@ export type RetrievalMode = "enabled" | "disabled" | "auto";
  * Automatic Speech Recognition mode options
  */
 export type SpeechRecognitionMode = "enabled" | "disabled" | "auto";
+
+export type ImageProcessingMode = "enabled" | "disabled" | "auto";
+
+export type ContentClassifierMode = "disabled" | "llm" | "bert" | "heuristic";

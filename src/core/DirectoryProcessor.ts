@@ -23,20 +23,20 @@ export interface IFileDiscoveryService {
 
 export class FileDiscoveryService implements IFileDiscoveryService {
   private readonly dir: string;
-  private readonly filter: string;
-  // private readonly exclude: string;
+  private readonly filter: string[];
+  private readonly exclude: string[];
   private readonly logger: Logger;
 
-  constructor(options: ProcessingOptions, logger: Logger) {
+  constructor(options: Pick<ProcessingOptions, "input" | "filter" | "exclude">, logger: Logger) {
     this.logger = logger;
     this.dir = options.input;
     this.filter = options.filter;
-    // this.exclude = options.exclude;
+    this.exclude = options.exclude;
   }
 
   async discover(): Promise<string[]> {
-    const pattern = path.join(this.dir, this.filter);
-    const files = await glob(pattern, { nodir: true });
+    const patterns = this.filter.map(f => path.join(this.dir, f));
+    const files = await glob(patterns, { nodir: true, ignore: this.exclude });
 
     if (files.length === 0) {
       const message = `No files found matching pattern: ${this.filter}`;
@@ -152,7 +152,7 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     )) as PromptManager;
     const systemPrompt = await promptManager.getSystemPrompt(
       options.input,
-      options.filter,
+      options.filter.join(', '),
       options.description
     );
 

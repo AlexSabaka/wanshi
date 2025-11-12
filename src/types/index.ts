@@ -1,4 +1,5 @@
 // Re-export all interfaces
+export * from './ContentClass';
 export * from './ILLMService';
 export * from './IEmbeddingService';
 export * from './IPromptManager';
