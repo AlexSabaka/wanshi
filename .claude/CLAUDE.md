@@ -185,6 +185,11 @@ const svc = container.get<ISomeService>(TYPES.SomeService);
 `KnowledgeGraphExportService` delegates to registered `IExportStrategy` implementations. `ProcessingOptions` is forwarded to strategies — `DirectoryProcessor` passes it through `export(graph, format, options)`, and the DOT strategy reads `dotOptions` (config-only; layout, rankdir, colorScheme, clustering, legend, …) plus the graph title and processing-config cluster.
 **To add a new export format**: implement `IExportStrategy`, register in `KnowledgeGraphExportService`.
 
+Formats: `json` · `jsonl` · `mcp-jsonl` (memory-server compatible) · `dot` · and the **KBLaM/LoRA-prep** trio (Phase 4):
+- **`kblam`** — JSONL `DataPoint`s `{name, description_type, description, Q, A, key_string}`, the on-disk shape KBLaM's `dataset_generation` ingests. Observations → `(entity, "fact", text)`; relations → `(from, relationType, to)`. Feeds KBLaM's KB-embedding step.
+- **`lora`** — chat SFT JSONL (`{messages:[user Q, assistant A]}`) from the same triples, **quality-filtered**: observations below `--grounding-min-score` (Phase 3 `groundingScore`) are dropped, so only grounded facts train.
+- **`graphiti`** — `add_triplet`-shaped `{nodes: EntityNode[], edges: EntityEdge[]}` (bi-temporal ingestion target). Entities→nodes (summary from observations), relations→edges with `created_at`; per-fact valid-time stays in `json`/`kblam` (fact-as-temporal-edge is a future refinement).
+
 ### 4. Hierarchical Merging (3 Levels)
 
 `KnowledgeMerger` applies progressively stricter deduplication:

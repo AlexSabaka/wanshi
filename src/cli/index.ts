@@ -184,7 +184,7 @@ program
   // Export Options
   .option(
     "--export-format <format>",
-    "export format (json|jsonl|mcp-jsonl|dot)",
+    "export format (json|jsonl|mcp-jsonl|dot|kblam|lora|graphiti)",
     "json"
   )
 

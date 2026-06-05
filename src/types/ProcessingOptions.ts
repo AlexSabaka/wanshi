@@ -119,7 +119,14 @@ export interface ProcessingOptions {
 /**
  * Chunking behavior options
  */
-export type ExportFormat = "json" | "jsonl" | "mcp-jsonl" | "dot";
+export type ExportFormat =
+  | "json"
+  | "jsonl"
+  | "mcp-jsonl"
+  | "dot"
+  | "kblam"
+  | "lora"
+  | "graphiti";
 
 /**
  * Chunking behavior options

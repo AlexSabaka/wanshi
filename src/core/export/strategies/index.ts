@@ -3,3 +3,6 @@ export * from "./JsonExportStrategy";
 export * from "./JsonlExportStrategy";
 export * from "./McpExportStrategy";
 export * from "./GraphvizDotExportStrategy";
+export * from "./KblamExportStrategy";
+export * from "./LoraExportStrategy";
+export * from "./GraphitiExportStrategy";

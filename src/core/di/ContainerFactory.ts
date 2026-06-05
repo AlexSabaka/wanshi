@@ -440,6 +440,9 @@ export class ContainerFactory {
         JsonlExportStrategy,
         McpExportStrategy,
         GraphvizDotExportStrategy,
+        KblamExportStrategy,
+        LoraExportStrategy,
+        GraphitiExportStrategy,
       } = await import("../export/strategies");
       const { KnowledgeGraphExportService } = await import(
         "../export/KnowledgeGraphExportService"
@@ -449,7 +452,10 @@ export class ContainerFactory {
         new JsonExportStrategy(),
         new JsonlExportStrategy(),
         new McpExportStrategy(),
-        new GraphvizDotExportStrategy()
+        new GraphvizDotExportStrategy(),
+        new KblamExportStrategy(),
+        new LoraExportStrategy(),
+        new GraphitiExportStrategy()
       );
     });
 
