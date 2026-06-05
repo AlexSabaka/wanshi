@@ -385,6 +385,10 @@ export class ContainerFactory {
           promptVersion: options.promptVersion,
           inputRoot: options.input,
           progress,
+          grounding: options.grounding,
+          groundingMinScore: options.groundingMinScore
+            ? Number(options.groundingMinScore)
+            : undefined,
         },
         logger
       );

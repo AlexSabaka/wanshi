@@ -72,6 +72,11 @@ export interface ProcessingOptions {
   retrievalLimit: number;
   retrievalScope: RetrievalScope;
 
+  // Inline grounding gate (Phase 3): check each extracted observation against
+  // its source chunk and flag/drop the ungrounded ones.
+  grounding?: GroundingMode;
+  groundingMinScore?: number;
+
   // Knowledge Graph Merging
   entitySimilarityThreshold: number;
   observationSimilarityThreshold: number;
@@ -141,6 +146,14 @@ export type SpeechRecognitionMode = "enabled" | "disabled" | "auto";
 export type ImageProcessingMode = "enabled" | "disabled" | "auto";
 
 export type ContentClassifierMode = "disabled" | "llm" | "bert" | "heuristic";
+
+/**
+ * Inline grounding gate mode:
+ * - "disabled": no check (default)
+ * - "flag": annotate each observation with grounded/groundingScore, keep all
+ * - "drop": remove observations that score below groundingMinScore
+ */
+export type GroundingMode = "disabled" | "flag" | "drop";
 
 /**
  * Document outline options. The outline is generated per file from its content

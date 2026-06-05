@@ -26,13 +26,24 @@ export class FactualEvaluator {
     return total > 0 ? ungrounded / total : 0;
   }
 
-  private static isClaimGrounded(claim: string, source: string, entity: string): boolean {
+  /**
+   * Per-observation grounding score: the fraction of a claim's content words
+   * (length > 3) found in the source text (0..1; 1 when there are no content
+   * words). Cheap keyword-overlap heuristic — this method is the seam where a
+   * stronger check (NLI / structured field extraction) would slot in. Used both
+   * by the offline metrics and the inline grounding gate.
+   */
+  static observationGroundingScore(text: string, source: string): number {
     const lSrc = source.toLowerCase();
-    if (!lSrc.includes(entity.toLowerCase())) return false;
-    const keywords = claim.toLowerCase().split(' ').filter(w => w.length > 3);
-    if (keywords.length === 0) return true;
+    const keywords = text.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    if (keywords.length === 0) return 1;
     const found = keywords.filter(k => lSrc.includes(k)).length;
-    return found / keywords.length >= 0.5;
+    return found / keywords.length;
+  }
+
+  private static isClaimGrounded(claim: string, source: string, entity: string): boolean {
+    if (!source.toLowerCase().includes(entity.toLowerCase())) return false;
+    return this.observationGroundingScore(claim, source) >= 0.5;
   }
 
   private static evaluateSourceGrounding(graph: KnowledgeGraph, source: string): number {

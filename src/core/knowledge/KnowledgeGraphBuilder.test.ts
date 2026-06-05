@@ -78,4 +78,68 @@ describe("KnowledgeGraphBuilder", () => {
       expect.arrayContaining(["function", "other"])
     );
   });
+
+  const SOURCE =
+    "Recursion is when a function calls itself repeatedly until a base case.";
+  const hallucinatingLlm = () =>
+    ({
+      generateStructured: async () => ({
+        entities: [
+          {
+            name: "Recursion",
+            entityType: "concept",
+            observations: [
+              "Recursion is when a function calls itself", // grounded in SOURCE
+              "Recursion was invented in the year 1742 by Zorblax", // fabricated
+            ],
+          },
+        ],
+        relations: [],
+      }),
+      getModelCapabilities: async () => [],
+    } as any);
+
+  const groundingFile = () =>
+    ({
+      path: "f.txt",
+      content: SOURCE,
+      chunks: [{ content: SOURCE, index: 1, totalChunks: 1, startOffset: 0, endOffset: SOURCE.length }],
+    } as any);
+
+  it("grounding gate (drop) removes an observation absent from the source", async () => {
+    const builder = new KnowledgeGraphBuilder(
+      {
+        llmService: hallucinatingLlm(),
+        promptManager: { getUserPrompt: async () => "u", getSystemPrompt: async () => "s" } as any,
+        model: "m",
+        grounding: "drop",
+        groundingMinScore: 0.5,
+      },
+      stubLogger()
+    );
+    const [kg] = await builder.build(groundingFile(), "s");
+    const texts = kg.entities[0].observations.map((o) => o.text);
+    expect(texts).toContain("Recursion is when a function calls itself");
+    expect(texts.some((t) => t.includes("1742"))).toBe(false); // hallucination dropped
+  });
+
+  it("grounding gate (flag) annotates without dropping", async () => {
+    const builder = new KnowledgeGraphBuilder(
+      {
+        llmService: hallucinatingLlm(),
+        promptManager: { getUserPrompt: async () => "u", getSystemPrompt: async () => "s" } as any,
+        model: "m",
+        grounding: "flag",
+        groundingMinScore: 0.5,
+      },
+      stubLogger()
+    );
+    const [kg] = await builder.build(groundingFile(), "s");
+    const obs = kg.entities[0].observations;
+    expect(obs).toHaveLength(2); // nothing dropped
+    const grounded = obs.find((o) => o.text.includes("calls itself"))!;
+    const fabricated = obs.find((o) => o.text.includes("1742"))!;
+    expect(grounded.grounded).toBe(true);
+    expect(fabricated.grounded).toBe(false);
+  });
 });

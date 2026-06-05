@@ -21,6 +21,9 @@ export interface Observation {
   invalidAt?: string; // valid-time end (stopped being true)
   createdAt?: string; // transaction-time: when extracted/ingested
   expiredAt?: string; // transaction-time: when superseded by the system
+  // Inline grounding gate (Phase 3), set when `--grounding flag` is used.
+  grounded?: boolean;
+  groundingScore?: number; // 0..1 keyword-overlap with the source chunk
 }
 
 /** An observation as stored may be a legacy bare string or a full object. */

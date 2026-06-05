@@ -152,6 +152,18 @@ program
     "chunk"
   )
 
+  // Inline Grounding Gate
+  .option(
+    "--grounding <mode>",
+    "inline grounding gate: disabled | flag (annotate observations) | drop (remove ungrounded ones)",
+    "disabled"
+  )
+  .option(
+    "--grounding-min-score <number>",
+    "minimum keyword-overlap grounding score (0..1) an observation must reach",
+    "0.5"
+  )
+
   // Knowledge Graph Merging
   .option(
     "--entity-similarity-threshold <number>",

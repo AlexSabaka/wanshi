@@ -2,10 +2,11 @@ import * as path from 'path';
 import { z } from 'zod';
 import { ILLMProvider, LLMMessage } from '../../types/ILLMProvider';
 import { PromptManager, PromptContext } from '../llm/prompts/PromptManager';
-import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder, ClassificationResult, IProgressEmitter, ChunkProvenance, Observation, normalizeObservations } from '../../types';
+import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder, ClassificationResult, IProgressEmitter, ChunkProvenance, Observation, normalizeObservations, GroundingMode } from '../../types';
 import { CheckpointService } from '../checkpoint';
 import { NoopProgressEmitter } from '../progress';
 import { NER_DOMAIN_EXAMPLES } from '../processor/classifier/NER_DOMAIN_EXAMPLES';
+import { FactualEvaluator } from '../../quality';
 import { Logger, shutdown } from '../../shared';
 
 /**
@@ -79,6 +80,10 @@ export interface BuilderOptions {
   // Optional structured-progress sink (per-chunk start/complete events).
   // Defaults to a no-op emitter.
   progress?: IProgressEmitter;
+  // Inline grounding gate: check each extracted observation against its source
+  // chunk and flag/drop ungrounded ones. Defaults to disabled.
+  grounding?: GroundingMode;
+  groundingMinScore?: number;
 }
 
 /**
@@ -94,6 +99,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   private inputRoot: string;
   private logger: Logger;
   private progress: IProgressEmitter;
+  private grounding: GroundingMode;
+  private groundingMinScore: number;
 
   constructor(options: BuilderOptions, logger: Logger) {
     this.llmService = options.llmService;
@@ -105,6 +112,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     this.inputRoot = options.inputRoot ?? '';
     this.logger = logger;
     this.progress = options.progress ?? new NoopProgressEmitter();
+    this.grounding = options.grounding ?? 'disabled';
+    this.groundingMinScore = options.groundingMinScore ?? 0.5;
   }
 
   /**
@@ -260,7 +269,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     }
 
     const raw = await generate();
-    const kg = this.toGraph(raw, provenance);
+    const kg = this.applyGroundingGate(this.toGraph(raw, provenance), content);
     kg.entities.forEach(attachMetadata);
 
     this.progress.emit({
@@ -347,6 +356,39 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
         relationType: r.relationType,
       })),
     };
+  }
+
+  /**
+   * Inline grounding gate: score each observation against its source chunk and
+   * either flag (annotate, keep) or drop the ungrounded ones. No-op when
+   * disabled. The score is a cheap keyword-overlap heuristic (FactualEvaluator),
+   * which is the seam for a stronger check later.
+   */
+  private applyGroundingGate(kg: KnowledgeGraph, source: string): KnowledgeGraph {
+    if (this.grounding === 'disabled' || !source) return kg;
+    const min = this.groundingMinScore;
+    let dropped = 0;
+    for (const e of kg.entities) {
+      if (this.grounding === 'drop') {
+        const before = e.observations.length;
+        e.observations = e.observations.filter(
+          (o) => FactualEvaluator.observationGroundingScore(o.text, source) >= min
+        );
+        dropped += before - e.observations.length;
+      } else {
+        for (const o of e.observations) {
+          const score = FactualEvaluator.observationGroundingScore(o.text, source);
+          o.groundingScore = score;
+          o.grounded = score >= min;
+        }
+      }
+    }
+    if (dropped > 0) {
+      this.logger.debug(
+        `Grounding gate dropped ${dropped} ungrounded observation(s) (min ${min})`
+      );
+    }
+    return kg;
   }
 
   /** Normalize a (possibly legacy string-observation) graph from the checkpoint. */

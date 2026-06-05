@@ -140,6 +140,14 @@ server stays compatible.
 an `other` escape hatch; with no class detected it stays a free string. The schema is built
 per chunk from the chunk's classification.
 
+**Inline grounding gate (`--grounding`).** After each chunk is extracted,
+`KnowledgeGraphBuilder.applyGroundingGate()` scores every observation against its source
+chunk via `FactualEvaluator.observationGroundingScore()` (keyword overlap; the seam for a
+stronger NLI-style check). Modes: `disabled` (default), `flag` (annotate each observation
+with `grounded`/`groundingScore`, keep all), `drop` (remove observations below
+`--grounding-min-score`, default 0.5). Runs before checkpoint/merge, so ungrounded facts
+never reach the output.
+
 ```typescript
 interface Relation {
   from: string;           // Source entity name
