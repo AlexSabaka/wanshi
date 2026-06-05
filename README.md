@@ -2,7 +2,9 @@
 
 > Transform any file collection into an intelligent knowledge graph using local LLMs via Ollama — or any OpenAI-compatible API provider
 
-An advanced CLI tool that analyzes files, extracts meaningful entities and relationships, and builds comprehensive knowledge graphs. Supports code, documents, PDFs, audio/video, and more. Local-first via Ollama by default, with optional OpenAI-compatible providers (OpenAI, OpenRouter, vLLM, …) and resumable runs for large jobs.
+An advanced CLI tool that analyzes files, extracts meaningful entities and relationships, and builds comprehensive knowledge graphs. Supports code, documents, PDFs, audio/video, transcripts, and more. Local-first via Ollama by default, with optional OpenAI-compatible providers (OpenAI, OpenRouter, vLLM, …) and resumable runs for large jobs.
+
+Facts carry **provenance and a bi-temporal axis**, an inline **grounding gate** filters hallucinations, and the graph **interops with existing memory stores** (drop-in for the official MCP memory server) and exports **KBLaM/LoRA** training data — kg-gen is a research/learning platform as much as a CLI.
 
 ## Project Goals
 
@@ -18,7 +20,7 @@ An advanced CLI tool that analyzes files, extracts meaningful entities and relat
 
 - **MCP Integration**: Compatible with Claude Desktop and Anthropic MCP protocol
 - **Quality Metrics**: Comprehensive evaluation system for continuous improvement
-- **Research Ready**: Support for LoRa fine-tuning and model improvement
+- **Research Ready**: KBLaM-format triples + quality-filtered LoRA/SFT datasets exported straight from extracted graphs
 - **Intelligent Search**: Vector and graph-based context retrieval
 
 ## Key Features
@@ -33,18 +35,20 @@ An advanced CLI tool that analyzes files, extracts meaningful entities and relat
 
 ### Advanced Features
 
-- **MCP Compatibility**: Works with Claude Desktop via `mcp-jsonl` export format
-- **Multiple Export Formats**: JSON, JSONL, MCP-compatible JSONL, GraphViz DOT
+- **Memory-store interop**: `mcp-jsonl` is byte-compatible with the official [MCP memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) — point it at the output and query your graph from Claude Code/Desktop. No store to build.
+- **Multiple export formats**: JSON, JSONL, MCP-compatible JSONL, GraphViz DOT, plus **KBLaM** / **LoRA** / **Graphiti** for fine-tuning and temporal-KG ingestion (see [Output Formats](#output-formats))
+- **Transcript-aware ingestion**: speaker-labeled transcripts (recua `*.parakeet.txt`, recua turns JSON, Claude/ChatGPT chat exports) are parsed into **speaker-pure chunks** so a speaker becomes per-fact provenance, not an entity
 - **Embedding-Based Search**: Context retrieval for cross-file consistency during extraction
 - **Embeddings Caching**: In-memory caching for repeated embedding calls
 - **Watch Mode**: Real-time knowledge graph updates as files change
-- **Document Classification**: Heuristic, BERT, or LLM-based content type detection (experimental)
+- **Document Classification**: Heuristic or LLM-based content type detection (experimental) — also scopes the `entityType` to an enforced per-domain enum
 
 ### Intelligence Features
 
-- **Zero Hallucination**: Strict prompt guidelines with factual grounding enforcement
+- **Provenance & bi-temporal facts**: every observation carries `speaker`/`source` and a Graphiti-style bi-temporal axis (`validAt`/`invalidAt` + `createdAt`/`expiredAt`) — see [Data Model](#standard-json---export-format-json)
+- **Inline grounding gate**: each extracted fact is scored against its source chunk; ungrounded "hallucinations" can be flagged or dropped before they reach the output (`--grounding`)
+- **Provenance-preserving merge**: the same fact from two speakers/sources stays as two attributed observations, never one flattened string
 - **Entity Deduplication**: Jaro-Winkler similarity for entity names + cosine similarity for observations
-- **Observation Ranking**: Embedding-based duplicate detection — keeps longer, more informative observations
 - **Cross-file Consistency**: Retrieval-augmented prompting maintains entity naming across files
 
 ## Installation
@@ -288,7 +292,7 @@ Embeddings (used for dedup and context retrieval) are configured independently f
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
-| `--classifier <mode>` | `disabled` | Content type detection: `disabled\|heuristic\|llm\|bert`. Drives domain-specific prompt hints/examples |
+| `--classifier <mode>` | `disabled` | Content type detection: `disabled\|heuristic\|llm`. Drives domain-specific prompt hints/examples **and** scopes the extracted `entityType` to an enforced per-domain Zod enum (the domain's types + generics + `other`) |
 
 ### JSON Processing
 
@@ -326,9 +330,25 @@ jsonReader:
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
-| `--export-format <format>` | `json` | `json\|jsonl\|mcp-jsonl\|dot` |
+| `--export-format <format>` | `json` | `json\|jsonl\|mcp-jsonl\|dot\|kblam\|lora\|graphiti` |
+| `--export-only` | `false` | Convert an existing knowledge-graph JSON file (`--input`) to `--export-format`, written to `--output` — no extraction. Handy for producing `kblam`/`lora`/`graphiti`/`mcp-jsonl` from a graph you already built |
 
 > DOT styling (`dotOptions`) is configured in YAML only — see [GraphViz DOT](#graphviz-dot---export-format-dot).
+
+```bash
+# Re-export an existing graph to KBLaM training triples (no LLM calls)
+npx ts-node ./src/index.ts --export-only \
+  -i ./knowledge-graph.json --export-format kblam -o ./kb.jsonl
+```
+
+### Inline Grounding Gate
+
+Each extracted observation is scored against its source chunk (keyword overlap); ungrounded "hallucinations" can be flagged or dropped before they reach the output, the checkpoint, or the merge.
+
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `--grounding <mode>` | `disabled` | `disabled` · `flag` (annotate each observation with `grounded`/`groundingScore`, keep all) · `drop` (remove observations below the threshold) |
+| `--grounding-min-score <n>` | `0.5` | Minimum keyword-overlap score (0–1) an observation must reach. Also gates which facts the `lora` export keeps |
 
 ### Resume / Continuation
 
@@ -357,6 +377,7 @@ jsonReader:
 | ------ | ---------- | ---------- |
 | Plain text | `.txt`, source code files | Direct extraction |
 | Markdown | `.md` | Markdown-aware parsing |
+| Transcripts | `*.parakeet.txt`/`*.whisper.txt` (speaker-labeled), transcript/turn JSON, Claude/ChatGPT chat exports | Speaker-pure chunks with per-fact `speaker`/`occurredAt` provenance |
 | JSON | `.json`, `.jsonl`, `.geojson` | Token-efficient, structure-aware chunking (compact, split on JSON structure) |
 | Source code | `.ts`, `.js`, `.py`, `.go`, `.rs`, and more | Code-aware extraction |
 | PDF | `.pdf` | Page-by-page text (or Docling for advanced) |
@@ -371,6 +392,8 @@ jsonReader:
 
 ### Standard JSON (`--export-format json`)
 
+Observations are **objects**, not bare strings: each carries provenance (`source`/`speaker`) and a Graphiti-style **bi-temporal** axis — `validAt`/`invalidAt` (when the fact was true in the world) and `createdAt`/`expiredAt` (when the system learned / superseded it). The LLM still emits plain text; kg-gen stamps these deterministically from what it already knows about the chunk. Optional fields are omitted when unknown; legacy graphs with string observations still load.
+
 ```json
 {
   "entities": [
@@ -378,13 +401,29 @@ jsonReader:
       "name": "knowledge_graph_builder",
       "entityType": "class",
       "observations": [
-        "Extracts entities and relations from file content using LLM",
-        "Uses Zod schema validation for structured LLM output",
-        "Supports retry logic with exponential backoff (3 attempts)"
+        {
+          "text": "Extracts entities and relations from file content using LLM",
+          "source": "src/core/knowledge/KnowledgeGraphBuilder.ts",
+          "createdAt": "2026-06-05T15:57:59.856Z"
+        }
       ],
       "files": ["src/core/knowledge/KnowledgeGraphBuilder.ts"],
       "chunk": 1,
       "totalChunks": 3
+    },
+    {
+      "name": "SPEAKER_01",
+      "entityType": "person",
+      "observations": [
+        {
+          "text": "Explains that a Naïve Bayes classifier assumes word independence",
+          "speaker": "SPEAKER_01",
+          "source": "Olga Lesson P.parakeet.txt",
+          "validAt": "2026-05-28T00:00:00Z",
+          "createdAt": "2026-06-05T15:57:59.856Z"
+        }
+      ],
+      "files": ["Olga Lesson P.parakeet.txt"]
     }
   ],
   "relations": [
@@ -443,9 +482,30 @@ dotOptions:
   showLegend: true
 ```
 
+### KBLaM Triples (`--export-format kblam`)
+
+JSONL in the shape Microsoft [KBLaM](https://github.com/microsoft/KBLaM)'s `dataset_generation` ingests — one `(entity, property, value)` `DataPoint` per line, with the derived `Q`/`A`/`key_string` it encodes into knowledge tokens. Observations become `(entity, "fact", text)`; relations become `(from, relationType, to)`.
+
+```jsonl
+{"name":"Recursion","description_type":"fact","description":"a function that calls itself","Q":"What is the fact of Recursion?","A":"The fact of Recursion is a function that calls itself.","key_string":"the fact of Recursion"}
+{"name":"Recursion","description_type":"terminates_at","description":"BaseCase","Q":"What is the terminates_at of Recursion?","A":"The terminates_at of Recursion is BaseCase.","key_string":"the terminates_at of Recursion"}
+```
+
+### LoRA / SFT Dataset (`--export-format lora`)
+
+Chat-format instruction examples (`{messages:[user Q, assistant A]}`) derived from the same triples, **quality-filtered**: observations whose grounding score (from `--grounding`) is below `--grounding-min-score` are dropped, so only grounded facts make it into training data.
+
+```jsonl
+{"messages":[{"role":"user","content":"What is the fact of Recursion?"},{"role":"assistant","content":"The fact of Recursion is a function that calls itself."}]}
+```
+
+### Graphiti (`--export-format graphiti`)
+
+`add_triplet`-shaped `{ nodes: EntityNode[], edges: EntityEdge[] }` for ingestion into a [Graphiti](https://github.com/getzep/graphiti) temporal knowledge graph — entities → nodes (summary built from observations, `created_at`), relations → edges (`UPPER_SNAKE` name, stable sha1 uuids). Per-fact valid-time is carried in the `json`/`kblam` exports.
+
 ## Quality Metrics
 
-Located in `/test/` — a standalone evaluation framework for assessing extraction quality (not automated tests):
+Located in `src/quality/` — importable evaluators (also wired into the `npm run benchmark` harness in `src/evaluation/`) for assessing extraction quality. The `factual` evaluator additionally backs the inline [grounding gate](#inline-grounding-gate):
 
 ### Structural Metrics
 
@@ -474,7 +534,7 @@ Located in `/test/` — a standalone evaluation framework for assessing extracti
 
 - Overall quality score (0–100)
 - Specific recommendations for improvement
-- Training data generation for LoRa fine-tuning
+- Composite score gates which graphs are harvested for fine-tuning data (`--export-format kblam`/`lora`)
 
 ## Local LLM Requirements & Leaderboard
 
@@ -517,8 +577,8 @@ const options = {
   // ... see ProcessingOptions for all fields
 };
 
-const container = await ContainerFactory.create(options);
-const processor = container.get<IDirectoryProcessor>(TYPES.DirectoryProcessor);
+const container = ContainerFactory.createContainer({ processingOptions: options });
+const processor = await container.resolve<IDirectoryProcessor>(TYPES.DirectoryProcessor);
 await processor.processDirectory(options);
 ```
 
@@ -526,19 +586,24 @@ await processor.processDirectory(options);
 
 ```text
 src/
-├── cli/              # Commander.js CLI (40+ options, process/watch/export commands)
+├── cli/              # Commander.js CLI (process/watch/export commands; --export-only)
 ├── core/
 │   ├── di/           # Async DI container + service registrations
-│   ├── processor/    # File readers (11 types) + text chunking + classifiers
-│   ├── llm/          # Ollama service, embeddings, versioned Handlebars prompt templates
-│   ├── knowledge/    # KG building (LLM+Zod), 3-level hierarchical merging, vector search
-│   └── export/       # Strategy pattern: json, jsonl, mcp-jsonl, GraphViz DOT
-├── types/            # TypeScript interfaces and data models
-└── shared/           # Logger (tslog), utilities (Jaro-Winkler, cosine similarity, config)
+│   ├── processor/    # File readers (transcript, JSON, PDF, Office, audio, …) + chunking + classifiers
+│   ├── checkpoint/   # Per-chunk resume sidecar (--resume)
+│   ├── llm/          # Ollama / OpenAI-compatible providers, embeddings, Handlebars prompt templates
+│   ├── knowledge/    # KG building (LLM+Zod, provenance + grounding gate), 3-level merge, vector search
+│   └── export/       # Strategy pattern: json, jsonl, mcp-jsonl, dot, kblam, lora, graphiti
+├── quality/          # Importable quality metrics (structural, semantic, factual, consistency, composite)
+├── evaluation/       # Benchmark harness (CrossRE / REBEL / RE-DocRED) — `npm run benchmark`
+├── types/            # TypeScript interfaces and data models (KnowledgeGraph, Observation, …)
+└── shared/           # Logger (tslog), graceful shutdown, utilities (Jaro-Winkler, cosine similarity, config)
 
-scripts/              # Quality metrics evaluation framework
+scripts/              # Standalone benchmark CLI + report tooling
 examples/             # Sample integrations and output files
 ```
+
+Tests use Jest (`npm test`); mock the LLM via the `ILLMProvider` interface for network-free unit tests.
 
 ## Development Setup
 
@@ -559,7 +624,7 @@ node ./dist/index.js --config config.yaml
 
 ## License
 
-GPL-3.0 License — see [LICENSE](LICENSE) file for details.
+MIT License — see [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
