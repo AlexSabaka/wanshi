@@ -227,6 +227,7 @@ export class ContainerFactory {
         JsonFileReader,
         OfficeReader,
         TextReader,
+        TranscriptReader,
         PdfReader,
         RtfReader
       } = await import(
@@ -252,6 +253,14 @@ export class ContainerFactory {
         factory.registerReader(new OfficeReader(chunker, logger));
         factory.registerReader(new PdfReader(chunker, logger));
       }
+
+      // Transcript reader claims speaker-labeled text (.parakeet.txt, …) and
+      // transcript-shaped JSON (recua turns / chat exports). Registered before
+      // JsonFileReader and TextReader (first-match-wins) so it wins for those;
+      // its content-sniffing canRead defers everything else.
+      factory.registerReader(
+        new TranscriptReader(chunker, logger, Number(options.chunkSize) || 4000)
+      );
 
       // JSON reader claims .json/.jsonl/.geojson — must be registered before
       // TextReader (first-match-wins) so it handles them instead of TextReader.

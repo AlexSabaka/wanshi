@@ -1,4 +1,5 @@
 import { KnowledgeGraph, Entity, Relation } from "../../../types/KnowledgeGraph";
+import { obsText, normalizeObservations } from "../../../types/Observation";
 import { MCPKnowledgeGraph } from "../../../types/MCPKnowledgeGraph";
 import { ProcessingOptions } from "../../../types/ProcessingOptions";
 import { IExportStrategy } from "./IExportStrategy";
@@ -38,7 +39,8 @@ export class McpExportStrategy implements IExportStrategy {
       entities: graph.entities.map((entity) => ({
         name: entity.name,
         entityType: entity.entityType,
-        observations: entity.observations || [],
+        // MCP memory server stores observations as bare strings.
+        observations: (entity.observations || []).map(obsText),
       })),
       relations: graph.relations.map((relation) => ({
         from: relation.from,
@@ -60,7 +62,7 @@ export class McpExportStrategy implements IExportStrategy {
           ({
             name: entity.name,
             entityType: entity.entityType,
-            observations: entity.observations || [],
+            observations: normalizeObservations(entity.observations || []),
           } as Entity)
       ),
       relations: mcpGraph.relations.map(

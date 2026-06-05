@@ -1,4 +1,4 @@
-import { KnowledgeGraph, Entity, Relation, ProcessingOptions, IEmbeddingProvider } from "../../../types";
+import { KnowledgeGraph, Entity, Relation, ProcessingOptions, IEmbeddingProvider, Observation, obsText } from "../../../types";
 import { jaroWinklerSimilarity , cosineSimilarity } from "../../../shared/utils";
 import { Logger } from "../../../shared";
 
@@ -6,69 +6,89 @@ import { Logger } from "../../../shared";
 const DefaultSimilarityThreshold = 0.7;
 const DefaultObservationThreshold = 0.7;
 
-// Deduplicate observations using embeddings
+/** Provenance identity used to keep distinct sources/speakers un-merged. */
+function provenanceKey(o: Observation): string {
+  return `${o.source ?? ""}␟${o.speaker ?? ""}`;
+}
+
+/**
+ * Deduplicate observations while PRESERVING per-source attribution: the same
+ * fact asserted by two different sources/speakers stays as two observations.
+ * We partition by provenance identity and only collapse near-duplicates *within*
+ * a single provenance group.
+ */
 async function deduplicateObservations(
-  observations: string[],
+  observations: Observation[],
   threshold: number,
   embeddingService: IEmbeddingProvider,
   logger: Logger,
-): Promise<string[]> {
+): Promise<Observation[]> {
   if (observations.length <= 1) return observations;
 
-  logger?.debug(`Deduplicating ${observations.length} observations`);
+  logger?.debug(`Deduplicating ${observations.length} observations (provenance-aware)`);
 
-  // Get embeddings for all observations
-  const observationData: Array<{ text: string; embedding: number[] }> = [];
+  const groups = new Map<string, Observation[]>();
+  for (const o of observations) {
+    const key = provenanceKey(o);
+    const g = groups.get(key);
+    if (g) g.push(o);
+    else groups.set(key, [o]);
+  }
 
+  const result: Observation[] = [];
+  for (const group of groups.values()) {
+    result.push(
+      ...(await dedupWithinProvenance(group, threshold, embeddingService, logger))
+    );
+  }
+
+  logger?.debug(
+    `Deduplicated to ${result.length} observations (removed ${
+      observations.length - result.length
+    }, across ${groups.size} provenance group(s))`
+  );
+  return result;
+}
+
+/** Collapse near-duplicate observations that share the same provenance. */
+async function dedupWithinProvenance(
+  observations: Observation[],
+  threshold: number,
+  embeddingService: IEmbeddingProvider,
+  logger: Logger,
+): Promise<Observation[]> {
+  if (observations.length <= 1) return observations;
+
+  const data: Array<{ obs: Observation; embedding: number[] }> = [];
   for (const obs of observations) {
     try {
-      const embedding = await embeddingService.embed(obs);
-      observationData.push({ text: obs, embedding });
+      const embedding = await embeddingService.embed(obs.text);
+      data.push({ obs, embedding });
     } catch (error) {
-      logger?.warn(`Failed to get embedding for observation: ${obs}`);
-      // Keep observation even if embedding fails
-      observationData.push({ text: obs, embedding: [] });
+      logger?.warn(`Failed to get embedding for observation: ${obs.text}`);
+      data.push({ obs, embedding: [] }); // keep it even if embedding fails
     }
   }
 
-  // Find duplicates using cosine similarity
   const toRemove = new Set<number>();
-
-  for (let i = 0; i < observationData.length; i++) {
-    if (toRemove.has(i) || observationData[i].embedding.length === 0) continue;
-
-    for (let j = i + 1; j < observationData.length; j++) {
-      if (toRemove.has(j) || observationData[j].embedding.length === 0)
-        continue;
-
-      const similarity = cosineSimilarity(
-        observationData[i].embedding,
-        observationData[j].embedding
-      );
-
+  for (let i = 0; i < data.length; i++) {
+    if (toRemove.has(i) || data[i].embedding.length === 0) continue;
+    for (let j = i + 1; j < data.length; j++) {
+      if (toRemove.has(j) || data[j].embedding.length === 0) continue;
+      const similarity = cosineSimilarity(data[i].embedding, data[j].embedding);
       if (similarity >= threshold) {
-        // Keep the longer/more detailed observation
-        if (observationData[i].text.length >= observationData[j].text.length) {
+        // keep the longer/more detailed observation (with its provenance)
+        if (data[i].obs.text.length >= data[j].obs.text.length) {
           toRemove.add(j);
         } else {
           toRemove.add(i);
-          break; // Exit inner loop since we're removing current observation
+          break;
         }
       }
     }
   }
 
-  const deduplicated = observationData
-    .filter((_, index) => !toRemove.has(index))
-    .map((item) => item.text);
-
-  logger?.debug(
-    `Deduplicated to ${deduplicated.length} observations (removed ${
-      observations.length - deduplicated.length
-    })`
-  );
-
-  return deduplicated;
+  return data.filter((_, index) => !toRemove.has(index)).map((d) => d.obs);
 }
 
 // Find similar entity by name
@@ -440,7 +460,7 @@ export function searchKnowledgeGraphsNodes(
           jaroWinklerSimilarity(e.name, query) > similarityThreshold ||
           jaroWinklerSimilarity(e.entityType, query) > similarityThreshold ||
           e.observations.some(
-            (o) => jaroWinklerSimilarity(o, query) > similarityThreshold
+            (o) => jaroWinklerSimilarity(obsText(o), query) > similarityThreshold
           )
       );
 

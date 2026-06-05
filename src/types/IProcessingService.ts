@@ -22,6 +22,23 @@ export interface ProcessedChunk {
   startOffset: number;
   endOffset: number;
   images?: ProcessedImage[];
+  /**
+   * Provenance the reader knows about this chunk (e.g. a transcript turn's
+   * speaker and timestamp). Stamped deterministically onto every observation
+   * extracted from the chunk by KnowledgeGraphBuilder.
+   */
+  provenance?: ChunkProvenance;
+}
+
+/**
+ * Per-chunk provenance carried from the reader to the extracted observations.
+ * `occurredAt` is valid-time (when it was said/true); the builder also stamps
+ * `source` (file path) and transaction-time (`createdAt`) itself.
+ */
+export interface ChunkProvenance {
+  speaker?: string;
+  source?: string;
+  occurredAt?: string; // ISO-8601; becomes the observation's validAt
 }
 
 /**

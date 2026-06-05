@@ -1,5 +1,6 @@
 import { Digraph, Node, Edge, Subgraph, attribute, toDot } from 'ts-graphviz';
 import { KnowledgeGraph } from "../../../types/KnowledgeGraph";
+import { obsText } from "../../../types/Observation";
 import { ProcessingOptions } from "../../../types/ProcessingOptions";
 import { IExportStrategy } from "./IExportStrategy";
 
@@ -191,8 +192,8 @@ export class GraphvizDotExportStrategy implements IExportStrategy {
 
       // Add observations if enabled
       if (options.includeObservations && entity.observations?.length > 0) {
-        const observations = entity.observations.slice(0, options.maxObservationsPerNode);
-        const truncatedObs = observations.map(obs => 
+        const observations = entity.observations.slice(0, options.maxObservationsPerNode).map(obsText);
+        const truncatedObs = observations.map(obs =>
           obs.length > 40 ? obs.substring(0, 37) + "..." : obs
         );
 

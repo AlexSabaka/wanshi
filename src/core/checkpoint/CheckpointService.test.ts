@@ -30,7 +30,12 @@ describe("CheckpointService", () => {
     const key = s.computeKey("a.txt", 1, "x", "m", "v");
     const kg = {
       entities: [
-        { name: "E", entityType: "t", observations: ["o"], files: [] },
+        {
+          name: "E",
+          entityType: "t",
+          observations: [{ text: "o", source: "f.txt" }],
+          files: [],
+        },
       ],
       relations: [],
     };

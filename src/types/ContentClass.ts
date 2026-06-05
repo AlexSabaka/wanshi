@@ -24,10 +24,26 @@ export interface ClassificationResult {
   confidence: number;
 }
 
+/**
+ * Few-shot NER example output. Mirrors the *raw* LLM shape (observations are
+ * bare strings), not the runtime `KnowledgeGraph` (whose observations are
+ * provenance-stamped `Observation` objects).
+ */
+export interface NERExampleEntity {
+  name: string;
+  files?: string[];
+  entityType: string;
+  observations: string[];
+}
+export interface NERExampleGraph {
+  entities: NERExampleEntity[];
+  relations: { from: string; to: string; relationType: string[] }[];
+}
+
 export interface PromptContentExample {
   filePath: string;
   fileContent: string;
-  output: KnowledgeGraph;
+  output: NERExampleGraph;
 }
 
 export interface ContentClassConfig {

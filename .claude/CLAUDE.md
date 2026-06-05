@@ -107,14 +107,40 @@ kg-gen/
 ```typescript
 // src/types/KnowledgeGraph.ts
 interface Entity {
-  name: string;           // Unique identifier — snake_case for code/technical entities; original casing for proper nouns
-  entityType: string;     // Category: "class", "function", "concept", "person", etc.
-  observations: string[]; // Factual statements extracted from source
-  files: string[];        // Source file paths
-  chunk?: number;         // Chunk index (1-based) if file was split
-  totalChunks?: number;   // Total chunks in source file
+  name: string;            // Unique identifier — snake_case for code/technical entities; original casing for proper nouns
+  entityType: string;      // Category: "class", "function", "concept", "person", etc.
+  observations: Observation[]; // Provenance-stamped facts (see below)
+  files: string[];         // Source file paths
+  chunk?: number;          // Chunk index (1-based) if file was split
+  totalChunks?: number;    // Total chunks in source file
 }
 
+// src/types/Observation.ts — observations are objects, not bare strings.
+interface Observation {
+  text: string;
+  speaker?: string;   // per-observation provenance: who asserted it
+  source?: string;    // origin file/path
+  validAt?: string;   // bi-temporal valid time (true in the world from)  [Graphiti-verbatim]
+  invalidAt?: string; // valid time end
+  createdAt?: string; // transaction time: when extracted/ingested
+  expiredAt?: string; // transaction time: when superseded (facts are superseded, never deleted)
+}
+```
+
+**Provenance is built, not asked of the model.** The LLM still emits observations as
+bare strings; `KnowledgeGraphBuilder.toGraph()` wraps each into an `Observation`,
+stamping `source`/`speaker`/`validAt` from the chunk's `ChunkProvenance` (reader-supplied)
+plus `createdAt`. Read sites use the `obsText()` / `normalizeObservations()` helpers and
+tolerate legacy bare-string data; **MCP export downgrades to bare strings** so the memory
+server stays compatible.
+
+**`entityType` enum (per-domain).** When a content class is detected,
+`KnowledgeGraphBuilder.buildGraphSchema(allowedTypes)` constrains `entityType` to a Zod
+**enum** = that domain's `primaryEntityTypes` (from `NER_DOMAIN_EXAMPLES`) + generic types +
+an `other` escape hatch; with no class detected it stays a free string. The schema is built
+per chunk from the chunk's classification.
+
+```typescript
 interface Relation {
   from: string;           // Source entity name
   to: string;             // Target entity name
@@ -159,6 +185,7 @@ const svc = container.get<ISomeService>(TYPES.SomeService);
 - **Cross-file**: Full `entitySimilarityThreshold` (default 0.9), full `observationSimilarityThreshold` (conservative)
 - Entity names: Jaro-Winkler similarity
 - Observations: Cosine similarity of embeddings (provider-selectable)
+- **Provenance-preserving:** `deduplicateObservations` partitions by provenance identity (`source␟speaker`) and only collapses near-duplicates *within* a group — the same fact from two sources/speakers stays as two attributed `Observation`s, never one flattened string.
 
 ### 5. Prompt Versioning
 
@@ -256,6 +283,7 @@ Output file
 
 | Reader | Extensions | Library |
 | ------ | ---------- | ------- |
+| `TranscriptReader` | speaker-labeled `*.parakeet.txt`/`*.whisper.txt`/`*.corrected.txt`, transcript-shaped `.json` | Built-in (registered **first**; content-sniffing `canRead`) |
 | `TextReader` | `.txt`, most text/code files | Built-in |
 | `JsonFileReader` | `.json`, `.jsonl`, `.geojson` | Built-in (registered before `TextReader`) |
 | `MarkdownReader` | `.md` | Built-in |
@@ -267,6 +295,8 @@ Output file
 | `AudioReader` | `.mp3`, `.wav`, `.ogg`, `.m4a`, etc. | `nodejs-whisper` + `fluent-ffmpeg` |
 | `DoclingReader` | `.pdf`, `.doc`, `.docx`, `.ppt`, `.pptx` | Docling API (opt-in) |
 | `BinaryReader` | Unknown/binary | Skips gracefully |
+
+**TranscriptReader** (`src/core/processor/readers/TranscriptReader.ts`) is registered **before** `JsonFileReader`/`TextReader` and overrides `canRead` to claim only files that sniff as transcripts (deferring everything else). It normalizes three real shapes — recua speaker-labeled text (`SPEAKER_XX:` blocks), recua turns JSON (`[{start,end,speaker,<backend>}]`), and Claude/ChatGPT chat exports (`[{chat_messages:[{sender,created_at,…}]}]`) — into `Turn[]`, then emits **speaker-pure** chunks (consecutive same-speaker turns grouped, oversized split) each carrying `ChunkProvenance {speaker, source, occurredAt}`. That provenance flows onto every observation, so a transcript's speaker becomes per-observation metadata instead of an entity (the old `SPEAKER_01`-as-entity bug). Cost note: chatty dialogue → one chunk per turn (many LLM calls); monologue-heavy content → fewer.
 
 **JsonFileReader** (`src/core/processor/readers/JsonFileReader.ts`) is registered **before** `TextReader` in `ContainerFactory` (first-match-wins) so it claims `.json`/`.jsonl`/`.geojson`. It re-serializes JSON compactly (token savings) and chunks on structure — top-level array elements, an object's dominant array (e.g. `{conversations:[…]}`, header of sibling keys preserved), or JSONL lines — packing to `jsonReader.maxChunkSize` (default = global `chunkSize`) and recursing one level into oversized elements. Malformed JSON falls back to raw text chunking (never throws). Config: `--json-strategy structural|raw` + nested `jsonReader: { strategy, maxChunkSize }`.
 

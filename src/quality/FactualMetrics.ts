@@ -1,4 +1,4 @@
-import { KnowledgeGraph } from '../types';
+import { KnowledgeGraph, obsText } from '../types';
 
 export interface FactualMetrics {
   hallucinationScore: number;
@@ -20,7 +20,7 @@ export class FactualEvaluator {
     for (const e of graph.entities) {
       for (const obs of e.observations || []) {
         total++;
-        if (!this.isClaimGrounded(obs, source, e.name)) ungrounded++;
+        if (!this.isClaimGrounded(obsText(obs), source, e.name)) ungrounded++;
       }
     }
     return total > 0 ? ungrounded / total : 0;
@@ -56,7 +56,7 @@ export class FactualEvaluator {
       for (let i = 0; i < obs.length; i++) {
         for (let j = i + 1; j < obs.length; j++) {
           pairs++;
-          const lo1 = obs[i].toLowerCase(), lo2 = obs[j].toLowerCase();
+          const lo1 = obsText(obs[i]).toLowerCase(), lo2 = obsText(obs[j]).toLowerCase();
           const conflict = contradictions.some(
             ([a, b]) => (lo1.includes(a) && lo2.includes(b)) || (lo1.includes(b) && lo2.includes(a))
           );

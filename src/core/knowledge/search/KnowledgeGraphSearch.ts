@@ -1,6 +1,6 @@
 import path from "path";
 import { cosineSimilarity, jaroWinklerSimilarity } from "../../../shared/utils";
-import { IKnowledgeGraphSearch, IEmbeddingProvider, Entity, KnowledgeGraph, Relation } from "../../../types";
+import { IKnowledgeGraphSearch, IEmbeddingProvider, Entity, KnowledgeGraph, Relation, obsText } from "../../../types";
 import { Logger } from "../../../shared";
 
 // Enhanced search with multiple strategies
@@ -129,7 +129,7 @@ export class KnowledgeGraphSearch implements IKnowledgeGraphSearch {
         if (options.includeObservations !== false) {
           for (const obs of entity.observations || []) {
             for (const term of keyTerms) {
-              if (obs.toLowerCase().includes(term.toLowerCase())) {
+              if (obsText(obs).toLowerCase().includes(term.toLowerCase())) {
                 relevanceScore += 0.3;
               }
             }
@@ -230,7 +230,7 @@ export class KnowledgeGraphSearch implements IKnowledgeGraphSearch {
       for (const graph of graphs) {
         for (const entity of graph.entities) {
           // Create entity text for embedding
-          const entityText = `${entity.name} ${entity.entityType} ${(entity.observations || []).join(' ')}`;
+          const entityText = `${entity.name} ${entity.entityType} ${(entity.observations || []).map(obsText).join(' ')}`;
           const entityEmbedding = await this.embeddingService.embed(entityText);
           
           const similarity = cosineSimilarity(contentEmbedding, entityEmbedding);

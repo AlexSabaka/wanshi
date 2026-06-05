@@ -1,0 +1,50 @@
+/**
+ * A single factual statement about an entity, with provenance and a bi-temporal
+ * axis (Graphiti-verbatim). The LLM emits observations as plain strings; the
+ * builder wraps each one into an `Observation` deterministically, stamping the
+ * source/speaker/time it already knows from the chunk — grounding is *built*, not
+ * asked of the model.
+ *
+ * Temporal fields follow Graphiti's bi-temporal model:
+ *  - validAt / invalidAt — *valid time*: when the fact was/Stopped being true in
+ *    the world (e.g. the lesson date, the turn timestamp).
+ *  - createdAt / expiredAt — *transaction time*: when the system learned the fact
+ *    and when it marked it superseded. Facts are superseded (expiredAt set), never
+ *    deleted.
+ * All timestamps are ISO-8601 strings.
+ */
+export interface Observation {
+  text: string;
+  speaker?: string; // who asserted it (per-observation provenance)
+  source?: string; // origin file/path/document
+  validAt?: string; // valid-time start (true in the world from)
+  invalidAt?: string; // valid-time end (stopped being true)
+  createdAt?: string; // transaction-time: when extracted/ingested
+  expiredAt?: string; // transaction-time: when superseded by the system
+}
+
+/** An observation as stored may be a legacy bare string or a full object. */
+export type ObservationLike = string | Observation;
+
+/** Read the text of an observation regardless of legacy/object form. */
+export function obsText(o: ObservationLike): string {
+  return typeof o === "string" ? o : o.text;
+}
+
+/**
+ * Coerce to an `Observation`. For a bare string, stamp the supplied provenance;
+ * an existing object is returned unchanged (its own fields are authoritative).
+ */
+export function toObservation(
+  o: ObservationLike,
+  provenance?: Partial<Observation>
+): Observation {
+  return typeof o === "string" ? { text: o, ...provenance } : o;
+}
+
+/** Normalize a possibly-legacy observation array to `Observation[]`. */
+export function normalizeObservations(
+  arr: ObservationLike[] | undefined
+): Observation[] {
+  return (arr ?? []).map((o) => toObservation(o));
+}

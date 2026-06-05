@@ -10,3 +10,4 @@ export * from './OfficeReader';
 export * from './PdfReader';
 export * from './RtfReader';
 export * from './TextReader';
+export * from './TranscriptReader';

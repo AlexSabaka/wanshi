@@ -1,10 +1,12 @@
+import { Observation } from "./Observation";
+
 export interface Entity {
   name: string;
   files: string[];
   chunk?: number;
   totalChunks?: number;
   entityType: string;
-  observations: string[];
+  observations: Observation[];
 }
 
 export interface Relation {

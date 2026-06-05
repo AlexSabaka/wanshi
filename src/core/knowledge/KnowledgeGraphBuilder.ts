@@ -2,30 +2,66 @@ import * as path from 'path';
 import { z } from 'zod';
 import { ILLMProvider, LLMMessage } from '../../types/ILLMProvider';
 import { PromptManager, PromptContext } from '../llm/prompts/PromptManager';
-import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder, ClassificationResult, IProgressEmitter } from '../../types';
+import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder, ClassificationResult, IProgressEmitter, ChunkProvenance, Observation, normalizeObservations } from '../../types';
 import { CheckpointService } from '../checkpoint';
 import { NoopProgressEmitter } from '../progress';
+import { NER_DOMAIN_EXAMPLES } from '../processor/classifier/NER_DOMAIN_EXAMPLES';
 import { Logger, shutdown } from '../../shared';
 
-// Define the schema for knowledge graph extraction
-const KnowledgeGraphSchema = z.object({
-  entities: z.array(
-    z.object({
-      name: z.string().describe("Unique entity name"),
-      entityType: z.string().describe("Entity description"),
-      observations: z
-        .array(z.string())
-        .describe("List of facts and observations about entity"),
-    })
-  ),
-  relations: z.array(
-    z.object({
-      from: z.string().describe("Relation source entity"),
-      to: z.string().describe("Relation target entity"),
-      relationType: z.array(z.string()).describe("List of relation types"),
-    })
-  ),
-});
+/**
+ * Domain-agnostic entity types always offered alongside a detected domain's
+ * vocabulary, plus an `other` escape hatch so the model is never forced to
+ * mislabel when nothing fits.
+ */
+const GENERIC_ENTITY_TYPES = [
+  "person",
+  "organization",
+  "location",
+  "concept",
+  "event",
+  "product",
+  "technology",
+  "document",
+  "date",
+];
+
+/**
+ * Build the extraction schema. When `allowedTypes` is supplied (a content class
+ * was detected), `entityType` is an enforced Zod enum scoped to that domain +
+ * generic types + `other`; otherwise it stays a free string.
+ */
+function buildGraphSchema(allowedTypes?: string[]) {
+  const entityType =
+    allowedTypes && allowedTypes.length > 0
+      ? z
+          .enum(allowedTypes as [string, ...string[]])
+          .describe("Entity type — pick the closest; use 'other' if none fit")
+      : z.string().describe("Entity description");
+
+  return z.object({
+    entities: z.array(
+      z.object({
+        name: z.string().describe("Unique entity name"),
+        entityType,
+        observations: z
+          .array(z.string())
+          .describe("List of facts and observations about entity"),
+      })
+    ),
+    relations: z.array(
+      z.object({
+        from: z.string().describe("Relation source entity"),
+        to: z.string().describe("Relation target entity"),
+        relationType: z.array(z.string()).describe("List of relation types"),
+      })
+    ),
+  });
+}
+
+const DEFAULT_GRAPH_SCHEMA = buildGraphSchema();
+
+/** What the LLM returns: observations are still bare strings here. */
+type RawGraph = z.infer<typeof DEFAULT_GRAPH_SCHEMA>;
 
 export interface BuilderOptions {
   llmService: ILLMProvider;
@@ -120,6 +156,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
           chunk.index,
           chunk.totalChunks,
           chunk.content,
+          this.chunkProvenance(processedFile, chunk),
           () =>
             this.buildFromChunk(
               processedFile.path,
@@ -151,6 +188,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
         chunk.index ?? 1,
         chunk.totalChunks ?? 1,
         content,
+        this.chunkProvenance(processedFile, chunk),
         () =>
           this.buildFromContent(
             processedFile.path,
@@ -181,7 +219,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     chunkIndex: number,
     totalChunks: number,
     content: string,
-    generate: () => Promise<KnowledgeGraph>,
+    provenance: ChunkProvenance,
+    generate: () => Promise<RawGraph>,
     attachMetadata: (entity: KnowledgeGraph['entities'][number]) => void
   ): Promise<KnowledgeGraph> {
     this.progress.emit({
@@ -207,7 +246,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       this.logger.info(
         `Skipping cached chunk ${chunkIndex}/${totalChunks} of ${filePath} (checkpoint hit)`
       );
-      const cached = this.checkpoint!.get(key)!;
+      const cached = this.normalizeGraph(this.checkpoint!.get(key)!);
       this.progress.emit({
         type: "chunk_complete",
         path: filePath,
@@ -220,7 +259,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       return cached;
     }
 
-    const kg = await generate();
+    const raw = await generate();
+    const kg = this.toGraph(raw, provenance);
     kg.entities.forEach(attachMetadata);
 
     this.progress.emit({
@@ -250,6 +290,77 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   }
 
   /**
+   * Scope the entity-type enum to the detected content domain. Returns the
+   * domain's `primaryEntityTypes` + generic types + `other`, or undefined when
+   * no class was detected (→ free-string entityType, today's behavior).
+   */
+  private resolveAllowedTypes(
+    contentClasses?: ClassificationResult[]
+  ): string[] | undefined {
+    if (!contentClasses || contentClasses.length === 0) return undefined;
+    const top = contentClasses.reduce((a, b) =>
+      b.confidence > a.confidence ? b : a
+    );
+    const domain = NER_DOMAIN_EXAMPLES[top.class]?.primaryEntityTypes ?? [];
+    if (domain.length === 0) return undefined;
+    return Array.from(new Set([...domain, ...GENERIC_ENTITY_TYPES, "other"]));
+  }
+
+  /** Provenance to stamp on a chunk's observations (reader-supplied or file). */
+  private chunkProvenance(
+    processedFile: ProcessedFile,
+    chunk: { provenance?: ChunkProvenance }
+  ): ChunkProvenance {
+    return {
+      speaker: chunk.provenance?.speaker,
+      source: chunk.provenance?.source ?? processedFile.path,
+      occurredAt: chunk.provenance?.occurredAt,
+    };
+  }
+
+  /**
+   * Convert the LLM's raw graph (bare-string observations) into the domain
+   * graph, stamping each observation with the chunk's provenance + transaction
+   * time. Grounding is deterministic — we attach what we already know rather
+   * than asking the model for it.
+   */
+  private toGraph(raw: RawGraph, provenance: ChunkProvenance): KnowledgeGraph {
+    const createdAt = new Date().toISOString();
+    return {
+      entities: raw.entities.map((e) => ({
+        name: e.name,
+        entityType: e.entityType,
+        files: [],
+        observations: e.observations.map(
+          (text): Observation => ({
+            text,
+            ...(provenance.speaker ? { speaker: provenance.speaker } : {}),
+            ...(provenance.source ? { source: provenance.source } : {}),
+            ...(provenance.occurredAt ? { validAt: provenance.occurredAt } : {}),
+            createdAt,
+          })
+        ),
+      })),
+      relations: raw.relations.map((r) => ({
+        from: r.from,
+        to: r.to,
+        relationType: r.relationType,
+      })),
+    };
+  }
+
+  /** Normalize a (possibly legacy string-observation) graph from the checkpoint. */
+  private normalizeGraph(kg: KnowledgeGraph): KnowledgeGraph {
+    return {
+      ...kg,
+      entities: kg.entities.map((e) => ({
+        ...e,
+        observations: normalizeObservations(e.observations as any),
+      })),
+    };
+  }
+
+  /**
    * Build knowledge graph from a chunk of content
    */
   private async buildFromChunk(
@@ -262,7 +373,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     retrievedContext?: any,
     images?: ProcessedImage[],
     contentClasses?: ClassificationResult[]
-  ): Promise<KnowledgeGraph> {
+  ): Promise<RawGraph> {
     this.logger.debug(`Building KG for chunk ${chunkIndex}/${totalChunks} of ${filePath}`);
 
     const userPrompt = await this.promptManager.getUserPrompt({
@@ -277,7 +388,12 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       contentClasses
     });
 
-    return this.generateKnowledgeGraph(systemPrompt, userPrompt, images);
+    return this.generateKnowledgeGraph(
+      systemPrompt,
+      userPrompt,
+      images,
+      this.resolveAllowedTypes(contentClasses)
+    );
   }
 
   /**
@@ -290,7 +406,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     retrievedContext?: any,
     images?: ProcessedImage[],
     contentClasses?: ClassificationResult[]
-  ): Promise<KnowledgeGraph> {
+  ): Promise<RawGraph> {
     this.logger.debug(`Building KG for entire file: ${filePath}`);
 
     const userPrompt = await this.promptManager.getUserPrompt({
@@ -303,7 +419,12 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       contentClasses
     });
 
-    return this.generateKnowledgeGraph(systemPrompt, userPrompt, images);
+    return this.generateKnowledgeGraph(
+      systemPrompt,
+      userPrompt,
+      images,
+      this.resolveAllowedTypes(contentClasses)
+    );
   }
 
   /**
@@ -312,8 +433,9 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   private async generateKnowledgeGraph(
     systemPrompt: string,
     userPrompt: string,
-    images?: ProcessedImage[]
-  ): Promise<KnowledgeGraph> {
+    images?: ProcessedImage[],
+    allowedTypes?: string[]
+  ): Promise<RawGraph> {
     const messages: LLMMessage[] = [
       {
         role: 'system',
@@ -329,7 +451,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     try {
       const result = await this.llmService.generateStructured(
         messages,
-        KnowledgeGraphSchema
+        buildGraphSchema(allowedTypes)
       );
 
       // Ensure arrays exist
@@ -338,7 +460,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
 
       this.logger.debug(`Generated KG with ${result.entities.length} entities and ${result.relations.length} relations`);
 
-      return result as KnowledgeGraph;
+      return result;
     } catch (error) {
       this.logger.error(`Failed to generate knowledge graph: ${error}`);
       

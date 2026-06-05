@@ -43,4 +43,39 @@ describe("KnowledgeGraphBuilder", () => {
     expect(captured[0].chunkContent).toBe("chunk one");
     expect(captured[1].chunkContent).toBe("chunk two");
   });
+
+  it("scopes entityType to a per-domain Zod enum when a content class is detected", async () => {
+    let capturedSchema: any;
+    const promptManager = {
+      getUserPrompt: async () => "u",
+      getSystemPrompt: async () => "s",
+    } as any;
+    const llmService = {
+      generateStructured: async (_m: any, schema: any) => {
+        capturedSchema = schema;
+        return { entities: [], relations: [] };
+      },
+      getModelCapabilities: async () => [],
+    } as any;
+    const builder = new KnowledgeGraphBuilder(
+      { llmService, promptManager, model: "m" },
+      stubLogger()
+    );
+
+    const processedFile = {
+      path: "f.ts",
+      content: "x",
+      metadata: { classes: [{ class: "code", confidence: 0.9 }] },
+      chunks: [{ content: "c", index: 1, totalChunks: 1, startOffset: 0, endOffset: 1 }],
+    } as any;
+
+    await builder.build(processedFile, "s");
+
+    const entityType = capturedSchema.shape.entities.element.shape.entityType;
+    // a ZodEnum exposes .options; ZodString does not
+    expect(Array.isArray(entityType.options)).toBe(true);
+    expect(entityType.options).toEqual(
+      expect.arrayContaining(["function", "other"])
+    );
+  });
 });

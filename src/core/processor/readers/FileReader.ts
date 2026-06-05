@@ -1,6 +1,7 @@
 import { Buffer } from 'buffer';
 import * as path from 'path';
 import { Logger } from '../../../shared';
+import { ChunkProvenance } from '../../../types';
 import { TextChunker } from '../chunking';
 
 /**
@@ -18,6 +19,8 @@ export interface ChunkResult {
   totalChunks: number;
   startOffset: number;
   endOffset: number;
+  /** Reader-supplied provenance (e.g. transcript turn speaker/time). */
+  provenance?: ChunkProvenance;
 }
 
 export interface ImageResult {

@@ -14,5 +14,6 @@ export * from './IKnowledgeGraphMerger';
 export * from './IKnowledgeGraphSearch';
 export * from './IProgressEmitter';
 export * from './KnowledgeGraph';
+export * from './Observation';
 export * from './MCPKnowledgeGraph';
 export * from './ProcessingOptions';

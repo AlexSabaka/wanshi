@@ -1,4 +1,4 @@
-import { KnowledgeGraph, Entity, Relation } from '../types';
+import { KnowledgeGraph, Entity, Relation, obsText } from '../types';
 
 export interface SemanticMetrics {
   entityNameQuality: number;
@@ -48,10 +48,11 @@ export class SemanticEvaluator {
     for (const e of entities) {
       for (const obs of e.observations || []) {
         total++;
-        if (!this.TRIVIAL_OBSERVATIONS.has(obs.toLowerCase())) {
-          if (obs.length > 10 || /\d/.test(obs) ||
-              obs.includes('implements') || obs.includes('uses') ||
-              obs.includes('version') || obs.includes('located')) {
+        const t = obsText(obs);
+        if (!this.TRIVIAL_OBSERVATIONS.has(t.toLowerCase())) {
+          if (t.length > 10 || /\d/.test(t) ||
+              t.includes('implements') || t.includes('uses') ||
+              t.includes('version') || t.includes('located')) {
             specific++;
           }
         }

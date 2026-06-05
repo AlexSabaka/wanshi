@@ -66,6 +66,7 @@ export class FileProcessor implements IFileProcessor {
             totalChunks: chunk.totalChunks,
             startOffset: chunk.startOffset,
             endOffset: chunk.endOffset,
+            ...(chunk.provenance && { provenance: chunk.provenance }),
             ...(this.attachImages && {
               images: chunk.images?.map((image) => {
                 return {
