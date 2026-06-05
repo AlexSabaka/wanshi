@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { OllamaService, LLMMessage } from '../llm/OllamaService';
+import { ILLMProvider, LLMMessage } from '../../types/ILLMProvider';
 import { PromptManager, PromptContext } from '../llm/prompts/PromptManager';
-import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder } from '../../types';
-import { Logger } from '../../shared';
+import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder, ClassificationResult } from '../../types';
+import { CheckpointService } from '../checkpoint';
+import { Logger, shutdown } from '../../shared';
 
 // Define the schema for knowledge graph extraction
 const KnowledgeGraphSchema = z.object({
@@ -25,21 +26,35 @@ const KnowledgeGraphSchema = z.object({
 });
 
 export interface BuilderOptions {
-  ollamaService: OllamaService;
+  llmService: ILLMProvider;
   promptManager: PromptManager;
+  // Resume support: when `resume` is set, each chunk's result is read from /
+  // written to the checkpoint, keyed by content + model + prompt version.
+  checkpoint?: CheckpointService;
+  resume?: boolean;
+  model: string;
+  promptVersion?: string;
 }
 
 /**
  * Builds knowledge graphs from processed files using LLM
  */
 export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
-  private ollamaService: OllamaService;
+  private llmService: ILLMProvider;
   private promptManager: PromptManager;
+  private checkpoint?: CheckpointService;
+  private resume: boolean;
+  private model: string;
+  private promptVersion: string;
   private logger: Logger;
 
   constructor(options: BuilderOptions, logger: Logger) {
-    this.ollamaService = options.ollamaService;
+    this.llmService = options.llmService;
     this.promptManager = options.promptManager;
+    this.checkpoint = options.checkpoint;
+    this.resume = options.resume ?? false;
+    this.model = options.model;
+    this.promptVersion = options.promptVersion ?? 'default';
     this.logger = logger;
   }
 
@@ -49,55 +64,133 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   async build(
     processedFile: ProcessedFile,
     systemPrompt: string,
-    retrievedContext?: any
+    retrieve?: (chunkContent: string) => Promise<any>
   ): Promise<KnowledgeGraph[]> {
     this.logger.info(`Building knowledge graph for: ${processedFile.path}`);
 
     const graphs: KnowledgeGraph[] = [];
 
+    const contentClasses = processedFile.metadata?.classes;
+    const multiChunk = processedFile.chunks.length > 1;
+
     // Process chunks if available
-    if (processedFile.chunks.length > 1) {
+    if (multiChunk) {
       for (const chunk of processedFile.chunks) {
-        const kg = await this.buildFromChunk(
+        // Cooperative interrupt: finish the in-flight chunk, then stop before
+        // starting the next one so a partial graph can be flushed.
+        if (shutdown.isRequested()) {
+          this.logger.warn(
+            `Interrupted — stopping at chunk ${chunk.index}/${chunk.totalChunks} of ${processedFile.path}`
+          );
+          break;
+        }
+
+        // Retrieve context for THIS chunk's content (per-chunk retrieval).
+        const retrievedContext = retrieve ? await retrieve(chunk.content) : undefined;
+
+        const kg = await this.buildChunk(
           processedFile.path,
-          chunk.content,
-          '', // TODO: What to do here? Do I need fileContent?
-          systemPrompt,
           chunk.index,
           chunk.totalChunks,
-          retrievedContext,
-          chunk.images
+          chunk.content,
+          () =>
+            this.buildFromChunk(
+              processedFile.path,
+              chunk.content,
+              '', // TODO: What to do here? Do I need fileContent?
+              systemPrompt,
+              chunk.index,
+              chunk.totalChunks,
+              retrievedContext,
+              chunk.images,
+              contentClasses
+            ),
+          (entity) => {
+            entity.files = [processedFile.path];
+            entity.chunk = chunk.index;
+            entity.totalChunks = chunk.totalChunks;
+          }
         );
-
-        // Add metadata to entities
-        kg.entities.forEach(entity => {
-          entity.files = [processedFile.path];
-          entity.chunk = chunk.index;
-          entity.totalChunks = chunk.totalChunks;
-        });
 
         graphs.push(kg);
       }
     } else if (processedFile.chunks.length === 1) {
-      const { content, images } = processedFile.chunks[0];
+      const chunk = processedFile.chunks[0];
+      const { content, images } = chunk;
+      const retrievedContext = retrieve ? await retrieve(content) : undefined;
       // Process entire file
-      const kg = await this.buildFromContent(
+      const kg = await this.buildChunk(
         processedFile.path,
+        chunk.index ?? 1,
+        chunk.totalChunks ?? 1,
         content,
-        systemPrompt,
-        retrievedContext,
-        images
+        () =>
+          this.buildFromContent(
+            processedFile.path,
+            content,
+            systemPrompt,
+            retrievedContext,
+            images,
+            contentClasses
+          ),
+        (entity) => {
+          entity.files = [processedFile.path];
+        }
       );
-
-      // Add metadata to entities
-      kg.entities.forEach(entity => {
-        entity.files = [processedFile.path];
-      });
 
       graphs.push(kg);
     }
 
     return graphs;
+  }
+
+  /**
+   * Run one chunk through the LLM, or restore it from the checkpoint when
+   * resuming. Stored graphs already carry their entity metadata, so on a hit
+   * we skip the LLM call entirely.
+   */
+  private async buildChunk(
+    filePath: string,
+    chunkIndex: number,
+    totalChunks: number,
+    content: string,
+    generate: () => Promise<KnowledgeGraph>,
+    attachMetadata: (entity: KnowledgeGraph['entities'][number]) => void
+  ): Promise<KnowledgeGraph> {
+    const key =
+      this.resume && this.checkpoint
+        ? this.checkpoint.computeKey(
+            filePath,
+            chunkIndex,
+            content,
+            this.model,
+            this.promptVersion
+          )
+        : undefined;
+
+    if (key && this.checkpoint!.has(key)) {
+      this.logger.info(
+        `Skipping cached chunk ${chunkIndex}/${totalChunks} of ${filePath} (checkpoint hit)`
+      );
+      return this.checkpoint!.get(key)!;
+    }
+
+    const kg = await generate();
+    kg.entities.forEach(attachMetadata);
+
+    if (key) {
+      await this.checkpoint!.append({
+        key,
+        filePath,
+        chunkIndex,
+        totalChunks,
+        model: this.model,
+        promptVersion: this.promptVersion,
+        kg,
+      });
+    }
+
+    return kg;
   }
 
   /**
@@ -111,7 +204,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     chunkIndex: number,
     totalChunks: number,
     retrievedContext?: any,
-    images?: ProcessedImage[]
+    images?: ProcessedImage[],
+    contentClasses?: ClassificationResult[]
   ): Promise<KnowledgeGraph> {
     this.logger.debug(`Building KG for chunk ${chunkIndex}/${totalChunks} of ${filePath}`);
 
@@ -123,7 +217,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       chunkContent: content,
       chunkIndex,
       totalChunks,
-      retrievedContext
+      retrievedContext,
+      contentClasses
     });
 
     return this.generateKnowledgeGraph(systemPrompt, userPrompt, images);
@@ -137,7 +232,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     content: string,
     systemPrompt: string,
     retrievedContext?: any,
-    images?: ProcessedImage[]
+    images?: ProcessedImage[],
+    contentClasses?: ClassificationResult[]
   ): Promise<KnowledgeGraph> {
     this.logger.debug(`Building KG for entire file: ${filePath}`);
 
@@ -147,7 +243,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       fileName: filePath,
       fileContent: content,
       chunkContent: content,
-      retrievedContext
+      retrievedContext,
+      contentClasses
     });
 
     return this.generateKnowledgeGraph(systemPrompt, userPrompt, images);
@@ -174,7 +271,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     ];
 
     try {
-      const result = await this.ollamaService.generateStructured(
+      const result = await this.llmService.generateStructured(
         messages,
         KnowledgeGraphSchema
       );

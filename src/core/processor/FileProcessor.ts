@@ -35,7 +35,7 @@ export class FileProcessor implements IFileProcessor {
    * Process a single file - read and optionally chunk it
    */
   async processFile(filePath: string): Promise<ProcessedFile> {
-    this.logger.info(`Processing fi0le: ${filePath}`);
+    this.logger.info(`Processing file: ${filePath}`);
 
     // Get appropriate reader
     const reader = this.readerFactory.getReader(filePath);

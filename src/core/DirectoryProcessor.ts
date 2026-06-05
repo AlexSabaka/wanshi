@@ -15,7 +15,7 @@ import {
   IFileProcessor
 } from "../types";
 import { PromptManager } from "./llm";
-import { Logger } from "../shared";
+import { Logger, shutdown } from "../shared";
 
 export interface IFileDiscoveryService {
   discover(): Promise<string[]>;
@@ -73,6 +73,13 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       const files = await fileDiscoveryService.discover();
 
       const knowledgeGraphs = await this.processFiles(files, options);
+
+      if (shutdown.isRequested()) {
+        logger.warn(
+          "Run interrupted — merging and exporting the partial graph collected so far. Re-run with --resume to continue."
+        );
+      }
+
       const finalKG = await this.mergeGraphs(knowledgeGraphs, logger);
       await this.exportKnowledgeGraph(finalKG, options);
 
@@ -86,11 +93,29 @@ export class DirectoryProcessor implements IDirectoryProcessor {
   /**
    * Process multiple files and generate knowledge graphs
    */
-  private async processFiles(
+  public async processFiles(
     files: string[],
     options: ProcessingOptions
   ): Promise<KnowledgeGraph[]> {
     const knowledgeGraphs: KnowledgeGraph[] = [];
+
+    // if output graph exists, load it to use for retrieval context
+    // TECH DEBT: these prior graphs are also pushed into `knowledgeGraphs`, so a
+    // plain re-run (without --resume) re-merges the old output into the new one,
+    // double-counting. Pre-existing behavior; orthogonal to checkpoint/resume.
+    if (fs.existsSync(options.output)) {
+      const existingContent = fs.readFileSync(options.output, "utf-8");
+      try {
+        const existingGraphs = JSON.parse(existingContent) as KnowledgeGraph[];
+        knowledgeGraphs.push(...existingGraphs);
+      } catch (error) {
+        // log and ignore
+        const logger = await this.container.resolve<Logger>(TYPES.Logger);
+        logger.error(
+          `Failed to parse existing knowledge graph at ${options.output}: ${error}`
+        );
+      }
+    }
 
     const logger = await this.container.resolve<Logger>(TYPES.Logger);
 
@@ -102,6 +127,13 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     );
 
     for (const file of files) {
+      // Cooperative interrupt: stop before starting the next file so the
+      // partial graph accumulated so far can still be merged and exported.
+      if (shutdown.isRequested()) {
+        logger.warn(`Interrupted — stopping before ${file}; flushing partial graph`);
+        break;
+      }
+
       try {
         const fileGraphs = await this.processFile(
           file,
@@ -140,7 +172,7 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     const processedFile = await fileProcessor.processFile(file);
     this.validateProcessedFile(processedFile, file, logger);
 
-    const retrievalContext = await this.getRetrievalContext(
+    const retrieve = await this.buildRetriever(
       processedFile,
       file,
       existingGraphs,
@@ -153,10 +185,11 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     const systemPrompt = await promptManager.getSystemPrompt(
       options.input,
       options.filter.join(', '),
-      options.description
+      options.description,
+      processedFile.metadata?.classes
     );
 
-    return await kgBuilder.build(processedFile, systemPrompt, retrievalContext);
+    return await kgBuilder.build(processedFile, systemPrompt, retrieve);
   }
 
   /**
@@ -174,14 +207,20 @@ export class DirectoryProcessor implements IDirectoryProcessor {
   }
 
   /**
-   * Get retrieval context for improved processing
+   * Build a retrieval function for a file, or undefined when retrieval is
+   * disabled / there's no existing graph to search.
+   *
+   * - `retrievalScope: "chunk"` (default) returns a function that retrieves
+   *   context per chunk using that chunk's own content.
+   * - `retrievalScope: "file"` retrieves once from the first chunk and reuses
+   *   it for every chunk (legacy behavior).
    */
-  private async getRetrievalContext(
+  private async buildRetriever(
     processedFile: ProcessedFile,
     filePath: string,
     existingGraphs: KnowledgeGraph[],
     options: ProcessingOptions
-  ): Promise<any> {
+  ): Promise<((chunkContent: string) => Promise<any>) | undefined> {
     if (!this.shouldUseRetrieval(options) || existingGraphs.length === 0) {
       return undefined;
     }
@@ -189,16 +228,22 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     const searchService = await this.container.resolve<IKnowledgeGraphSearch>(
       TYPES.KnowledgeGraphSearch
     );
+    const searchOptions = {
+      limit: options.retrievalLimit || 3,
+      includeObservations: true,
+    };
 
-    return await searchService.searchByFileContent(
-      processedFile.chunks[0].content,
-      filePath,
-      existingGraphs,
-      {
-        limit: options.retrievalLimit || 3,
-        includeObservations: true,
-      }
-    );
+    const search = (content: string) =>
+      searchService.searchByFileContent(content, filePath, existingGraphs, searchOptions);
+
+    if (options.retrievalScope === "file") {
+      // Retrieve once from the first chunk, reuse for all chunks.
+      const context = await search(processedFile.chunks[0].content);
+      return async () => context;
+    }
+
+    // Default: per-chunk retrieval.
+    return (chunkContent: string) => search(chunkContent);
   }
 
   /**
@@ -249,7 +294,7 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       );
     }
 
-    const outputContent = exporter.export(knowledgeGraph, exportFormat);
+    const outputContent = exporter.export(knowledgeGraph, exportFormat, options);
     const outputPath = this.getOutputPath(options.output, exportFormat);
 
     await fs.promises.writeFile(outputPath, outputContent);

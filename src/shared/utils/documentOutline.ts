@@ -1,9 +1,21 @@
 import { default as DocumentOutline } from "document-outline-gen"
 
+/** Subset of document-outline-gen's GeneratorOptions we expose via config. */
+export interface OutlineGeneratorOptions {
+  maxDepth?: number;
+  includeLineNumbers?: boolean;
+  includePrivate?: boolean;
+  includeComments?: boolean;
+}
+
 export class DocumentOutlineGenerator {
-  static async generateOutlineFromContent(content: string, extension: string) {
+  static async generateOutlineFromContent(
+    content: string,
+    extension: string,
+    options?: OutlineGeneratorOptions
+  ) {
     const generator = new DocumentOutline();
-    const outline = await generator.generateFromContent(content, extension);
+    const outline = await generator.generateFromContent(content, extension, options);
     return DocumentOutlineGenerator.formatAsTree(outline);
   }
 

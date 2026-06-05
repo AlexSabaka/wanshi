@@ -1,13 +1,14 @@
 import { Logger } from "../../shared";
 import { ProcessingOptions } from "../../types";
 import {
-  ILLMService,
+  ILLMProvider,
   IPromptManager,
   IKnowledgeGraphMerger,
 } from "../../types";
 import { DIContainer } from "./DIContainer";
 import { EmbeddingService } from "../llm";
 import { FileReaderFactory, TextChunker } from "../processor";
+import type { CheckpointService } from "../checkpoint";
 import { IContentClassifier } from "../processor/classifier";
 import { LlmContentClassifier } from "../processor/classifier/LlmContentClassifier";
 
@@ -30,6 +31,7 @@ export const TYPES = {
   DirectoryProcessor: Symbol.for("DirectoryProcessor"),
   KnowledgeGraphExportService: Symbol.for("KnowledgeGraphExportService"),
   ProcessingOptions: Symbol.for("ProcessingOptions"),
+  CheckpointService: Symbol.for("CheckpointService"),
 };
 
 /**
@@ -79,40 +81,75 @@ export class ContainerFactory {
       return LoggerFactory.createLogger(options);
     });
 
-    // Register LLM services
+    // Register LLM services (provider-selectable: local Ollama or OpenAI-compatible)
     container.register(TYPES.LLMService, async (c) => {
-      const { OllamaService } = await import("../llm/OllamaService");
       const options = await c.resolve<ProcessingOptions>(
         TYPES.ProcessingOptions
       );
       const logger = await c.resolve<Logger>(TYPES.Logger);
 
-      return new OllamaService(
-        {
-          model: options.model,
-          host: options.host,
-          images: options.images !== "disabled",
-          temperature: options.temperature,
-          contextLength: options.contextLength,
-          repeatPenalty: options.repeatPenalty,
-          seed: options.seed,
-        },
-        logger
-      );
+      const llmOptions = {
+        model: options.model,
+        host: options.host,
+        apiKey: options.apiKey,
+        images: options.images !== "disabled",
+        temperature: options.temperature,
+        contextLength: options.contextLength,
+        repeatPenalty: options.repeatPenalty,
+        seed: options.seed,
+        maxTokens: options.maxTokens ? Number(options.maxTokens) : undefined,
+      };
+
+      if (options.provider === "openai") {
+        const { OpenAICompatibleService } = await import(
+          "../llm/OpenAICompatibleService"
+        );
+        logger.info(`Using OpenAI-compatible provider at ${options.host}`);
+        return new OpenAICompatibleService(llmOptions, logger);
+      }
+
+      const { OllamaService } = await import("../llm/OllamaService");
+      return new OllamaService(llmOptions, logger);
     });
 
-    // Register Embedding service
+    // Register Embedding service (independent provider from generation)
     container.register(TYPES.EmbeddingService, async (c) => {
-      const { EmbeddingService } = await import("../llm/EmbeddingService");
       const options = await c.resolve<ProcessingOptions>(
         TYPES.ProcessingOptions
       );
       const logger = await c.resolve<Logger>(TYPES.Logger);
 
+      const embeddingsModel =
+        options.embeddingsModel || "mxbai-embed-large:335m";
+      const embeddingsHost =
+        options.embeddingsHost || "http://localhost:11434";
+
+      if (options.embeddingsProvider === "openai") {
+        const { OpenAIEmbeddingService } = await import(
+          "../llm/OpenAIEmbeddingService"
+        );
+        logger.info(
+          `Using OpenAI-compatible embeddings provider at ${embeddingsHost}`
+        );
+        return new OpenAIEmbeddingService(
+          {
+            model: embeddingsModel,
+            host: embeddingsHost,
+            apiKey: options.embeddingsApiKey,
+            maxInputChars: options.embeddingsMaxInputChars
+              ? Number(options.embeddingsMaxInputChars)
+              : undefined,
+          },
+          logger
+        );
+      }
+
+      const { EmbeddingService } = await import("../llm/EmbeddingService");
       return new EmbeddingService(
         {
-          model: options.embeddingsModel || "mxbai-embed-large:335m",
-          host: options.host,
+          model: embeddingsModel,
+          host: embeddingsHost,
+          maxInputChars: options.embeddingsMaxInputChars,
         },
         logger
       );
@@ -123,10 +160,12 @@ export class ContainerFactory {
       const { PromptManager } = await import("../llm/prompts/PromptManager");
       const logger = await c.resolve<Logger>(TYPES.Logger);
 
-      const manager = new PromptManager(logger);
+      const manager = new PromptManager(logger, undefined, config.processingOptions?.outline);
 
-      // Set custom system prompt if provided
       const options = config.processingOptions;
+      if (options?.promptVersion) {
+        manager.setPromptVersion(options.promptVersion);
+      }
       if (options?.system) {
         manager.setCustomSystemPrompt(options.system);
       }
@@ -168,6 +207,7 @@ export class ContainerFactory {
         DoclingReader,
         HtmlReader,
         ImageReader,
+        JsonFileReader,
         OfficeReader,
         TextReader,
         PdfReader,
@@ -196,8 +236,22 @@ export class ContainerFactory {
         factory.registerReader(new PdfReader(chunker, logger));
       }
 
+      // JSON reader claims .json/.jsonl/.geojson — must be registered before
+      // TextReader (first-match-wins) so it handles them instead of TextReader.
+      factory.registerReader(
+        new JsonFileReader(
+          {
+            strategy: options.jsonReader?.strategy ?? options.jsonStrategy,
+            maxChunkSize:
+              options.jsonReader?.maxChunkSize ?? Number(options.chunkSize) ?? undefined,
+          },
+          chunker,
+          logger
+        )
+      );
+
       factory.registerReader(new TextReader(chunker, logger));
-      
+
       if (options.asr !== "disabled") {
         logger.info(`Using automatic speech recognition pipeline`);
         factory.registerReader(
@@ -230,7 +284,7 @@ export class ContainerFactory {
       switch (options.classifier) {
         case "bert": return new BertContentClassifier(logger);
         case "heuristic": return new HeuristicContentClassifier(logger);
-        case "llm": return new LlmContentClassifier(logger);
+        case "llm": return new LlmContentClassifier(logger, { model: options.model, host: options.host });
         default: return undefined;
       }
     });
@@ -251,21 +305,51 @@ export class ContainerFactory {
       return new FileProcessor(factory, classifier, options.images !== "disabled", logger);
     });
 
+    // Register Checkpoint service (used only when --resume is set)
+    container.register(TYPES.CheckpointService, async (c) => {
+      const { CheckpointService } = await import("../checkpoint");
+      const options = await c.resolve<ProcessingOptions>(
+        TYPES.ProcessingOptions
+      );
+      const logger = await c.resolve<Logger>(TYPES.Logger);
+
+      const checkpointPath =
+        options.checkpointPath || `${options.output}.checkpoint.jsonl`;
+      const service = new CheckpointService(checkpointPath, logger, {
+        model: options.model,
+        promptVersion: options.promptVersion ?? "default",
+      });
+      if (options.resume) {
+        await service.load();
+      }
+      return service;
+    });
+
     // Register Knowledge Graph Builder
     container.register(TYPES.KnowledgeGraphBuilder, async (c) => {
       const { KnowledgeGraphBuilder } = await import(
         "../knowledge/KnowledgeGraphBuilder"
       );
       const logger = await c.resolve<Logger>(TYPES.Logger);
-      const llmService = await c.resolve<ILLMService>(TYPES.LLMService);
+      const options = await c.resolve<ProcessingOptions>(
+        TYPES.ProcessingOptions
+      );
+      const llmService = await c.resolve<ILLMProvider>(TYPES.LLMService);
       const promptManager = await c.resolve<IPromptManager>(
         TYPES.PromptManager
+      );
+      const checkpoint = await c.resolve<CheckpointService>(
+        TYPES.CheckpointService
       );
 
       return new KnowledgeGraphBuilder(
         {
-          ollamaService: llmService as any, // TODO: Update KnowledgeGraphBuilder to use interface
+          llmService,
           promptManager: promptManager as any,
+          checkpoint,
+          resume: options.resume,
+          model: options.model,
+          promptVersion: options.promptVersion,
         },
         logger
       );
@@ -311,7 +395,7 @@ export class ContainerFactory {
     });
 
     // Register Knowledge Graph Export Service
-    container.register(TYPES.KnowledgeGraphExportService, async (c) => {
+    container.register(TYPES.KnowledgeGraphExportService, async () => {
       const {
         JsonExportStrategy,
         JsonlExportStrategy,

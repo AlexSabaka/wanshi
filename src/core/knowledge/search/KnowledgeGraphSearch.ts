@@ -1,14 +1,13 @@
 import path from "path";
-import { EmbeddingService } from "../../llm/";
 import { cosineSimilarity, jaroWinklerSimilarity } from "../../../shared/utils";
-import { IKnowledgeGraphSearch, Entity, KnowledgeGraph, Relation } from "../../../types";
+import { IKnowledgeGraphSearch, IEmbeddingProvider, Entity, KnowledgeGraph, Relation } from "../../../types";
 import { Logger } from "../../../shared";
 
 // Enhanced search with multiple strategies
 export class KnowledgeGraphSearch implements IKnowledgeGraphSearch {
- 
+
   constructor(
-    private embeddingService: EmbeddingService,
+    private embeddingService: IEmbeddingProvider,
     private logger: Logger,
   ) {
   }

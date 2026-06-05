@@ -4,6 +4,7 @@ export * from './FileReader';
 export * from './FileReaderFactory';
 export * from './HtmlReader';
 export * from './ImageReader';
+export * from './JsonFileReader';
 export * from './MarkdownReader';
 export * from './OfficeReader';
 export * from './PdfReader';

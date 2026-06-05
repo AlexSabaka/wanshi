@@ -12,6 +12,6 @@ export interface IKnowledgeGraphBuilder {
   build(
     file: ProcessedFile,
     systemPrompt: string,
-    retrievalContext?: any
+    retrieve?: (chunkContent: string) => Promise<any>
   ): Promise<KnowledgeGraph[]>;
 }

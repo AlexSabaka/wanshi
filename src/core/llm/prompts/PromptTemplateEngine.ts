@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DirectoryTreeGenerator } from '../../../shared/utils/directoryTree';
 import { DocumentOutlineGenerator } from '../../../shared/utils/documentOutline';
+import { OutlineOptions } from '../../../types/ProcessingOptions';
 import { Logger } from '../../../shared';
 
 export interface TemplateContext {
@@ -41,9 +42,11 @@ export class PromptTemplateEngine {
   private templateCache: Map<string, HandlebarsTemplateDelegate>;
   private partialsRegistered: boolean = false;
   private logger: Logger;
+  private outlineOptions?: OutlineOptions;
 
-  constructor(logger: Logger) {
+  constructor(logger: Logger, outlineOptions?: OutlineOptions) {
     this.logger = logger;
+    this.outlineOptions = outlineOptions;
     this.handlebars = Handlebars.create();
     this.templateCache = new Map();
     this.registerHelpers();
@@ -222,10 +225,23 @@ export class PromptTemplateEngine {
       enhanced.fileExtension = path.extname(enhanced.fileName).toLowerCase();
     }
 
-    // Extract document outline
-    if (enhanced.fileContent && enhanced.fileExtension) {
+    // Extract document outline (skip entirely when disabled via config)
+    if (
+      this.outlineOptions?.enabled !== false &&
+      enhanced.fileContent &&
+      enhanced.fileExtension
+    ) {
       try {
-        enhanced.fileOutline = await DocumentOutlineGenerator.generateOutlineFromContent(enhanced.fileContent, enhanced.fileExtension.slice(1));
+        enhanced.fileOutline = await DocumentOutlineGenerator.generateOutlineFromContent(
+          enhanced.fileContent,
+          enhanced.fileExtension.slice(1),
+          {
+            maxDepth: this.outlineOptions?.maxDepth,
+            includeLineNumbers: this.outlineOptions?.includeLineNumbers,
+            includePrivate: this.outlineOptions?.includePrivate,
+            includeComments: this.outlineOptions?.includeComments,
+          }
+        );
       } catch (error: any) {
         this.logger.warn(`Cannot generate document outline from file content: ${error.message}`);
       }

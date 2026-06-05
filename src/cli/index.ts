@@ -31,8 +31,21 @@ program
   )
 
   // LLM Configuration
-  .option("-m, --model <name>", "LLM to use with Ollama", "llama3.2")
-  .option("-h, --host <url>", "Ollama host URL", "http://localhost:11434")
+  .option(
+    "--provider <name>",
+    "LLM provider for generation (ollama|openai). 'openai' targets any OpenAI-compatible endpoint via --host",
+    "ollama"
+  )
+  .option("-m, --model <name>", "LLM to use for generation", "llama3.2")
+  .option(
+    "-h, --host <url>",
+    "Ollama host URL, or OpenAI-compatible base URL when --provider openai",
+    "http://localhost:11434"
+  )
+  .option(
+    "--api-key <key>",
+    "API key for the OpenAI-compatible provider (falls back to OPENAI_API_KEY / KG_API_KEY env)"
+  )
   .option("--temperature <number>", "model temperature", "0.1")
   .option(
     "--repeat-penalty <number>",
@@ -44,15 +57,38 @@ program
     "model context length, should be long enough to fit system prompt, file content/chunk and response (default: 8192)",
     "8192"
   )
+  .option(
+    "--max-tokens <number>",
+    "max output tokens per generation; raise it (or lower --chunk-size) if large knowledge-graph JSON gets truncated mid-output"
+  )
   .option("--seed <number>", "model seed", "")
   .option(
     "-s, --system <prompt|path>",
     "LLM system prompt or path to handlebars template"
   )
   .option(
+    "--embeddings-provider <name>",
+    "embeddings provider (ollama|openai). Independent from --provider; defaults to local Ollama",
+    "ollama"
+  )
+  .option(
     "--embeddings-model <name>",
     "embeddings model used for observations similarity merging",
     "mxbai-embed-large:335m"
+  )
+  .option(
+    "--embeddings-host <url>",
+    "embeddings host / OpenAI-compatible base URL",
+    "http://localhost:11434"
+  )
+  .option(
+    "--embeddings-api-key <key>",
+    "API key for OpenAI-compatible embeddings (falls back to OPENAI_API_KEY / KG_API_KEY env)"
+  )
+  .option(
+    "--embeddings-max-input-chars <n>",
+    "truncate embedding inputs to at most N characters (auto-shrinks further if the model still rejects them)",
+    "1024"
   )
 
   // Text Processing
@@ -85,6 +121,20 @@ program
   // Enable Docling PDF/DOC/DOCX/PPT/PPTX Processing
   .option("--docling", "use docling for PDF/DOC/DOCX/PPT/PPTX documents processing (default: false)", false)
 
+  // JSON reading strategy
+  .option(
+    "--json-strategy <mode>",
+    "JSON reader strategy: structural (compact + split on JSON structure, default) or raw (compact + text split)",
+    "structural"
+  )
+
+
+  // Content Classification
+  .option(
+    "--classifier <mode>",
+    "content classifier mode (disabled|heuristic|llm|bert)",
+    "disabled"
+  )
 
   // Enable Image Processing
   .option("--images", "enable image processing (disabled|auto|enabled)", "auto")
@@ -96,6 +146,11 @@ program
     "enabled"
   )
   .option("--retrieval-limit <number>", "context retrieval limit", "3")
+  .option(
+    "--retrieval-scope <mode>",
+    "retrieval granularity: chunk (per-chunk, default) or file (once per file from first chunk)",
+    "chunk"
+  )
 
   // Knowledge Graph Merging
   .option(
@@ -127,6 +182,17 @@ program
   .option("-D, --debug", "debug mode", false)
   .option("-S, --silent", "silent mode", false)
 
+  // Resume / Continuation
+  .option(
+    "--resume",
+    "checkpoint each processed chunk and skip already-done chunks on re-run (survives interrupted/credit-exhausted runs)",
+    false
+  )
+  .option(
+    "--checkpoint <path>",
+    "checkpoint sidecar file path (default: <output>.checkpoint.jsonl)"
+  )
+
   // Runtime Modes
   .option("-w, --watch", "watch for changes and update knowledge graph", false)
 
@@ -146,6 +212,15 @@ program
         ...options,
         ...configOptions,
       };
+    }
+
+    // API keys may come from the environment instead of CLI/config.
+    const envApiKey = process.env.OPENAI_API_KEY || process.env.KG_API_KEY;
+    if (!options.apiKey && envApiKey) {
+      options.apiKey = envApiKey;
+    }
+    if (!options.embeddingsApiKey && envApiKey) {
+      options.embeddingsApiKey = envApiKey;
     }
 
     // Initialize DI container

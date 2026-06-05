@@ -10,7 +10,8 @@
     "start": "ts-node ./src/index.ts",
     "test": "ts-node ./src/index.ts --config /Users/oleksii/Downloads/33/config.yml",
     "t3-test": "ts-node ./t4.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "benchmark": "ts-node scripts/benchmark.ts"
   },
   "author": "Alex Sabaka",
   "license": "GPL-3.0",
@@ -48,6 +49,7 @@
     "nodejs-whisper": "^0.2.9",
     "officeparser": "^5.1.1",
     "ollama": "^0.5.16",
+    "openai": "^6.42.0",
     "pdf2json": "^3.1.6",
     "pretty-format": "^29.7.0",
     "readline-sync": "^1.4.10",

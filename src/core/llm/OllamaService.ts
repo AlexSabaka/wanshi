@@ -1,30 +1,19 @@
-import ollama, { ChatResponse, ChatRequest, Message } from "ollama";
+import { Ollama, ChatResponse, ChatRequest, Message } from "ollama";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { Logger } from "../../shared";
+import { ILLMProvider, LLMOptions, LLMMessage } from "../../types/ILLMProvider";
 
-export interface LLMOptions {
-  model: string;
-  host: string;
-  images: boolean;
-  temperature?: number;
-  contextLength?: number;
-  repeatPenalty?: number;
-  seed?: number;
-}
-
-export interface LLMMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
-  images?: string[]; // Base64 encoded images
-}
+// Re-export for back-compat: these types used to live here.
+export { LLMOptions, LLMMessage };
 
 /**
  * Service for interacting with Ollama LLMs
  */
-export class OllamaService {
+export class OllamaService implements ILLMProvider {
   private options: LLMOptions;
   private logger: Logger;
+  private ollama: Ollama;
 
   constructor(options: LLMOptions, logger: Logger) {
     this.logger = logger;
@@ -34,6 +23,7 @@ export class OllamaService {
       repeatPenalty: 0.3,
       ...options,
     };
+    this.ollama = new Ollama({ host: this.options.host });
   }
 
   /**
@@ -56,6 +46,9 @@ export class OllamaService {
       think: false,
       options: {
         num_ctx: Number(this.options.contextLength || 8192),
+        ...(this.options.maxTokens
+          ? { num_predict: Number(this.options.maxTokens) }
+          : {}),
         // temperature: Number(this.options.temperature),
         // repeat_penalty: Number(this.options.repeatPenalty),
         // seed: Number(this.options.seed),
@@ -68,9 +61,18 @@ export class OllamaService {
           `Generating structured output (attempt ${attempt + 1}/${retries})`
         );
 
-        const response = await ollama.chat(chatRequest);
+        const response = await this.ollama.chat(chatRequest);
 
         this.logResponseStats(response);
+
+        // A "length" done_reason means output hit num_predict / the model's
+        // limit and the JSON is truncated — give an actionable hint.
+        if ((response as { done_reason?: string }).done_reason === "length") {
+          this.logger.warn(
+            "LLM output was truncated at the output-token limit — the JSON is incomplete. " +
+              "Increase --max-tokens or reduce --chunk-size."
+          );
+        }
 
         // Parse the response
         const responseContent = response.message.content.trim();
@@ -131,7 +133,7 @@ export class OllamaService {
   }
 
   async getModelCapabilities(modelName: string): Promise<string[]> {
-    const modelInfo = await ollama.show({ model: modelName });
+    const modelInfo = await this.ollama.show({ model: modelName });
     return modelInfo.capabilities;
   }
 
@@ -140,7 +142,7 @@ export class OllamaService {
    */
   async isModelAvailable(modelName: string): Promise<boolean> {
     try {
-      const models = await ollama.list();
+      const models = await this.ollama.list();
       return models.models.some((m) => m.name === modelName);
     } catch (error) {
       this.logger.error(`Failed to check model availability: ${error}`);

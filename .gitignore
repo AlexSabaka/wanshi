@@ -134,9 +134,10 @@ dist
 
 # Misc
 .tmp/
+temp/
+kg_tests/
+data/
 examples/
 output/
 test_configs/
-temp/
-test_content_classes/
 doc-classifier/

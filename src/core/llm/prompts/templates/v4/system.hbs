@@ -54,7 +54,7 @@ You **MUST** output a valid JSON following this exact schema:
 2. **Focus on meaningful, substantial entities** (functions, classes, concepts, technologies, people, organizations)
 3. **Create specific, informative observations** that add real value
 4. **Establish clear, logical relationships** between entities
-5. **Use consistent naming conventions** (snake_case for multi-word entities)
+5. **Use domain-appropriate naming**: `snake_case` for code identifiers and technical concepts; preserve original spelling and casing for proper nouns (people, places, organizations, events)
 6. **Leverage directory context** to infer file relationships and project structure
 7. **Return empty graph** if no meaningful knowledge can be extracted
 8. **Cover every entity** in the content
@@ -129,17 +129,11 @@ You **MUST** output a valid JSON following this exact schema:
 
 Input:
 
-Current File: `src/index.ts`
+## File Information
 
-Existing Knowledge Context:
-```json
-{
-  "entities": [],
-  "relations": []
-}
-```
+Path: `src/index.ts`
 
-File Content:
+## Content to Analyze
 ```
 #! /usr/bin/env node
 
@@ -212,34 +206,18 @@ Output:
 
 Input:
 
-Current File: `src/processor.ts`
+## File Information
 
-Existing Knowledge Context:
-```json
-{
-  "entities": [
-    {
-      "name": "file-converter",
-      "entityType": "cli_application",
-      "observations": ["Converts files between different formats", "Version 1.0.0", "NodeJS CLI utility"]
-    },
-    {
-      "name": "processFiles",
-      "entityType": "function",
-      "observations": ["Handles file conversion logic", "Accepts input path, output path, and format parameters"]
-    }
-  ],
-  "relations": [
-    {
-      "from": "file-converter",
-      "to": "processFiles",
-      "relationType": ["calls", "delegates_to"]
-    }
-  ]
-}
-```
+Path: `src/processor.ts`
 
-File Content:
+## Existing Knowledge Context
+
+Entities already extracted from other parts of this project (do NOT copy them — only reference or extend them):
+
+- **file-converter** (cli_application): Converts files between different formats; Version 1.0.0; NodeJS CLI utility
+- **processFiles** (function): Handles file conversion logic; Accepts input path, output path, and format parameters
+
+## Content to Analyze
 ```
 import * as fs from 'fs';
 import * as path from 'path';
@@ -309,23 +287,17 @@ Output:
 
 Input:
 
-Current File: `experiments/crispr_protocol.md`
+## File Information
 
-Existing Knowledge Context:
-```json
-{
-  "entities": [
-    {
-      "name": "Cas9_protein",
-      "entityType": "enzyme",
-      "observations": ["RNA-guided DNA endonuclease", "Part of CRISPR-Cas9 system"]
-    }
-  ],
-  "relations": []
-}
-```
+Path: `experiments/crispr_protocol.md`
 
-File Content:
+## Existing Knowledge Context
+
+Entities already extracted from other parts of this project (do NOT copy them — only reference or extend them):
+
+- **Cas9_protein** (enzyme): RNA-guided DNA endonuclease; Part of CRISPR-Cas9 system
+
+## Content to Analyze
 ```
 # CRISPR-Cas9 Gene Editing Protocol
 
@@ -402,23 +374,17 @@ Output:
 
 Input:
 
-Current File: `quantum/shor_algorithm.py`
+## File Information
 
-Existing Knowledge Context:
-```json
-{
-  "entities": [
-    {
-      "name": "quantum_fourier_transform",
-      "entityType": "quantum_algorithm",
-      "observations": ["Quantum analogue of discrete Fourier transform", "Key component in period finding"]
-    }
-  ],
-  "relations": []
-}
-```
+Path: `quantum/shor_algorithm.py`
 
-File Content:
+## Existing Knowledge Context
+
+Entities already extracted from other parts of this project (do NOT copy them — only reference or extend them):
+
+- **quantum_fourier_transform** (quantum_algorithm): Quantum analogue of discrete Fourier transform; Key component in period finding
+
+## Content to Analyze
 ```
 def shor_algorithm(N, a=2):
     """
@@ -513,34 +479,18 @@ Output:
 
 Input:
 
-Current File: `models/transformer_attention.py`
+## File Information
 
-Existing Knowledge Context:
-```json
-{
-  "entities": [
-    {
-      "name": "multi_head_attention",
-      "entityType": "neural_mechanism",
-      "observations": ["Core component of transformer architecture", "Allows model to focus on different positions"]
-    },
-    {
-      "name": "transformer_architecture",
-      "entityType": "neural_network",
-      "observations": ["Attention-based sequence-to-sequence model", "Introduced in 'Attention is All You Need'"]
-    }
-  ],
-  "relations": [
-    {
-      "from": "transformer_architecture",
-      "to": "multi_head_attention",
-      "relationType": ["contains", "uses"]
-    }
-  ]
-}
-```
+Path: `models/transformer_attention.py`
 
-File Content:
+## Existing Knowledge Context
+
+Entities already extracted from other parts of this project (do NOT copy them — only reference or extend them):
+
+- **multi_head_attention** (neural_mechanism): Core component of transformer architecture; Allows model to focus on different positions
+- **transformer_architecture** (neural_network): Attention-based sequence-to-sequence model; Introduced in 'Attention is All You Need'
+
+## Content to Analyze
 ```
 import torch
 import torch.nn as nn
@@ -631,17 +581,11 @@ Output:
 
 Input:
 
-Current File: `synthesis/aspirin_synthesis.md`
+## File Information
 
-Existing Knowledge Context:
-```json
-{
-  "entities": [],
-  "relations": []
-}
-```
+Path: `synthesis/aspirin_synthesis.md`
 
-File Content:
+## Content to Analyze
 ```
 # Aspirin Synthesis via Acetylation
 
@@ -715,23 +659,17 @@ Output:
 
 Input:
 
-Current File: `experiments/neuron_recording.py`
+## File Information
 
-Existing Knowledge Context:
-```json
-{
-  "entities": [
-    {
-      "name": "action_potential",
-      "entityType": "electrical_signal",
-      "observations": ["Neural spike", "All-or-nothing electrical event"]
-    }
-  ],
-  "relations": []
-}
-```
+Path: `experiments/neuron_recording.py`
 
-File Content:
+## Existing Knowledge Context
+
+Entities already extracted from other parts of this project (do NOT copy them — only reference or extend them):
+
+- **action_potential** (electrical_signal): Neural spike; All-or-nothing electrical event
+
+## Content to Analyze
 ```
 import numpy as np
 from scipy import signal
@@ -829,7 +767,7 @@ Output:
 
 Input:
 
-## File Metadata
+## File Information
 
 Path: `corrupted.txt`
 Chunk: 10 of 13
@@ -849,6 +787,14 @@ Output:
 }
 ```
 
+{{#if domainExamples}}
+## Domain-Specific Extraction Examples
+
+The following examples are tailored to the detected content type ({{detectedContentClass}}):
+
+{{domainExamples}}
+
+{{/if}}
 ## FINAL REMINDER
 
 Your success is measured by the **meaningfulness and accuracy** of extracted knowledge. When in doubt, prefer returning an empty graph over including trivial or hallucinated information. Focus on entities and relationships that would be valuable to a knowledge worker trying to understand the codebase, project, or domain.

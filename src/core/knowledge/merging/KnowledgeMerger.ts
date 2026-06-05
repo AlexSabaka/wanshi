@@ -1,6 +1,5 @@
-import { KnowledgeGraph, Entity, Relation, ProcessingOptions } from "../../../types";
+import { KnowledgeGraph, Entity, Relation, ProcessingOptions, IEmbeddingProvider } from "../../../types";
 import { jaroWinklerSimilarity , cosineSimilarity } from "../../../shared/utils";
-import { EmbeddingService } from "../../llm";
 import { Logger } from "../../../shared";
 
 // Default similarity thresholds for entities and observation merging
@@ -11,7 +10,7 @@ const DefaultObservationThreshold = 0.7;
 async function deduplicateObservations(
   observations: string[],
   threshold: number,
-  embeddingService: EmbeddingService,
+  embeddingService: IEmbeddingProvider,
   logger: Logger,
 ): Promise<string[]> {
   if (observations.length <= 1) return observations;
@@ -95,7 +94,7 @@ function findSimilarEntity(
 export async function mergeKnowledgeGraphs(
   graphs: KnowledgeGraph[],
   options: Partial<ProcessingOptions>,
-  embeddingService: EmbeddingService,
+  embeddingService: IEmbeddingProvider,
   logger: Logger,
 ): Promise<KnowledgeGraph> {
   logger?.info(
@@ -168,7 +167,7 @@ async function mergeWithinFile(
   fileGraphs: KnowledgeGraph[],
   fileName: string,
   options: Partial<ProcessingOptions>,
-  embeddingService: EmbeddingService,
+  embeddingService: IEmbeddingProvider,
   logger: Logger,
 ): Promise<KnowledgeGraph> {
   const entityMap = new Map<string, Entity>();
@@ -285,7 +284,7 @@ async function mergeWithinFile(
 async function mergeGlobally(
   fileGraphs: KnowledgeGraph[],
   options: Partial<ProcessingOptions>,
-  embeddingService: EmbeddingService,
+  embeddingService: IEmbeddingProvider,
   logger: Logger,
 ): Promise<KnowledgeGraph> {
   const entityMap = new Map<string, Entity>();

@@ -1,5 +1,5 @@
 import z from "zod";
-import ollama from "ollama";
+import { Ollama } from "ollama";
 import zodToJsonSchema from "zod-to-json-schema";
 import { Logger } from "../../../shared";
 import { ClassificationResult } from "../../../types";
@@ -63,15 +63,26 @@ Please provide your response in the following JSON schema:
 Ensure that your classification is accurate and that the confidence score reflects your certainty in the classification.
 `;
 
+export interface LlmClassifierOptions {
+  model: string;
+  host: string;
+}
+
 export class LlmContentClassifier implements IContentClassifier {
-  constructor(private logger: Logger) {}
+  private model: string;
+  private ollama: Ollama;
+
+  constructor(private logger: Logger, options?: LlmClassifierOptions) {
+    this.model = options?.model ?? "gemma3:1b";
+    this.ollama = new Ollama({ host: options?.host ?? "http://localhost:11434" });
+  }
 
   async classify(
     content: string,
     path: string
   ): Promise<ClassificationResult[]> {
     const chatRequest = {
-      model: "gemma3:1b",
+      model: this.model,
       messages: [
         { role: "system", content: ClassifierSystemPrompt },
         { role: "user", content: this.formatMessage(content, path) },
@@ -83,7 +94,7 @@ export class LlmContentClassifier implements IContentClassifier {
       },
     };
 
-    const response = await ollama.chat(chatRequest);
+    const response = await this.ollama.chat(chatRequest);
 
     // Parse the response
     const responseContent = response.message.content.trim();
