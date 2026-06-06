@@ -6,9 +6,11 @@ import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { buildKgConfig, type RunRequest } from "@/lib/kg-options"
+import { listIndexedRuns, recordRun } from "@/server/run-store"
 import type {
   LogLine,
   ProgressEvent,
+  RunListItem,
   RunState,
   RunSummary,
   StreamLine,
@@ -22,6 +24,10 @@ export interface RunRecord {
   child: ChildProcess
   bus: EventEmitter
   sigintSent: boolean
+  /** Original request — carries config (input/model/format) for the runs list. */
+  req: RunRequest
+  /** Absolute output path the CLI was told to write (graph source). */
+  resolvedOutput: string
 }
 
 // Survive Next dev hot-reload: a fresh module instance would orphan running
@@ -69,8 +75,40 @@ export function listRuns(): RunSummary[] {
     .sort((a, b) => b.startedAt - a.startedAt)
 }
 
+/** A registry record as a config-enriched list item. */
+function toListItem(record: RunRecord): RunListItem {
+  return {
+    ...record.summary,
+    input: record.req.input,
+    model: record.req.model,
+    provider: record.req.provider,
+    exportFormat: record.req.exportFormat,
+  }
+}
+
+/**
+ * All known runs for the runs list: live registry records (current, may be
+ * running) merged over the persisted index (historical), deduped by id.
+ */
+export function listAllRuns(): RunListItem[] {
+  const live = new Map<string, RunListItem>()
+  for (const record of runs.values()) live.set(record.summary.id, toListItem(record))
+  const merged = [...live.values()]
+  for (const entry of listIndexedRuns()) {
+    if (!live.has(entry.id)) merged.push(entry)
+  }
+  return merged.sort((a, b) => b.startedAt - a.startedAt)
+}
+
 export function getRun(id: string): RunRecord | undefined {
   return runs.get(id)
+}
+
+/** Resolve a run's output graph path from the registry or the persisted index. */
+export function getRunOutput(id: string): string | undefined {
+  const record = runs.get(id)
+  if (record) return record.summary.output ?? record.resolvedOutput
+  return listIndexedRuns().find((r) => r.id === id)?.output
 }
 
 export function startRun(req: RunRequest): RunSummary {
@@ -81,7 +119,8 @@ export function startRun(req: RunRequest): RunSummary {
   // would land in the kg-gen project root. Resolve it to an absolute path next
   // to the input directory instead, where a project's graph is expected to live.
   const config = buildKgConfig(req)
-  config.output = resolveOutputPath(req.input, req.output)
+  const resolvedOutput = resolveOutputPath(req.input, req.output)
+  config.output = resolvedOutput
 
   // Write the request as a temp JSON config; the CLI reads it via --config so
   // array fields (filter/exclude) and nested groups survive intact.
@@ -113,6 +152,8 @@ export function startRun(req: RunRequest): RunSummary {
     child,
     bus: new EventEmitter(),
     sigintSent: false,
+    req,
+    resolvedOutput,
   }
   record.bus.setMaxListeners(0)
   runs.set(id, record)
@@ -260,4 +301,10 @@ function finalize(record: RunRecord, state: RunState, error?: string): void {
   if (error) record.summary.error = error
   emitSummary(record)
   emitEnd(record)
+  // Persist to the run index so the run survives a server restart. Best-effort.
+  try {
+    recordRun(toListItem(record))
+  } catch {
+    // never let persistence break a run
+  }
 }

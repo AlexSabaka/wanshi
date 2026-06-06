@@ -3,12 +3,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiGet, apiPost } from "@/lib/api"
 import type { RunRequest } from "@/lib/kg-options"
-import type { RunSummary } from "@/types"
+import type { RunListItem, RunSummary } from "@/types"
 
 export function useRuns(poll = true) {
   return useQuery({
     queryKey: ["runs"],
-    queryFn: () => apiGet<{ runs: RunSummary[] }>("/api/runs"),
+    queryFn: () => apiGet<{ runs: RunListItem[] }>("/api/runs"),
     refetchInterval: poll ? 3000 : false,
     select: (d) => d.runs,
   })

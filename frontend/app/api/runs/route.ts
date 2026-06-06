@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
 import { RunRequestSchema } from "@/lib/kg-options"
-import { listRuns, startRun } from "@/server/run-registry"
+import { listAllRuns, startRun } from "@/server/run-registry"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  return NextResponse.json({ runs: listRuns() })
+  return NextResponse.json({ runs: listAllRuns() })
 }
 
 export async function POST(req: Request) {

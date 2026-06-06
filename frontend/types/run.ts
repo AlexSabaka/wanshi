@@ -64,6 +64,18 @@ export interface LogLine {
   message: string
 }
 
+/**
+ * A run enriched with its config — what the runs list (dashboard + Results)
+ * shows. Live runs get this from the registry record's request; historical runs
+ * from the persisted index.
+ */
+export interface RunListItem extends RunSummary {
+  input?: string
+  model?: string
+  provider?: string
+  exportFormat?: string
+}
+
 /** Server-side summary of a run (what the registry tracks / the UI polls). */
 export interface RunSummary {
   id: string
