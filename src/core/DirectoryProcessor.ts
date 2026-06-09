@@ -25,6 +25,7 @@ import {
   GraphTransform,
   TransformContext,
 } from "./pipeline";
+import { Canonicalizer } from "./knowledge/canon";
 import { IEmbeddingProvider } from "../types/IEmbeddingProvider";
 import { ILLMProvider } from "../types/ILLMProvider";
 import { Logger, shutdown } from "../shared";
@@ -384,7 +385,10 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     options: ProcessingOptions,
     logger: Logger
   ): Promise<KnowledgeGraph> {
-    const transforms: GraphTransform[] = [new GroundingTransform()];
+    const transforms: GraphTransform[] = [
+      new GroundingTransform(),
+      new Canonicalizer(),
+    ];
 
     const ctx: TransformContext = {
       options,
