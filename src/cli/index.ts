@@ -7,6 +7,7 @@ import {
   watchCommand,
   exportCommand,
   metricsCommand,
+  inspectMergesCommand,
 } from "./commands";
 import { ContainerFactory, TYPES } from "../core/di";
 import { readConfigurationFile, Logger } from "../shared";
@@ -251,6 +252,25 @@ program
   .action(async (graphPath: string, opts) => {
     try {
       await metricsCommand(graphPath, opts);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  });
+
+// `kg-gen inspect-merges <merges.jsonl>` — table view over the canonicalization
+// merge log: what got fused, how tight each cluster was, suspicious over-merges
+// first. The merge log is the experiment's deliverable, not the graph.
+program
+  .command("inspect-merges")
+  .description("render the canonicalization merge log as a table (suspicious over-merges first)")
+  .argument("<merges.jsonl>", "path to a merges.jsonl emitted by a canonicalization run")
+  .option("--target <kind>", "only show 'entity' or 'relation' clusters")
+  .option("--suspect-below <number>", "flag clusters whose min intra-cluster sim is below this (default 0.80)")
+  .option("--limit <number>", "limit the number of rows printed")
+  .action((logPath: string, opts) => {
+    try {
+      inspectMergesCommand(logPath, opts);
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
       process.exit(1);
