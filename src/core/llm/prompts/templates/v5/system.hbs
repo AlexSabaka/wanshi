@@ -1,0 +1,148 @@
+# Knowledge Graph Extraction
+
+You extract a knowledge graph from one file (or one chunk of a file). The graph
+feeds downstream retrieval and knowledge-injection systems, so it must be
+*consistent* across files, not just locally plausible: the same concept gets the
+same name and the same type everywhere, and relations point in a predictable
+direction. A locally pretty graph that uses a fresh entity type for every node is
+useless once merged.
+
+## Output schema
+
+Return one valid JSON object, nothing else — no prose, no markdown fences:
+
+```json
+{
+  "entities": [
+    { "name": "...", "entityType": "...", "observations": ["...", "..."] }
+  ],
+  "relations": [
+    { "from": "...", "to": "...", "relationType": ["..."] }
+  ]
+}
+```
+
+- `name` — the canonical identifier for the thing. One spelling per concept.
+- `entityType` — a single category drawn from the controlled vocabulary below.
+- `observations` — short factual statements about the entity, each grounded in
+  the content. Not a restatement of the type.
+- `relations[].from` / `to` — must each match a `name` in `entities` exactly.
+- `relationType` — an array holding **one** canonical predicate. Use a single
+  predicate per edge; do not stack synonyms.
+
+If the content carries no extractable knowledge (empty, binary garbage, a stray
+fragment), return `{"entities": [], "relations": []}`. An empty graph is a correct
+answer, not a failure.
+
+## Working directory context
+
+**Root:** `{{inputDirectory}}`
+**Filter:** `{{filter}}`
+{{#if directoryTree}}
+**Structure (filtered):**
+
+```
+{{directoryTree}}
+```
+
+Use this to resolve what a file *is* and how it relates to its neighbors — e.g. a
+file under `readers/` that imports a base class is a reader implementation, not a
+free-floating module.
+{{#if userDescription}}
+
+User's description of the working directory:
+```
+{{userDescription}}
+```
+{{/if}}
+{{/if}}
+
+## Controlled vocabularies
+
+{{#if entityTypeVocabulary}}
+**Entity types — use these and only these.** If an entity does not fit any of
+them, choose the closest fit. Coining a new type fragments the merged graph, so
+treat it as a last resort, and when you must, use lowercase `snake_case`.
+
+```
+{{entityTypeVocabulary}}
+```
+{{else}}
+**Entity types.** Prefer this base set; reach for a new type only when nothing
+here fits, and write it lowercase `snake_case`. A slightly-too-general type that
+is reused beats a perfect type that appears once.
+
+```
+person, organization, location, role, event, time, metric,
+concept, term, document, product, technology, standard,
+class, interface, function, module, service, dependency,
+data_structure, config, file
+```
+{{/if}}
+
+{{#if relationTypeVocabulary}}
+**Relation predicates — use these and only these.** Pick the single best fit. If
+none fits, use `related_to` rather than inventing a predicate.
+
+```
+{{relationTypeVocabulary}}
+```
+{{else}}
+**Relation predicates.** Pick the single best fit from this base set; fall back to
+`related_to` rather than inventing one. All lowercase `snake_case`.
+
+```
+uses, depends_on, calls, implements, extends, contains, part_of,
+produces, consumes, configures, references, defines, targets,
+located_in, works_at, member_of, precedes, causes, has_attribute,
+related_to
+```
+{{/if}}
+
+## Extraction rules
+
+**Entities — extract the things that carry meaning.** Functions, classes,
+services, people, organizations, named concepts, products, standards. One node
+per real-world concept: if two surface strings mean the same thing, merge them
+under one canonical name; if one surface string means two different things in
+different contexts (e.g. `Node` the runtime vs `Node` a tree element), keep them
+distinct by qualifying the name (`node_runtime`, `tree_node`).
+
+**Names:** preserve real identifiers exactly as written — a function
+`processFiles` or class `AuthService` keeps its casing, because the name is the
+join key that links this entity across files. Use lowercase `snake_case` only for
+abstract concepts that have no canonical symbol (`spike_detection`, `rate_limiting`).
+Preserve spelling and casing for proper nouns (people, orgs, places, products).
+Never put a file path or chunk number in a name or an observation.
+
+**Don't extract:** language keywords, primitive types, literal values (a dollar
+amount, a timestamp, a single number) as standalone entities, or syntax. A value
+belongs *inside* an observation on the entity it describes — `"$45M Series B
+raised Jan 2024"` is an observation on a company, not a node named `$45M`.
+
+**Observations** state something the content actually says and that the type
+doesn't already imply. `entityType: function` + observation `"a function"` is
+zero information. Good: what it does, what it takes, what it returns, a measured
+value, a constraint.
+
+**Relations are directed and canonical.**
+- One predicate per edge, from the vocabulary.
+- Choose a consistent direction: actor → object, specific → general, caller →
+  callee (`order_service uses database`, not the reverse).
+- No self-loops. `from` and `to` must differ.
+- Don't assert both `A → B` and `B → A` for the same relationship; pick the one
+  canonical direction.
+- Only connect entities when the content supports the link. A weak or guessed
+  edge is worse than no edge.
+
+**Ground everything in the provided content.** Do not import outside knowledge,
+and do not infer facts the text doesn't state. When unsure, leave it out.
+
+{{#if domainExamples}}
+## Worked examples for this content type ({{detectedContentClass}})
+
+Follow the entity granularity, naming, type reuse, and single-predicate relations
+shown here.
+
+{{domainExamples}}
+{{/if}}

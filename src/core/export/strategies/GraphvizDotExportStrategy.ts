@@ -34,11 +34,11 @@ export class GraphvizDotExportStrategy implements IExportStrategy {
       clusterByEntityType = false,
       clusterByFile = false,
       showLegend = true
-    } = processingOptions?.dotOptions ?? {};
+    } = processingOptions?.export?.dot ?? {};
 
     // Create the main digraph
     const graphTitle = processingOptions
-      ? `Knowledge Graph - ${processingOptions.input} (${processingOptions.model})`
+      ? `Knowledge Graph - ${processingOptions.input} (${processingOptions.llm.model})`
       : "Knowledge Graph";
 
     const digraph = new Digraph('KnowledgeGraph', {
@@ -270,18 +270,18 @@ export class GraphvizDotExportStrategy implements IExportStrategy {
 
     const configInfo = [
       ["Input", processingOptions.input],
-      ["Model", processingOptions.model],
-      ["Host", processingOptions.host],
-      ["Temperature", processingOptions.temperature.toString()],
-      ["Chunk Size", processingOptions.chunkSize.toString()],
-      ["Overlap Size", processingOptions.overlapSize.toString()],
-      ["Chunking", processingOptions.chunking],
-      ["Retrieval", processingOptions.retrieval],
-      ["ASR", processingOptions.asr],
-      ...(processingOptions.whisperModel ? [["Whisper Model", processingOptions.whisperModel]] : []),
-      ...(processingOptions.language ? [["Language", processingOptions.language]] : []),
-      ...(processingOptions.exportFormat ? [["Export Format", processingOptions.exportFormat]] : []),
-      ...(processingOptions.seed !== undefined ? [["Seed", processingOptions.seed.toString()]] : []),
+      ["Model", processingOptions.llm.model],
+      ["Host", processingOptions.llm.host],
+      ["Temperature", processingOptions.llm.temperature.toString()],
+      ["Chunk Size", processingOptions.chunking.size.toString()],
+      ["Overlap Size", processingOptions.chunking.overlap.toString()],
+      ["Chunking", processingOptions.chunking.mode],
+      ["Retrieval", processingOptions.retrieval.mode],
+      ["ASR", processingOptions.readers.asr.mode],
+      ...(processingOptions.readers.asr.whisperModel ? [["Whisper Model", processingOptions.readers.asr.whisperModel]] : []),
+      ...(processingOptions.readers.asr.language ? [["Language", processingOptions.readers.asr.language]] : []),
+      ...(processingOptions.export.format ? [["Export Format", processingOptions.export.format]] : []),
+      ...(processingOptions.llm.seed !== undefined ? [["Seed", processingOptions.llm.seed.toString()]] : []),
     ];
 
     configInfo.forEach(([key, value], index) => {

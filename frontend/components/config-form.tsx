@@ -20,7 +20,7 @@ import {
 import { cn } from "@/lib/utils"
 import { ModelPicker } from "@/components/model-picker"
 import { HostField } from "@/components/host-field"
-import { CONFIG_GROUPS, type ConfigField, type FieldValue } from "@/lib/config-schema"
+import type { ConfigField, ConfigGroup, FieldValue } from "@/lib/config-schema"
 
 function Field({
   field,
@@ -111,15 +111,17 @@ function Field({
 }
 
 export function ConfigForm({
+  groups,
   values,
   onChange,
 }: {
+  groups: ConfigGroup[]
   values: Record<string, FieldValue>
   onChange: (key: string, value: FieldValue) => void
 }) {
   return (
     <div className="space-y-3">
-      {CONFIG_GROUPS.map((group) => (
+      {groups.map((group) => (
         <Collapsible
           key={group.id}
           defaultOpen={group.defaultOpen}

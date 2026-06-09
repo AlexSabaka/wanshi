@@ -46,7 +46,7 @@ export async function exportCommand(container: DIContainer): Promise<void> {
     const exporter = await container.resolve<IKnowledgeGraphExporter>(
       TYPES.KnowledgeGraphExportService
     );
-    const format = options.exportFormat || "json";
+    const format = options.export.format;
     if (!exporter.isFormatSupported(format)) {
       throw new Error(
         `Unsupported export format: ${format}. Supported: ${exporter

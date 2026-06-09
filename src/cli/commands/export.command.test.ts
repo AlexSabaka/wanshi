@@ -5,7 +5,7 @@ import { exportCommand } from "./export.command";
 import { DIContainer, TYPES } from "../../core/di";
 import { KnowledgeGraphExportService } from "../../core/export/KnowledgeGraphExportService";
 import { JsonExportStrategy, McpExportStrategy } from "../../core/export/strategies";
-import { stubLogger } from "../../__tests__/helpers";
+import { stubLogger, makeConfig } from "../../__tests__/helpers";
 
 describe("exportCommand", () => {
   let tmp: string;
@@ -44,7 +44,7 @@ describe("exportCommand", () => {
     );
 
     await exportCommand(
-      container({ input: inFile, output: outFile, exportFormat: "mcp-jsonl" })
+      container(makeConfig({ input: inFile, output: outFile, export: { format: "mcp-jsonl" } }))
     );
 
     expect(fs.existsSync(outFile)).toBe(true);
@@ -56,7 +56,7 @@ describe("exportCommand", () => {
   it("rejects when --input is not a file", async () => {
     await expect(
       exportCommand(
-        container({ input: tmp, output: path.join(tmp, "o.json"), exportFormat: "json" })
+        container(makeConfig({ input: tmp, output: path.join(tmp, "o.json"), export: { format: "json" } }))
       )
     ).rejects.toThrow(/must point to an existing knowledge-graph JSON file/);
   });

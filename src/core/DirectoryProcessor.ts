@@ -70,7 +70,7 @@ export class DirectoryProcessor implements IDirectoryProcessor {
 
     logger.info(`Starting knowledge graph generation`);
     logger.info(
-      `Input: ${options.input}, Filter: ${options.filter}, Output: ${options.output}, Model: ${options.model}`
+      `Input: ${options.input}, Filter: ${options.filter}, Output: ${options.output}, Model: ${options.llm.model}`
     );
 
     try {
@@ -92,7 +92,7 @@ export class DirectoryProcessor implements IDirectoryProcessor {
 
       progress.emit({
         type: "export",
-        format: options.exportFormat || "json",
+        format: options.export.format,
         entities: finalKG.entities.length,
         relations: finalKG.relations.length,
         output: outputPath,
@@ -106,7 +106,7 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         interrupted: shutdown.isRequested(),
       });
     } catch (error) {
-      this.handleError(error, options.debug, logger);
+      this.handleError(error, options.logging.debug, logger);
       progress.emit({
         type: "error",
         message: error instanceof Error ? error.message : String(error),
@@ -174,11 +174,11 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         const relations = fileGraphs.reduce((n, g) => n + g.relations.length, 0);
         progress.emit({ type: "file_complete", index, total, path: file, entities, relations });
 
-        if (options.debug) {
+        if (options.logging.debug) {
           await this.writeIntermediateResults(knowledgeGraphs, options.output);
         }
       } catch (error) {
-        this.handleFileError(file, error, options.debug, logger);
+        this.handleFileError(file, error, options.logging.debug, logger);
         progress.emit({ type: "file_complete", index, total, path: file, entities: 0, relations: 0 });
       }
     }
@@ -246,7 +246,8 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       options.input,
       options.filter.join(', '),
       options.description,
-      processedFile.metadata?.classes
+      processedFile.metadata?.classes,
+      corpusProfile?.glossary
     );
 
     return await kgBuilder.build(
@@ -267,7 +268,7 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     options: ProcessingOptions,
     logger: Logger
   ): Promise<CorpusProfile | undefined> {
-    if (options.corpusProfiling !== "enabled") return undefined;
+    if (options.corpus.profiling !== "enabled") return undefined;
     try {
       logger.info("Corpus analysis pre-pass enabled — profiling corpus before extraction");
       const analyzer = await this.container.resolve<ICorpusAnalyzer>(
@@ -319,14 +320,14 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       TYPES.KnowledgeGraphSearch
     );
     const searchOptions = {
-      limit: options.retrievalLimit || 3,
+      limit: options.retrieval.limit,
       includeObservations: true,
     };
 
     const search = (content: string) =>
       searchService.searchByFileContent(content, filePath, existingGraphs, searchOptions);
 
-    if (options.retrievalScope === "file") {
+    if (options.retrieval.scope === "file") {
       // Retrieve once from the first chunk, reuse for all chunks.
       const context = await search(processedFile.chunks[0].content);
       return async () => context;
@@ -341,8 +342,8 @@ export class DirectoryProcessor implements IDirectoryProcessor {
    */
   private shouldUseRetrieval(options: ProcessingOptions): boolean {
     // Fix the conflicting boolean pairs issue
-    if (options.retrieval === "disabled") return false;
-    if (options.retrieval === "enabled") return true;
+    if (options.retrieval.mode === "disabled") return false;
+    if (options.retrieval.mode === "enabled") return true;
     return true; // Auto to true
   }
 
@@ -374,7 +375,7 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     const exporter = await this.container.resolve<IKnowledgeGraphExporter>(
       TYPES.KnowledgeGraphExportService
     );
-    const exportFormat = options.exportFormat || "json";
+    const exportFormat = options.export.format;
 
     if (!exporter.isFormatSupported(exportFormat)) {
       throw new Error(

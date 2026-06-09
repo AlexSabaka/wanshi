@@ -82,8 +82,7 @@ export interface RunListItem extends RunSummary {
  */
 export interface StoredRun {
   summary: RunSummary
-  config: import("@/lib/kg-options").RunRequest
-  passthrough?: Record<string, unknown>
+  config: import("@/lib/kg-options").KgGenConfig
 }
 
 /** Server-side summary of a run (what the registry tracks / the UI polls). */

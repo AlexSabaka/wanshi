@@ -14,30 +14,51 @@ import { Logger, shutdown } from '../../shared';
  * vocabulary, plus an `other` escape hatch so the model is never forced to
  * mislabel when nothing fits.
  */
-const GENERIC_ENTITY_TYPES = [
-  "person",
-  "organization",
-  "location",
-  "concept",
-  "event",
-  "product",
-  "technology",
-  "document",
-  "date",
+/**
+ * Base controlled vocabularies (v5). These mirror the `{{else}}` base lists in
+ * `templates/v5/system.hbs` — keep the two in sync (a future refinement renders
+ * the template list from these constants). The escape hatches (`other` for
+ * entities, `related_to` for relations) keep the model from being forced to
+ * mislabel and prevent validation-failure recall loss.
+ */
+const BASE_ENTITY_TYPES = [
+  "person", "organization", "location", "role", "event", "time", "metric",
+  "concept", "term", "document", "product", "technology", "standard",
+  "class", "interface", "function", "module", "service", "dependency",
+  "data_structure", "config", "file",
 ];
 
+const BASE_RELATION_TYPES = [
+  "uses", "depends_on", "calls", "implements", "extends", "contains", "part_of",
+  "produces", "consumes", "configures", "references", "defines", "targets",
+  "located_in", "works_at", "member_of", "precedes", "causes", "has_attribute",
+  "related_to",
+];
+
+/** Back-compat alias: generic entity types still used by the type resolver. */
+const GENERIC_ENTITY_TYPES = BASE_ENTITY_TYPES;
+
 /**
- * Build the extraction schema. When `allowedTypes` is supplied (a content class
- * was detected), `entityType` is an enforced Zod enum scoped to that domain +
- * generic types + `other`; otherwise it stays a free string.
+ * Build the extraction schema. Under v5 both vocabularies are *closed*: when an
+ * allowed set is supplied, the field is an enforced Zod enum; `entityType` falls
+ * back to the base set + `other`, `relationType` to the base set + `related_to`,
+ * so the model can never invent a one-off type/predicate. When a set is empty the
+ * field stays a free string (legacy behavior, e.g. older prompt versions).
  */
-function buildGraphSchema(allowedTypes?: string[]) {
+function buildGraphSchema(allowedTypes?: string[], allowedRelationTypes?: string[]) {
   const entityType =
     allowedTypes && allowedTypes.length > 0
       ? z
           .enum(allowedTypes as [string, ...string[]])
           .describe("Entity type — pick the closest; use 'other' if none fit")
       : z.string().describe("Entity description");
+
+  const relationType =
+    allowedRelationTypes && allowedRelationTypes.length > 0
+      ? z
+          .array(z.enum(allowedRelationTypes as [string, ...string[]]))
+          .describe("One canonical predicate; use 'related_to' if none fit")
+      : z.array(z.string()).describe("List of relation types");
 
   return z.object({
     entities: z.array(
@@ -53,7 +74,7 @@ function buildGraphSchema(allowedTypes?: string[]) {
       z.object({
         from: z.string().describe("Relation source entity"),
         to: z.string().describe("Relation target entity"),
-        relationType: z.array(z.string()).describe("List of relation types"),
+        relationType,
       })
     ),
   });
@@ -302,11 +323,12 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   }
 
   /**
-   * Scope the entity-type enum to the detected content domain, unioned with any
-   * corpus-glossary entity types. Returns the domain's `primaryEntityTypes` +
-   * generic types + glossary types + `other`, or undefined when neither a class
-   * nor a glossary is available (→ free-string entityType, today's behavior).
-   * The `other` escape keeps the model from being forced to mislabel.
+   * Scope the entity-type enum: the detected content domain's `primaryEntityTypes`
+   * unioned with any corpus-glossary entity types + the base set + `other`. Under
+   * v5 the vocabulary is *always closed* — with no class and no glossary it still
+   * returns the base set (+`other`) rather than `undefined`, so `entityType` is an
+   * enforced enum even on an un-profiled, un-classified run. The `other` escape
+   * keeps the model from being forced to mislabel.
    */
   private resolveAllowedTypes(
     contentClasses?: ClassificationResult[],
@@ -320,9 +342,22 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       );
       domain = NER_DOMAIN_EXAMPLES[top.class]?.primaryEntityTypes ?? [];
     }
-    if (domain.length === 0 && glossaryTypes.length === 0) return undefined;
     return Array.from(
-      new Set([...domain, ...glossaryTypes, ...GENERIC_ENTITY_TYPES, "other"])
+      new Set([...domain, ...glossaryTypes, ...BASE_ENTITY_TYPES, "other"])
+    );
+  }
+
+  /**
+   * Scope the relation-predicate enum: corpus-glossary relation types unioned with
+   * the base predicate set + `related_to` catch-all. Always closed (mirror of
+   * {@link resolveAllowedTypes}), so `relationType` is an enforced enum — the
+   * prompt-side fix to the predicate explosion (523→826 distinct types) backed by
+   * schema validation.
+   */
+  private resolveAllowedRelationTypes(glossary?: CorpusGlossary): string[] {
+    const glossaryRelations = glossary?.relationTypes ?? [];
+    return Array.from(
+      new Set([...glossaryRelations, ...BASE_RELATION_TYPES, "related_to"])
     );
   }
 
@@ -447,7 +482,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       systemPrompt,
       userPrompt,
       images,
-      this.resolveAllowedTypes(contentClasses, glossary)
+      this.resolveAllowedTypes(contentClasses, glossary),
+      this.resolveAllowedRelationTypes(glossary)
     );
   }
 
@@ -480,7 +516,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       systemPrompt,
       userPrompt,
       images,
-      this.resolveAllowedTypes(contentClasses, glossary)
+      this.resolveAllowedTypes(contentClasses, glossary),
+      this.resolveAllowedRelationTypes(glossary)
     );
   }
 
@@ -491,7 +528,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     systemPrompt: string,
     userPrompt: string,
     images?: ProcessedImage[],
-    allowedTypes?: string[]
+    allowedTypes?: string[],
+    allowedRelationTypes?: string[]
   ): Promise<RawGraph> {
     const messages: LLMMessage[] = [
       {
@@ -508,7 +546,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     try {
       const result = await this.llmService.generateStructured(
         messages,
-        buildGraphSchema(allowedTypes)
+        buildGraphSchema(allowedTypes, allowedRelationTypes)
       );
 
       // Ensure arrays exist

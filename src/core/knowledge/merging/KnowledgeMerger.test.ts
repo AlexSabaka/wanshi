@@ -1,4 +1,4 @@
-import { mergeKnowledgeGraphs } from "./KnowledgeMerger";
+import { mergeKnowledgeGraphs, canonicalizeRelationType } from "./KnowledgeMerger";
 import { JsonExportStrategy, McpExportStrategy } from "../../export/strategies";
 import { KnowledgeGraph } from "../../../types";
 import { stubLogger } from "../../../__tests__/helpers";
@@ -77,5 +77,45 @@ describe("KnowledgeMerger — provenance & bi-temporal", () => {
     const mcp = new McpExportStrategy().export(merged);
     expect(mcp).toContain("the sky is blue");
     expect(mcp).toContain('"type":"entity"');
+  });
+});
+
+describe("canonicalizeRelationType", () => {
+  it("trims, lowercases, de-dupes and sorts so reversed twins collapse", () => {
+    expect(canonicalizeRelationType(["uses", "calls"])).toEqual(["calls", "uses"]);
+    expect(canonicalizeRelationType(["calls", "uses"])).toEqual(["calls", "uses"]);
+    expect(canonicalizeRelationType([" Uses ", "USES", "uses"])).toEqual(["uses"]);
+    expect(canonicalizeRelationType([])).toEqual([]);
+  });
+});
+
+describe("KnowledgeMerger — relation hygiene (cheap wins)", () => {
+  const ent = (name: string) => ({
+    name,
+    entityType: "concept",
+    files: ["A.txt"],
+    observations: [{ text: `${name} fact`, source: "A.txt", createdAt: "2026-01-01T00:00:00Z" }],
+  });
+
+  it("drops self-loops and collapses reversed-twin predicates", async () => {
+    const g: KnowledgeGraph = {
+      entities: [ent("Foo"), ent("Bar")],
+      relations: [
+        { from: "Foo", to: "Foo", relationType: ["uses"] }, // self-loop → dropped
+        { from: "Foo", to: "Bar", relationType: ["uses", "calls"] },
+        { from: "Foo", to: "Bar", relationType: ["calls", "uses"] }, // reversed twin → collapses
+        { from: "Bar", to: "Foo", relationType: ["implements"] }, // distinct direction survives
+      ],
+    };
+
+    const merged = await mergeKnowledgeGraphs([g], opts, stubEmbed, stubLogger());
+
+    expect(merged.relations.some((r) => r.from === r.to)).toBe(false);
+    const fooBar = merged.relations.filter((r) => r.from === "Foo" && r.to === "Bar");
+    expect(fooBar).toHaveLength(1);
+    expect(fooBar[0].relationType).toEqual(["calls", "uses"]);
+    // the genuinely distinct Bar→Foo edge is kept
+    expect(merged.relations.some((r) => r.from === "Bar" && r.to === "Foo")).toBe(true);
+    expect(merged.relations).toHaveLength(2);
   });
 });

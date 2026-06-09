@@ -94,7 +94,7 @@ export class ContainerFactory {
       const { NoopProgressEmitter, NdjsonProgressEmitter } = await import(
         "../progress"
       );
-      return options.progressNdjson
+      return options.logging.progressNdjson
         ? new NdjsonProgressEmitter(process.stdout)
         : new NoopProgressEmitter();
     });
@@ -107,22 +107,22 @@ export class ContainerFactory {
       const logger = await c.resolve<Logger>(TYPES.Logger);
 
       const llmOptions = {
-        model: options.model,
-        host: options.host,
-        apiKey: options.apiKey,
-        images: options.images !== "disabled",
-        temperature: options.temperature,
-        contextLength: options.contextLength,
-        repeatPenalty: options.repeatPenalty,
-        seed: options.seed,
-        maxTokens: options.maxTokens ? Number(options.maxTokens) : undefined,
+        model: options.llm.model,
+        host: options.llm.host,
+        apiKey: options.llm.apiKey,
+        images: options.readers.images !== "disabled",
+        temperature: options.llm.temperature,
+        contextLength: options.llm.contextLength,
+        repeatPenalty: options.llm.repeatPenalty,
+        seed: options.llm.seed,
+        maxTokens: options.llm.maxTokens,
       };
 
-      if (options.provider === "openai") {
+      if (options.llm.provider === "openai") {
         const { OpenAICompatibleService } = await import(
           "../llm/OpenAICompatibleService"
         );
-        logger.info(`Using OpenAI-compatible provider at ${options.host}`);
+        logger.info(`Using OpenAI-compatible provider at ${options.llm.host}`);
         return new OpenAICompatibleService(llmOptions, logger);
       }
 
@@ -137,12 +137,10 @@ export class ContainerFactory {
       );
       const logger = await c.resolve<Logger>(TYPES.Logger);
 
-      const embeddingsModel =
-        options.embeddingsModel || "mxbai-embed-large:335m";
-      const embeddingsHost =
-        options.embeddingsHost || "http://localhost:11434";
+      const embeddingsModel = options.embeddings.model;
+      const embeddingsHost = options.embeddings.host;
 
-      if (options.embeddingsProvider === "openai") {
+      if (options.embeddings.provider === "openai") {
         const { OpenAIEmbeddingService } = await import(
           "../llm/OpenAIEmbeddingService"
         );
@@ -153,10 +151,8 @@ export class ContainerFactory {
           {
             model: embeddingsModel,
             host: embeddingsHost,
-            apiKey: options.embeddingsApiKey,
-            maxInputChars: options.embeddingsMaxInputChars
-              ? Number(options.embeddingsMaxInputChars)
-              : undefined,
+            apiKey: options.embeddings.apiKey,
+            maxInputChars: options.embeddings.maxInputChars,
           },
           logger
         );
@@ -167,7 +163,7 @@ export class ContainerFactory {
         {
           model: embeddingsModel,
           host: embeddingsHost,
-          maxInputChars: options.embeddingsMaxInputChars,
+          maxInputChars: options.embeddings.maxInputChars,
         },
         logger
       );
@@ -178,14 +174,14 @@ export class ContainerFactory {
       const { PromptManager } = await import("../llm/prompts/PromptManager");
       const logger = await c.resolve<Logger>(TYPES.Logger);
 
-      const manager = new PromptManager(logger, undefined, config.processingOptions?.outline);
+      const manager = new PromptManager(logger, undefined, config.processingOptions?.readers?.outline);
 
       const options = config.processingOptions;
-      if (options?.promptVersion) {
-        manager.setPromptVersion(options.promptVersion);
+      if (options?.llm?.promptVersion) {
+        manager.setPromptVersion(options.llm.promptVersion);
       }
-      if (options?.system) {
-        manager.setCustomSystemPrompt(options.system);
+      if (options?.llm?.system) {
+        manager.setCustomSystemPrompt(options.llm.system);
       }
 
       return manager;
@@ -208,9 +204,9 @@ export class ContainerFactory {
       const logger = await c.resolve<Logger>(TYPES.Logger);
       return new TextChunker(
         {
-          enabled: options.chunking !== "disabled",
-          maxChunkSize: options.chunkSize || 2000,
-          overlapSize: options.overlapSize || 100,
+          enabled: options.chunking.mode !== "disabled",
+          maxChunkSize: options.chunking.size,
+          overlapSize: options.chunking.overlap,
         },
         logger
       );
@@ -241,7 +237,7 @@ export class ContainerFactory {
       const chunker = await c.resolve<TextChunker>(TYPES.TextChunker);
       const factory = new FileReaderFactory(logger);
 
-      if (options.docling) {
+      if (options.readers.docling) {
         logger.info(`Using docling document reading pipeline`);
         factory.registerReader(
           new DoclingReader(undefined, undefined, undefined, "./temp", chunker, logger)
@@ -260,7 +256,7 @@ export class ContainerFactory {
       // JsonFileReader and TextReader (first-match-wins) so it wins for those;
       // its content-sniffing canRead defers everything else.
       factory.registerReader(
-        new TranscriptReader(chunker, logger, Number(options.chunkSize) || 4000)
+        new TranscriptReader(chunker, logger, options.chunking.size)
       );
 
       // JSON reader claims .json/.jsonl/.geojson — must be registered before
@@ -268,9 +264,8 @@ export class ContainerFactory {
       factory.registerReader(
         new JsonFileReader(
           {
-            strategy: options.jsonReader?.strategy ?? options.jsonStrategy,
-            maxChunkSize:
-              options.jsonReader?.maxChunkSize ?? Number(options.chunkSize) ?? undefined,
+            strategy: options.readers.json.strategy,
+            maxChunkSize: options.readers.json.maxChunkSize ?? options.chunking.size,
           },
           chunker,
           logger
@@ -279,14 +274,14 @@ export class ContainerFactory {
 
       factory.registerReader(new TextReader(chunker, logger));
 
-      if (options.asr !== "disabled") {
+      if (options.readers.asr.mode !== "disabled") {
         logger.info(`Using automatic speech recognition pipeline`);
         factory.registerReader(
           new AudioReader(
             {
-              modelName: options.whisperModel,
-              language: options.language,
-              translate: options.translate,
+              modelName: options.readers.asr.whisperModel,
+              language: options.readers.asr.language,
+              translate: options.readers.asr.translate,
             },
             "./temp",
             chunker, 
@@ -307,7 +302,7 @@ export class ContainerFactory {
         TYPES.ProcessingOptions
       );
       const logger = await c.resolve<Logger>(TYPES.Logger);
-      switch (options.classifier) {
+      switch (options.classifier.mode) {
         case "bert":
           // Not implemented — fail clearly at wiring time rather than throwing
           // partway through a run. The CLI also rejects this earlier.
@@ -315,7 +310,7 @@ export class ContainerFactory {
             "The 'bert' classifier is not implemented. Use --classifier heuristic|llm, or disabled."
           );
         case "heuristic": return new HeuristicContentClassifier(logger);
-        case "llm": return new LlmContentClassifier(logger, { model: options.model, host: options.host });
+        case "llm": return new LlmContentClassifier(logger, { model: options.llm.model, host: options.llm.host });
         default: return undefined;
       }
     });
@@ -333,7 +328,7 @@ export class ContainerFactory {
         TYPES.ContentClassifier
       );
       const logger = await c.resolve<Logger>(TYPES.Logger);
-      return new FileProcessor(factory, classifier, options.images !== "disabled", logger);
+      return new FileProcessor(factory, classifier, options.readers.images !== "disabled", logger);
     });
 
     // Register Corpus Analyzer (used only when --corpus-profiling is enabled)
@@ -347,7 +342,8 @@ export class ContainerFactory {
         TYPES.FileReaderFactory
       );
       const logger = await c.resolve<Logger>(TYPES.Logger);
-      return new CorpusAnalyzer(llmService, classifier, factory, logger);
+      const promptManager = await c.resolve<IPromptManager>(TYPES.PromptManager);
+      return new CorpusAnalyzer(llmService, classifier, factory, logger, promptManager);
     });
 
     // Register Checkpoint service (used only when --resume is set)
@@ -359,12 +355,12 @@ export class ContainerFactory {
       const logger = await c.resolve<Logger>(TYPES.Logger);
 
       const checkpointPath =
-        options.checkpointPath || `${options.output}.checkpoint.jsonl`;
+        options.resume.checkpointPath || `${options.output}.checkpoint.jsonl`;
       const service = new CheckpointService(checkpointPath, logger, {
-        model: options.model,
-        promptVersion: options.promptVersion ?? "default",
+        model: options.llm.model,
+        promptVersion: options.llm.promptVersion,
       });
-      if (options.resume) {
+      if (options.resume.enabled) {
         await service.load();
       }
       return service;
@@ -395,15 +391,13 @@ export class ContainerFactory {
           llmService,
           promptManager: promptManager as any,
           checkpoint,
-          resume: options.resume,
-          model: options.model,
-          promptVersion: options.promptVersion,
+          resume: options.resume.enabled,
+          model: options.llm.model,
+          promptVersion: options.llm.promptVersion,
           inputRoot: options.input,
           progress,
-          grounding: options.grounding,
-          groundingMinScore: options.groundingMinScore
-            ? Number(options.groundingMinScore)
-            : undefined,
+          grounding: options.grounding.mode,
+          groundingMinScore: options.grounding.minScore,
         },
         logger
       );
@@ -437,9 +431,9 @@ export class ContainerFactory {
           return await mergeKnowledgeGraphs(
             graphs,
             {
-              entitySimilarityThreshold: options.entitySimilarityThreshold,
+              entitySimilarityThreshold: options.merging.entitySimilarityThreshold,
               observationSimilarityThreshold:
-                options.observationSimilarityThreshold,
+                options.merging.observationSimilarityThreshold,
             },
             embeddingService,
             logger

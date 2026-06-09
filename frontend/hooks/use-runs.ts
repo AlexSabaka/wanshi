@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiGet, apiPost } from "@/lib/api"
-import type { RunRequest } from "@/lib/kg-options"
+import type { KgGenConfig } from "@/lib/kg-options"
 import type { RunListItem, RunSummary } from "@/types"
 
 export function useRuns(poll = true) {
@@ -17,13 +17,8 @@ export function useRuns(poll = true) {
 export function useStartRun() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({
-      req,
-      passthrough,
-    }: {
-      req: RunRequest
-      passthrough?: Record<string, unknown>
-    }) => apiPost<{ run: RunSummary }>("/api/runs", { ...req, passthrough }),
+    mutationFn: (config: KgGenConfig) =>
+      apiPost<{ run: RunSummary }>("/api/runs", config),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["runs"] }),
   })
 }

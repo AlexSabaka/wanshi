@@ -1,22 +1,26 @@
 import yaml from 'js-yaml';
 import path from "path";
 import fs from "fs";
-import { ProcessingOptions } from "../../types";
 
+/**
+ * Read a YAML/JSON config file into a raw object. No validation or shaping here
+ * — the caller merges this with CLI flags + env and validates the result via
+ * `parseConfig` (src/config), the single source of truth.
+ */
 export async function readConfigurationFile(
   file: string
-): Promise<Partial<ProcessingOptions>> {
+): Promise<Record<string, unknown>> {
   const ext = path.extname(file);
   const content = fs.readFileSync(file, "utf-8");
   switch (ext.toLowerCase()) {
     case ".json":
-      return JSON.parse(content) as ProcessingOptions;
+      return JSON.parse(content) as Record<string, unknown>;
 
-      case ".yaml":
+    case ".yaml":
     case ".yml":
-      return yaml.load(content) as ProcessingOptions;
+      return (yaml.load(content) as Record<string, unknown>) ?? {};
 
     default:
-      return {} as ProcessingOptions;
+      return {};
   }
 }

@@ -14,7 +14,7 @@ import { IExportStrategy } from "./IExportStrategy";
  */
 export class LoraExportStrategy implements IExportStrategy {
   export(graph: KnowledgeGraph, options?: ProcessingOptions): string {
-    const min = options?.groundingMinScore ?? 0.5;
+    const min = options?.grounding?.minScore ?? 0.5;
     const lines: string[] = [];
 
     for (const entity of graph.entities) {

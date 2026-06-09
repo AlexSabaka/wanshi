@@ -46,7 +46,7 @@ const CLASS_TO_PARTIAL: Record<ContentClass, string> = {
  */
 export class PromptManager {
   private templateEngine: PromptTemplateEngine;
-  private systemPromptVersion: string = 'v4.5';
+  private systemPromptVersion: string = 'v5';
   private customSystemPrompt?: string;
   private templatesDir: string;
   private logger: Logger;
@@ -75,7 +75,7 @@ export class PromptManager {
   }
 
   /**
-   * Override the prompt template version (default: 'v4.5').
+   * Override the prompt template version (default: 'v5').
    * Must match a directory under src/core/llm/prompts/templates/.
    */
   setPromptVersion(version: string): void {
@@ -98,7 +98,8 @@ export class PromptManager {
     input: string,
     filter: string,
     description?: string,
-    contentClasses?: ClassificationResult[]
+    contentClasses?: ClassificationResult[],
+    glossary?: CorpusGlossary
   ): Promise<string> {
     if (this.customSystemPrompt) {
       return this.customSystemPrompt;
@@ -116,6 +117,16 @@ export class PromptManager {
         filter: filter,
         userDescription: description,
       };
+
+      // Promote the corpus glossary to the *authoritative* closed vocabularies
+      // rendered in the system prompt (v5). Absent → the template falls back to
+      // its base entity/relation vocab. Names stay in the user prompt.
+      if (glossary?.entityTypes?.length) {
+        context.entityTypeVocabulary = glossary.entityTypes.join(', ');
+      }
+      if (glossary?.relationTypes?.length) {
+        context.relationTypeVocabulary = glossary.relationTypes.join(', ');
+      }
 
       // Inject domain-specific examples if classification is available
       const topClass = this.getTopClass(contentClasses);
@@ -285,9 +296,11 @@ export class PromptManager {
   }
 
   /**
-   * Renders the corpus glossary as a soft-hint block: prefer these canonical
-   * names/types when they apply, but never force-fit (so new entities discovered
-   * in a chunk are still extracted). Returns undefined when the glossary is empty.
+   * Renders the corpus glossary block for the user prompt (v5: authoritative).
+   * Focuses on canonical entity *names* — the established entity/relation *types*
+   * are now the closed vocabularies in the system prompt, so this avoids
+   * duplicating them. New entities not listed are still extracted as usual.
+   * Returns undefined when the glossary is empty.
    */
   private buildCorpusGlossaryHint(glossary?: CorpusGlossary): string | undefined {
     if (!glossary) return undefined;
@@ -300,21 +313,43 @@ export class PromptManager {
       return undefined;
     }
 
-    const lines: string[] = [
-      'When a concept below appears, reuse its exact canonical form for the entity ' +
-        'name (do not invent spelling variants); do NOT force-fit — extract new ' +
-        'entities not listed here as usual.',
-    ];
+    const lines: string[] = [];
     if (entityNames.length > 0) {
       lines.push(`Canonical entity names: ${entityNames.join(', ')}`);
     }
     if (entityTypes.length > 0) {
-      lines.push(`Preferred entity types: ${entityTypes.join(', ')}`);
+      lines.push(`Established entity types: ${entityTypes.join(', ')}`);
     }
     if (relationTypes.length > 0) {
-      lines.push(`Preferred relation types: ${relationTypes.join(', ')}`);
+      lines.push(`Established relation predicates: ${relationTypes.join(', ')}`);
     }
     return lines.join('\n');
+  }
+
+  /**
+   * Render the glossary-generation system + user prompts for the corpus pre-pass
+   * from `templates/<version>/glossary/{system,user}.hbs`. Falls back to `undefined`
+   * when the current version ships no glossary templates (e.g. v4.5), so the caller
+   * (CorpusAnalyzer) keeps its inline-string prompts. Non-fatal: a render failure
+   * also returns undefined.
+   */
+  async getGlossaryPrompt(
+    vars: { classLine: string; termList: string; snippets: string }
+  ): Promise<{ system: string; user: string } | undefined> {
+    const dir = path.join(this.templatesDir, this.systemPromptVersion, 'glossary');
+    const systemPath = path.join(dir, 'system.hbs');
+    const userPath = path.join(dir, 'user.hbs');
+    if (!fs.existsSync(systemPath) || !fs.existsSync(userPath)) {
+      return undefined;
+    }
+    try {
+      const system = await this.templateEngine.renderFile(systemPath, {});
+      const user = await this.templateEngine.renderFile(userPath, vars);
+      return { system, user };
+    } catch (error) {
+      this.logger.warn(`Failed to render glossary prompt (using inline fallback): ${error}`);
+      return undefined;
+    }
   }
 
   /**

@@ -5,12 +5,15 @@ import { Logger } from "./Logger";
 
 export class LoggerFactory {
   static createLogger(
-    options: Pick<
-      ProcessingOptions,
-      "logFile" | "logLevel" | "silent" | "debug" | "progressNdjson"
-    >
+    options: { logging?: Partial<ProcessingOptions["logging"]> }
   ): Logger {
-    const { logFile, logLevel, silent, debug, progressNdjson } = options;
+    const {
+      file: logFile,
+      level: logLevel,
+      silent,
+      debug,
+      progressNdjson,
+    } = options.logging ?? {};
 
     const logger = new TSLogger<any>({
       name: "kg-gen",

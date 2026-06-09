@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import YAML from "yaml"
@@ -15,30 +15,30 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ConfigForm } from "@/components/config-form"
 import { useStartRun } from "@/hooks/use-runs"
+import { useConfigSchema } from "@/hooks/use-config-schema"
 import { apiPost } from "@/lib/api"
 import { configToYaml } from "@/lib/config-export"
 import { makeStorageKey } from "@/lib/local-storage"
 import {
+  adaptGroups,
   buildDefaultValues,
-  flattenConfig,
-  partitionValues,
-  PATH_KEYS,
+  configToValues,
+  valuesToConfig,
+  pathFieldKeys,
+  secretFieldKeys,
   type FieldValue,
+  type SchemaPayload,
 } from "@/lib/config-schema"
 
 // Remember the last config across reloads. API keys are NOT persisted here —
 // they live (encrypted) in the credential store.
 const FORM_STORAGE_KEY = makeStorageKey("run-form", "state")
-const SECRET_KEYS = ["apiKey", "embeddingsApiKey"]
 
-function loadStoredState(): {
-  values?: Record<string, FieldValue>
-  importExtra?: Record<string, unknown>
-} {
+function loadStoredValues(): Record<string, FieldValue> {
   if (typeof window === "undefined") return {}
   try {
     const raw = localStorage.getItem(FORM_STORAGE_KEY)
-    return raw ? JSON.parse(raw) : {}
+    return raw ? (JSON.parse(raw).values ?? {}) : {}
   } catch {
     return {}
   }
@@ -47,28 +47,33 @@ function loadStoredState(): {
 export default function RunPage() {
   const router = useRouter()
   const start = useStartRun()
-  const [values, setValues] = useState<Record<string, FieldValue>>(() => ({
-    ...buildDefaultValues(),
-    ...(loadStoredState().values ?? {}),
-  }))
-  const [importExtra, setImportExtra] = useState<Record<string, unknown>>(
-    () => loadStoredState().importExtra ?? {}
-  )
+  const { data: schema, isLoading, error } = useConfigSchema()
+
+  const groups = useMemo(() => (schema ? adaptGroups(schema) : []), [schema])
+  const [values, setValues] = useState<Record<string, FieldValue>>({})
+  const [ready, setReady] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Initialize form values from the schema defaults + last-used config once the
+  // schema arrives.
+  useEffect(() => {
+    if (schema && !ready) {
+      setValues({ ...buildDefaultValues(schema), ...loadStoredValues() })
+      setReady(true)
+    }
+  }, [schema, ready])
 
   // Persist (minus secrets) so the form reopens with the last-used config.
   useEffect(() => {
+    if (!schema || !ready) return
     const persistable = { ...values }
-    for (const k of SECRET_KEYS) delete persistable[k]
+    for (const k of secretFieldKeys(schema)) delete persistable[k]
     try {
-      localStorage.setItem(
-        FORM_STORAGE_KEY,
-        JSON.stringify({ values: persistable, importExtra })
-      )
+      localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify({ values: persistable }))
     } catch {
       // ignore quota / private mode
     }
-  }, [values, importExtra])
+  }, [values, schema, ready])
 
   const set = (key: string, value: FieldValue) =>
     setValues((v) => ({ ...v, [key]: value }))
@@ -76,21 +81,19 @@ export default function RunPage() {
   async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = "" // allow re-importing the same file
-    if (!file) return
+    if (!file || !schema) return
     try {
       // YAML.parse also accepts JSON (JSON is valid YAML).
       const parsed = YAML.parse(await file.text())
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("config must be a YAML/JSON object")
       }
-      const { values: imported, extra } = flattenConfig(
-        parsed as Record<string, unknown>
-      )
+      const imported = configToValues(parsed as Record<string, unknown>, schema)
 
       // Resolve path fields to absolute against the run dir (the browser can't
       // see the config file's location; a relative output would otherwise
       // double-nest under the input dir at run time).
-      const pathKeys = PATH_KEYS.filter(
+      const pathKeys = pathFieldKeys(schema).filter(
         (k) => imported[k] != null && String(imported[k]).trim() !== ""
       )
       if (pathKeys.length) {
@@ -108,11 +111,7 @@ export default function RunPage() {
       }
 
       setValues((v) => ({ ...v, ...imported }))
-      setImportExtra(extra)
-      const n = Object.keys(extra).length
-      toast.success(
-        `Config imported${n ? ` · ${n} unknown field${n > 1 ? "s" : ""} passed through` : ""}`
-      )
+      toast.success("Config imported")
     } catch (err) {
       toast.error(
         `Couldn't parse config: ${err instanceof Error ? err.message : String(err)}`
@@ -122,6 +121,7 @@ export default function RunPage() {
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
+    if (!schema) return
     if (!String(values.input ?? "").trim()) {
       toast.error("Input directory is required")
       return
@@ -130,7 +130,7 @@ export default function RunPage() {
       toast.error("At least one include pattern is required")
       return
     }
-    if (!String(values.model ?? "").trim()) {
+    if (!String(values["llm.model"] ?? "").trim()) {
       toast.error("Model is required")
       return
     }
@@ -138,23 +138,21 @@ export default function RunPage() {
       toast.error("Output file is required")
       return
     }
-    const { req, passthrough } = partitionValues(values, importExtra)
-    start.mutate(
-      { req, passthrough },
-      {
-        onSuccess: ({ run }) => {
-          toast.success("Run started")
-          router.push(`/runs/${run.id}`)
-        },
-        onError: (err) =>
-          toast.error(err instanceof Error ? err.message : "Failed to start run"),
-      }
-    )
+    const config = valuesToConfig(values, schema)
+    start.mutate(config, {
+      onSuccess: ({ run }) => {
+        toast.success("Run started")
+        router.push(`/runs/${run.id}`)
+      },
+      onError: (err) =>
+        toast.error(err instanceof Error ? err.message : "Failed to start run"),
+    })
   }
 
   async function copyYaml() {
+    if (!schema) return
     try {
-      await navigator.clipboard.writeText(configToYaml(values, importExtra))
+      await navigator.clipboard.writeText(configToYaml(values, schema))
       toast.success("Config YAML copied to clipboard")
     } catch {
       toast.error("Failed to copy YAML")
@@ -162,8 +160,9 @@ export default function RunPage() {
   }
 
   function downloadYaml() {
+    if (!schema) return
     try {
-      const blob = new Blob([configToYaml(values, importExtra)], { type: "text/yaml" })
+      const blob = new Blob([configToYaml(values, schema)], { type: "text/yaml" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
@@ -174,8 +173,6 @@ export default function RunPage() {
       toast.error("Failed to download YAML")
     }
   }
-
-  const extraKeys = Object.keys(importExtra)
 
   return (
     <form onSubmit={submit}>
@@ -195,6 +192,7 @@ export default function RunPage() {
               type="button"
               variant="outline"
               size="sm"
+              disabled={!schema}
               onClick={() => fileRef.current?.click()}
             >
               <Upload className="h-4 w-4" />
@@ -202,7 +200,7 @@ export default function RunPage() {
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" size="sm">
+                <Button type="button" variant="outline" size="sm" disabled={!schema}>
                   <Download className="h-4 w-4" />
                   Export
                 </Button>
@@ -216,7 +214,7 @@ export default function RunPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button type="submit" size="sm" disabled={start.isPending}>
+            <Button type="submit" size="sm" disabled={start.isPending || !ready}>
               {start.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -228,16 +226,19 @@ export default function RunPage() {
         }
       />
 
-      {extraKeys.length > 0 && (
-        <div className="mb-4 rounded-md border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">
-            {extraKeys.length} unknown imported field{extraKeys.length > 1 ? "s" : ""}
-          </span>{" "}
-          passed through: <span className="font-mono">{extraKeys.join(", ")}</span>
+      {isLoading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading config schema…
+        </div>
+      )}
+      {error && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Couldn&apos;t load the config schema. Build the kg-gen backend
+          (<span className="font-mono">npm run build</span> in the repo root) and reload.
         </div>
       )}
 
-      <ConfigForm values={values} onChange={set} />
+      {ready && <ConfigForm groups={groups} values={values} onChange={set} />}
     </form>
   )
 }

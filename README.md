@@ -47,7 +47,7 @@ Facts carry **provenance and a bi-temporal axis**, an inline **grounding gate** 
 
 - **Provenance & bi-temporal facts**: every observation carries `speaker`/`source` and a Graphiti-style bi-temporal axis (`validAt`/`invalidAt` + `createdAt`/`expiredAt`) — see [Data Model](#standard-json---export-format-json)
 - **Inline grounding gate**: each extracted fact is scored against its source chunk; ungrounded "hallucinations" can be flagged or dropped before they reach the output (`--grounding`)
-- **Corpus glossary pre-pass** *(experimental)*: an optional pass over the whole corpus counts term frequency, classifies once (cached), and asks the LLM for a corpus-specific glossary of canonical entity names/types/relation types, injected as soft hints so extraction names things consistently from the start (`--corpus-profiling`)
+- **Corpus glossary pre-pass** *(experimental)*: an optional pass over the whole corpus counts term frequency, classifies once (cached), and asks the LLM for a corpus-specific glossary of canonical entity names/types/relation types. Under the v5 prompts this glossary is **authoritative** — its types and predicates become the closed vocabularies that constrain extraction, so the merged graph doesn't fragment into hundreds of one-off types (`--corpus-profiling`)
 - **Provenance-preserving merge**: the same fact from two speakers/sources stays as two attributed observations, never one flattened string
 - **Entity Deduplication**: Jaro-Winkler similarity for entity names + cosine similarity for observations
 - **Cross-file Consistency**: Retrieval-augmented prompting maintains entity naming across files
@@ -93,7 +93,7 @@ npx ts-node ./src/index.ts --config config.yaml
 Create a `config.yaml`:
 
 ```yaml
-# Input/Output
+# Input/Output (top-level)
 input: ./my-project
 filter:
   - "**/*.ts"
@@ -105,43 +105,57 @@ output: knowledge-graph.jsonl
 description: "TypeScript project source code"
 
 # LLM
-provider: ollama            # ollama | openai (OpenAI-compatible)
-model: gemma3:4b
-host: http://localhost:11434
-contextLength: 12000
-temperature: 0.1
-# promptVersion: v4.5       # prompt template version (config-only; default v4.5)
+llm:
+  provider: ollama            # ollama | openai (OpenAI-compatible)
+  model: gemma3:4b
+  host: http://localhost:11434
+  contextLength: 12000
+  temperature: 0.1
+  # promptVersion: v5         # prompt template version (also --prompt-version; default v5, use v4.5 for legacy)
 
 # Embeddings (independent from generation)
-embeddingsProvider: ollama
-embeddingsModel: mxbai-embed-large:335m
-embeddingsHost: http://localhost:11434
+embeddings:
+  provider: ollama
+  model: mxbai-embed-large:335m
+  host: http://localhost:11434
 
 # Text Processing
-chunking: enabled
-chunkSize: 4000
-overlapSize: 100
+chunking:
+  mode: enabled
+  size: 4000
+  overlap: 100
 
 # Media (disable if not needed)
-images: disabled
-asr: disabled
+readers:
+  images: disabled
+  asr:
+    mode: disabled
 
 # Context Retrieval
-retrieval: enabled
-retrievalLimit: 3
+retrieval:
+  mode: enabled
+  limit: 3
 
 # Merging
-enableSimilarityMerging: true
-entitySimilarityThreshold: 0.9
-observationSimilarityThreshold: 0.7
+merging:
+  enableSimilarityMerging: true
+  entitySimilarityThreshold: 0.9
+  observationSimilarityThreshold: 0.7
 
 # Export
-exportFormat: jsonl
+export:
+  format: jsonl
 
 # Logging
-logLevel: info
-debug: false
+logging:
+  level: info
+  debug: false
 ```
+
+> The config file uses a **nested** shape (the single source of truth is the Zod
+> schema in `src/config/`). CLI flags stay flat (`--chunk-size`). Run `node
+> ./dist/index.js schema` to print the full JSON Schema. Migrating an old flat
+> config? See [docs/MIGRATION.md](./docs/MIGRATION.md).
 
 Then run:
 
@@ -158,20 +172,24 @@ input: ./claude-chats-export
 filter:
   - "**/*.json"
 output: knowledge-graph.jsonl
-exportFormat: jsonl
+export:
+  format: jsonl
 
 # Generation on OpenRouter (host = base URL)
-provider: openai
-host: https://openrouter.ai/api/v1
-apiKey: sk-or-...            # or set $OPENAI_API_KEY / $KG_API_KEY instead
-model: google/gemma-3-27b-it
+llm:
+  provider: openai
+  host: https://openrouter.ai/api/v1
+  apiKey: sk-or-...            # or set $OPENAI_API_KEY / $KG_API_KEY instead
+  model: google/gemma-3-27b-it
 
 # Embeddings stay local & free
-embeddingsProvider: ollama
-embeddingsModel: mxbai-embed-large:335m
+embeddings:
+  provider: ollama
+  model: mxbai-embed-large:335m
 
 # Resumable: writes <output>.checkpoint.jsonl; re-run the same command to continue
-resume: true
+resume:
+  enabled: true
 ```
 
 ```bash
@@ -181,9 +199,9 @@ npx ts-node ./src/index.ts --config config.yaml
 # If the run dies mid-way, just run it again — finished chunks are skipped.
 ```
 
-### Document Outline (`outline`, config-only)
+### Document Outline (`readers.outline`, config-only)
 
-Each file's structural outline is generated and injected into the prompt as extra context. Tune or disable it via a nested `outline:` group in `config.yaml` (no CLI flags, like `dotOptions`):
+Each file's structural outline is generated and injected into the prompt as extra context. Tune or disable it via the nested `readers.outline:` group in `config.yaml` (no CLI flags, like `export.dot`):
 
 | Key | Default | Description |
 | --- | ------- | ----------- |
@@ -194,9 +212,10 @@ Each file's structural outline is generated and injected into the prompt as extr
 | `includeComments` | `false` | Include comments / docstrings |
 
 ```yaml
-outline:
-  enabled: true
-  maxDepth: 3
+readers:
+  outline:
+    enabled: true
+    maxDepth: 3
 ```
 
 ### Watch Mode
@@ -303,12 +322,13 @@ Embeddings (used for dedup and context retrieval) are configured independently f
 | ------ | ------- | ----------- |
 | `--json-strategy <mode>` | `structural` | `structural` (compact + split on JSON structure) or `raw` (compact + plain text split) |
 
-Chunk size for the JSON reader can be set per-reader in `config.yaml` (defaults to the global `chunkSize`):
+Chunk size for the JSON reader can be set per-reader in `config.yaml` (defaults to the global `chunking.size`):
 
 ```yaml
-jsonReader:
-  strategy: structural
-  maxChunkSize: 8000
+readers:
+  json:
+    strategy: structural
+    maxChunkSize: 8000
 ```
 
 ### Context Retrieval
@@ -334,7 +354,7 @@ jsonReader:
 | `--export-format <format>` | `json` | `json\|jsonl\|mcp-jsonl\|dot\|kblam\|lora\|graphiti` |
 | `--export-only` | `false` | Convert an existing knowledge-graph JSON file (`--input`) to `--export-format`, written to `--output` — no extraction. Handy for producing `kblam`/`lora`/`graphiti`/`mcp-jsonl` from a graph you already built |
 
-> DOT styling (`dotOptions`) is configured in YAML only — see [GraphViz DOT](#graphviz-dot---export-format-dot).
+> DOT styling (`export.dot`) is configured in YAML only — see [GraphViz DOT](#graphviz-dot---export-format-dot).
 
 ```bash
 # Re-export an existing graph to KBLaM training triples (no LLM calls)
@@ -355,7 +375,8 @@ Each extracted observation is scored against its source chunk (keyword overlap);
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
-| `--corpus-profiling <mode>` | `disabled` | `disabled` · `enabled` — run a pre-pass that counts term frequency, classifies once (cached), and asks the LLM for a corpus-specific glossary (canonical entity names/types/relation types) injected as soft naming hints |
+| `--corpus-profiling <mode>` | `disabled` | `disabled` · `enabled` — run a pre-pass that counts term frequency, classifies once (cached), and asks the LLM for a corpus-specific glossary (canonical entity names/types/relation types). Under v5 the glossary is **authoritative**: its types/predicates become the closed extraction vocabularies |
+| `--prompt-version <version>` | `v5` | Prompt template set under `templates/` (`v5` = closed-vocabulary + topology-hygiene default; `v4.5` = legacy). Also settable via config `promptVersion` |
 | `--corpus-top-terms <n>` | `100` | Number of most-frequent terms fed to the glossary call |
 | `--corpus-profile-path <path>` | `<output>.corpus-profile.json` | Cached profile sidecar path (reused on re-run when the corpus + model are unchanged) |
 
@@ -461,9 +482,9 @@ npx ts-node ./src/index.ts -i ./src --export-format dot -o graph.dot
 dot -Tsvg graph.dot -o graph.svg          # or: neato/fdp/sfdp/circo/twopi
 ```
 
-#### DOT styling options (`dotOptions`)
+#### DOT styling options (`export.dot`)
 
-These are **config-only** (nested under `dotOptions:` in `config.yaml`; there are no CLI flags for them). All keys are optional — defaults are shown below.
+These are **config-only** (nested under `export.dot:` in `config.yaml`; there are no CLI flags for them). All keys are optional — defaults are shown below.
 
 | Key | Default | Values / Description |
 | --- | ------- | -------------------- |
@@ -480,15 +501,16 @@ These are **config-only** (nested under `dotOptions:` in `config.yaml`; there ar
 
 ```yaml
 # config.yaml
-exportFormat: dot
-dotOptions:
-  layout: dot
-  rankdir: LR
-  colorScheme: code
-  includeObservations: true
-  maxObservationsPerNode: 5
-  clusterByFile: true
-  showLegend: true
+export:
+  format: dot
+  dot:
+    layout: dot
+    rankdir: LR
+    colorScheme: code
+    includeObservations: true
+    maxObservationsPerNode: 5
+    clusterByFile: true
+    showLegend: true
 ```
 
 ### KBLaM Triples (`--export-format kblam`)

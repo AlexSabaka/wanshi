@@ -138,11 +138,17 @@ plus `createdAt`. Read sites use the `obsText()` / `normalizeObservations()` hel
 tolerate legacy bare-string data; **MCP export downgrades to bare strings** so the memory
 server stays compatible.
 
-**`entityType` enum (per-domain).** When a content class is detected,
-`KnowledgeGraphBuilder.buildGraphSchema(allowedTypes)` constrains `entityType` to a Zod
-**enum** = that domain's `primaryEntityTypes` (from `NER_DOMAIN_EXAMPLES`) + generic types +
-an `other` escape hatch; with no class detected it stays a free string. The schema is built
-per chunk from the chunk's classification.
+**Closed-vocabulary enums (entityType + relationType).**
+`KnowledgeGraphBuilder.buildGraphSchema(allowedTypes, allowedRelationTypes)` constrains
+**both** fields to Zod **enums** (v5): `entityType` = domain `primaryEntityTypes` ∪ corpus
+glossary `entityTypes` ∪ `BASE_ENTITY_TYPES` ∪ `other`; `relationType` = glossary
+`relationTypes` ∪ `BASE_RELATION_TYPES` ∪ `related_to`. The vocabularies are **always
+closed** — `resolveAllowedTypes`/`resolveAllowedRelationTypes` fall back to the base sets
+even with no class and no glossary, so a one-off type/predicate can't be invented. The
+escapes (`other`, `related_to`) prevent validation-failure recall loss;
+`KnowledgeMerger.logVocabularyFit` logs the catch-all fraction (Dove's guardrail — a high
+`related_to` % means the closed set is too tight). The `BASE_*` constants mirror the
+`{{else}}` base lists in `templates/v5/system.hbs` (keep them in sync).
 
 **Inline grounding gate (`--grounding`).** After each chunk is extracted,
 `KnowledgeGraphBuilder.applyGroundingGate()` scores every observation against its source
@@ -166,6 +172,25 @@ interface KnowledgeGraph {
 ```
 
 ## Architecture Patterns
+
+### 0. Configuration (single source of truth)
+
+`src/config/schema.ts` is the **one** definition of the config: a nested Zod
+`ConfigSchema` from which everything derives — the `ProcessingOptions` type
+(`z.infer`, re-exported through `src/types/ProcessingOptions.ts`), runtime
+validation + **all defaults** (`parseConfig`), and the JSON Schema served to the
+frontend (`configJsonSchema` / the `kg-gen schema` command). The shape is
+**nested** (`llm`, `embeddings`, `chunking`, `retrieval`, `merging`, `grounding`,
+`corpus`, `classifier`, `readers`, `export`, `resume`, `logging`, `runtime`; with
+`input`/`filter`/`exclude`/`output`/`description` top-level). Config files use
+this nested shape — a legacy flat key errors with a migration hint (`src/config/
+legacyHints.ts`, docs/MIGRATION.md). **CLI flags stay flat** and ergonomic; `cli/
+optionsToConfig.ts` (`FLAG_TO_PATH`) maps them onto nested paths, merged as
+**defaults < file < CLI < env** then validated once. Defaults live **only** in the
+schema — don't add `?? fallback`s in services or `.option()` defaults in the CLI.
+Adding a config field = add it to the schema (+ `FLAG_TO_PATH` for a CLI flag,
+`legacyHints` if it had a flat name, `ui.ts` for the form). Tests build configs
+via `makeConfig(partial)` (helpers), not hand-rolled flat objects.
 
 ### 1. Dependency Injection
 
@@ -206,7 +231,11 @@ Formats: `json` · `jsonl` · `mcp-jsonl` (memory-server compatible) · `dot` ·
 
 ### 5. Prompt Versioning
 
-Templates live in `src/core/llm/prompts/templates/` (`v1`–`v4` plus `v4.5`). Default is **v4.5** (set in `PromptManager.ts`); v5 was removed. Each version has `system.hbs` and `user.hbs` with Handlebars syntax. Partials live in `templates/partials/` and domain examples in `partials/examples/`.
+Templates live in `src/core/llm/prompts/templates/` (`v1`–`v4`, `v4.5`, `v5`). Default is **v5** (set in `PromptManager.ts`); select another with `--prompt-version` / config `promptVersion` (e.g. `v4.5` for the legacy prompts). Each version has `system.hbs` and `user.hbs` (Handlebars; engine compiles with `noEscape: true`, so `{{var}}` is safe for code/JSON). Partials live in `templates/partials/` and domain examples in `partials/examples/`.
+
+**v5** is the "closed-vocabulary + topology-hygiene" rewrite (the prompt-side mirror of the Zod enums): the system prompt declares the controlled entity/relation vocabularies (overridden by the corpus glossary's `entityTypeVocabulary`/`relationTypeVocabulary` when present, else a base set) and the relation-topology rules (one canonical predicate per edge, no self-loops, consistent direction, no type-pair predicates); the corpus glossary is promoted from a soft hint to **authoritative**. `${pwd}`/`${filter}` (a latent no-interpolation bug in ≤v4.5) are `{{inputDirectory}}`/`{{filter}}` in v5. The `partials/examples/*.md` were rewritten to stop teaching sprawl (`EXAMPLE_STYLE_GUIDE.md` is the spec: one-element `relationType`, reused lowercase types, literals-as-observations, no self-loops) — these are **shared across versions**, so they improve v4.5 too.
+
+Glossary generation also has v5 templates: `templates/v5/glossary/{system,user}.hbs`, rendered by `PromptManager.getGlossaryPrompt()` (injected into `CorpusAnalyzer`); falls back to the inline `FALLBACK_GLOSSARY_SYSTEM` string when the active version ships no glossary template (e.g. v4.5).
 
 ### 6. Classifier → Prompt Routing (two-part system)
 
@@ -305,14 +334,16 @@ Before extraction, `CorpusAnalyzer` (`src/core/corpus/`) builds a corpus-global
 counts term frequency (`countTerms`, pure — lowercased content words + capitalized
 multiword proper-noun runs, stopword/number/short dropped), runs content classification
 **once** (cached in `perFileClasses`, reused by `FileProcessor` so the classifier isn't
-re-run per file), then makes **one** `ILLMProvider.generateStructured` call returning a
-`CorpusGlossary {entityNames, entityTypes, relationTypes}`. The glossary is threaded
-explicitly (`DirectoryProcessor` → `KnowledgeGraphBuilder.build(…, glossary)`) and injected
-as a **soft hint**: a `{{corpusGlossary}}` block in `user.hbs` ("prefer these canonical
-forms, don't force-fit") plus a union of `glossary.entityTypes` into the `resolveAllowedTypes`
-entityType enum (names are never enum'd, so new entities are still discovered). The aim is
-consistent entity *naming* up front, complementing the downstream Jaro-Winkler/embedding
-merge. Cached by a key over (sorted relpaths + model + topN + classifier); a stale key
+re-run per file), then makes **one** `ILLMProvider.generateStructured` call (rendered from
+the `v5/glossary` templates) returning a `CorpusGlossary {entityNames, entityTypes,
+relationTypes}`. Under v5 the glossary is **authoritative**, threaded two ways: (1)
+`glossary.entityTypes`/`relationTypes` become the closed `entityTypeVocabulary`/
+`relationTypeVocabulary` in the **system** prompt *and* union into the `buildGraphSchema`
+Zod enums (`DirectoryProcessor` → `getSystemPrompt(…, glossary)` and
+`KnowledgeGraphBuilder.build(…, glossary)`); (2) `glossary.entityNames` render as the
+canonical-names block in `user.hbs`. Names are never enum'd, so new entities are still
+discovered; the aim is consistent entity *naming* + a small controlled type/predicate vocab
+up front, complementing the downstream Jaro-Winkler/embedding merge. Cached by a key over (sorted relpaths + model + topN + classifier); a stale key
 rebuilds. Profiling is an enhancement — any failure (e.g. the glossary LLM emitting bad JSON)
 is caught and the run continues without it. Flags: `--corpus-profiling disabled|enabled`,
 `--corpus-top-terms` (100), `--corpus-profile-path`. `corpusClustering` is a v2 stub
@@ -405,9 +436,12 @@ input: /path/to/project
 filter: ["**/*.ts", "**/*.md"]
 exclude: ["**/node_modules/**", "**/dist/**"]
 output: ./kg-output.jsonl
-model: gemma3:4b
-exportFormat: jsonl
-logLevel: debug
+llm:
+  model: gemma3:4b
+export:
+  format: jsonl
+logging:
+  level: debug
 EOF
 
 npx ts-node ./src/index.ts --config config.yaml
@@ -420,19 +454,23 @@ cat > config.yaml << 'EOF'
 input: /path/to/claude-chats-export
 filter: ["**/*.json"]
 output: ./kg-output.jsonl
-exportFormat: jsonl
+export:
+  format: jsonl
 
 # Generation on OpenRouter (host = base URL); key can also come from $OPENAI_API_KEY
-provider: openai
-host: https://openrouter.ai/api/v1
-apiKey: sk-or-...
-model: google/gemma-3-27b-it
+llm:
+  provider: openai
+  host: https://openrouter.ai/api/v1
+  apiKey: sk-or-...
+  model: google/gemma-3-27b-it
 
 # Embeddings stay local & free (default), so dedup/merge costs nothing
-embeddingsProvider: ollama
-embeddingsModel: mxbai-embed-large:335m
+embeddings:
+  provider: ollama
+  model: mxbai-embed-large:335m
 
-resume: true   # writes <output>.checkpoint.jsonl; re-run the same command to continue
+resume:
+  enabled: true   # writes <output>.checkpoint.jsonl; re-run the same command to continue
 EOF
 
 npx ts-node ./src/index.ts --config config.yaml

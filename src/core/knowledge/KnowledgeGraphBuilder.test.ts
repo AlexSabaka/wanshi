@@ -122,6 +122,46 @@ describe("KnowledgeGraphBuilder", () => {
     expect(entityType.options).toEqual(
       expect.arrayContaining(["theorem", "other"])
     );
+    // relationType is now a closed enum unioning glossary predicates + base set +
+    // the "related_to" catch-all
+    const relationType = capturedSchema.shape.relations.element.shape.relationType;
+    expect(relationType.element.options).toEqual(
+      expect.arrayContaining(["assumes", "uses", "related_to"])
+    );
+  });
+
+  it("closes the relationType enum to the base set even with no class or glossary", async () => {
+    let capturedSchema: any;
+    const llmService = {
+      generateStructured: async (_m: any, schema: any) => {
+        capturedSchema = schema;
+        return { entities: [], relations: [] };
+      },
+      getModelCapabilities: async () => [],
+    } as any;
+    const builder = new KnowledgeGraphBuilder(
+      {
+        llmService,
+        promptManager: { getUserPrompt: async () => "u", getSystemPrompt: async () => "s" } as any,
+        model: "m",
+      },
+      stubLogger()
+    );
+
+    const processedFile = {
+      path: "f.txt",
+      content: "x",
+      chunks: [{ content: "c", index: 1, totalChunks: 1, startOffset: 0, endOffset: 1 }],
+    } as any;
+
+    await builder.build(processedFile, "s");
+
+    const entityType = capturedSchema.shape.entities.element.shape.entityType;
+    const relationType = capturedSchema.shape.relations.element.shape.relationType;
+    expect(entityType.options).toEqual(expect.arrayContaining(["function", "other"]));
+    expect(relationType.element.options).toEqual(
+      expect.arrayContaining(["depends_on", "related_to"])
+    );
   });
 
   const SOURCE =

@@ -1,4 +1,4 @@
-import { KnowledgeGraph, Entity, Relation, ProcessingOptions, IEmbeddingProvider, Observation, obsText } from "../../../types";
+import { KnowledgeGraph, Entity, Relation, IEmbeddingProvider, Observation, obsText } from "../../../types";
 import { jaroWinklerSimilarity , cosineSimilarity } from "../../../shared/utils";
 import { Logger } from "../../../shared";
 
@@ -9,6 +9,19 @@ const DefaultObservationThreshold = 0.7;
 /** Provenance identity used to keep distinct sources/speakers un-merged. */
 function provenanceKey(o: Observation): string {
   return `${o.source ?? ""}␟${o.speaker ?? ""}`;
+}
+
+/**
+ * Canonicalize a relation's `relationType` array so semantically identical edges
+ * collapse on merge: trim → lowercase → de-dupe → sort. This makes the compound
+ * predicate order-insensitive, so `["uses","calls"]` and `["calls","uses"]` (the
+ * "reversed-twin" class that bloats the predicate vocabulary) map to one key.
+ * Pure — exported for tests.
+ */
+export function canonicalizeRelationType(types: string[]): string[] {
+  return Array.from(
+    new Set((types ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean))
+  ).sort();
 }
 
 /**
@@ -111,9 +124,15 @@ function findSimilarEntity(
   return bestMatch;
 }
 
+/** Thresholds the hierarchical merge needs (narrow slice of the merging config). */
+export interface MergeThresholds {
+  entitySimilarityThreshold?: number;
+  observationSimilarityThreshold?: number;
+}
+
 export async function mergeKnowledgeGraphs(
   graphs: KnowledgeGraph[],
-  options: Partial<ProcessingOptions>,
+  options: MergeThresholds,
   embeddingService: IEmbeddingProvider,
   logger: Logger,
 ): Promise<KnowledgeGraph> {
@@ -179,14 +198,41 @@ export async function mergeKnowledgeGraphs(
     `Hierarchical merge complete: ${finalResult.entities.length} entities, ${finalResult.relations.length} relations`
   );
 
+  logVocabularyFit(finalResult, logger);
+
   return finalResult;
+}
+
+/**
+ * Closed-vocabulary fit metric (Dove's guardrail for the v5 enums): how often the
+ * model fell back to a catch-all instead of a specific type/predicate. A high
+ * relation `related_to` fraction (north of ~15–20%) suggests the closed predicate
+ * set is too tight for this corpus, not that the corpus is weird.
+ */
+function logVocabularyFit(graph: KnowledgeGraph, logger: Logger): void {
+  const rels = graph.relations;
+  const ents = graph.entities;
+  if (rels.length === 0 && ents.length === 0) return;
+
+  const relCatchAll = rels.filter((r) => {
+    const types = Array.isArray(r.relationType) ? r.relationType : [r.relationType];
+    return types.length > 0 && types.every((t) => t === "related_to");
+  }).length;
+  const entCatchAll = ents.filter((e) => e.entityType === "other").length;
+
+  const relPct = rels.length ? ((100 * relCatchAll) / rels.length).toFixed(1) : "0.0";
+  const entPct = ents.length ? ((100 * entCatchAll) / ents.length).toFixed(1) : "0.0";
+  logger?.info(
+    `Vocabulary fit: ${relCatchAll}/${rels.length} relations → 'related_to' (${relPct}%), ` +
+      `${entCatchAll}/${ents.length} entities → 'other' (${entPct}%)`
+  );
 }
 
 // Merge entities within a single file using stricter similarity
 async function mergeWithinFile(
   fileGraphs: KnowledgeGraph[],
   fileName: string,
-  options: Partial<ProcessingOptions>,
+  options: MergeThresholds,
   embeddingService: IEmbeddingProvider,
   logger: Logger,
 ): Promise<KnowledgeGraph> {
@@ -277,18 +323,17 @@ async function mergeWithinFile(
           withinFileSimilarityThreshold
         ) || relation.to;
 
+      // Drop self-loops (X→X): an extraction artifact, and merging names can also
+      // create one when both endpoints collapse to the same entity.
+      if (fromEntity === toEntity) continue;
+
       // Only keep relations where both entities exist in the file's merged graph
       if (entityMap.has(fromEntity) && entityMap.has(toEntity)) {
-        const relationKey = `${fromEntity}->${toEntity}:${JSON.stringify(
-          relation.relationType
-        )}`;
+        const relationType = canonicalizeRelationType(relation.relationType);
+        const relationKey = `${fromEntity}->${toEntity}:${relationType.join(",")}`;
         if (!relationSet.has(relationKey)) {
           relationSet.add(relationKey);
-          relations.push({
-            from: fromEntity,
-            to: toEntity,
-            relationType: relation.relationType,
-          });
+          relations.push({ from: fromEntity, to: toEntity, relationType });
         }
       }
     }
@@ -303,7 +348,7 @@ async function mergeWithinFile(
 // Global merge across different files using more relaxed similarity
 async function mergeGlobally(
   fileGraphs: KnowledgeGraph[],
-  options: Partial<ProcessingOptions>,
+  options: MergeThresholds,
   embeddingService: IEmbeddingProvider,
   logger: Logger,
 ): Promise<KnowledgeGraph> {
@@ -408,18 +453,17 @@ async function mergeGlobally(
         findSimilarEntity(relation.to, entityMap, globalSimilarityThreshold || DefaultSimilarityThreshold) ||
         relation.to;
 
+      // Drop self-loops (X→X): an extraction artifact, and cross-file name
+      // mapping can also collapse both endpoints onto the same entity.
+      if (fromEntity === toEntity) continue;
+
       // Only keep relations where both entities exist in final graph
       if (entityMap.has(fromEntity) && entityMap.has(toEntity)) {
-        const relationKey = `${fromEntity}->${toEntity}:${JSON.stringify(
-          relation.relationType
-        )}`;
+        const relationType = canonicalizeRelationType(relation.relationType);
+        const relationKey = `${fromEntity}->${toEntity}:${relationType.join(",")}`;
         if (!relationSet.has(relationKey)) {
           relationSet.add(relationKey);
-          relations.push({
-            from: fromEntity,
-            to: toEntity,
-            relationType: relation.relationType,
-          });
+          relations.push({ from: fromEntity, to: toEntity, relationType });
         }
       }
     }

@@ -1,0 +1,55 @@
+## File information
+
+{{#if filePath}}Path: `{{filePath}}`{{/if}}
+{{#if totalChunks}}Chunk {{chunkIndex}} of {{totalChunks}}{{/if}}
+
+{{#if metadata}}
+## File metadata
+
+```
+{{metadata}}
+```
+{{/if}}
+
+{{#if fileOutline}}
+## Document outline
+
+```
+{{fileOutline}}
+```
+{{/if}}
+
+{{#if corpusGlossary}}
+## Corpus vocabulary (authoritative)
+
+These entity names, types, and relation predicates have already been established
+across this corpus. Reuse them exactly. When something you find matches one of
+these, use the established spelling and type rather than coining your own.
+
+{{corpusGlossary}}
+{{/if}}
+
+{{#if retrievedEntities}}
+## Already extracted (do not re-emit)
+
+These entities exist from other files. Do **not** copy them into your output. You
+may extend them only by emitting an entity with the *same canonical name* carrying
+a genuinely new observation from this file; otherwise leave them out and just point
+relations at them by name.
+
+{{#each retrievedEntities}}
+- **{{name}}** ({{entityType}}): {{truncate (join observations "; ") 200}}
+{{/each}}
+{{/if}}
+
+{{#if domainHints}}
+## Domain context
+
+{{domainHints}}
+{{/if}}
+
+## Content to analyze
+
+```
+{{#if chunkContent}}{{chunkContent}}{{else}}{{fileContent}}{{/if}}
+```

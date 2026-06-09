@@ -3,7 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import { DirectoryProcessor } from "./DirectoryProcessor";
 import { DIContainer, TYPES } from "./di";
-import { stubLogger } from "../__tests__/helpers";
+import { stubLogger, makeConfig } from "../__tests__/helpers";
 
 describe("DirectoryProcessor — double-count regression", () => {
   let tmp: string;
@@ -36,10 +36,10 @@ describe("DirectoryProcessor — double-count regression", () => {
     const dp = new DirectoryProcessor(container);
     // No files this run; the prior graph must be used for retrieval only, never
     // merged. So the returned merge set is empty (would contain "OLD" before fix).
-    const result = await dp.processFiles([], {
-      output,
-      retrieval: "disabled",
-    } as any);
+    const result = await dp.processFiles(
+      [],
+      makeConfig({ output, retrieval: { mode: "disabled" } })
+    );
 
     expect(result).toEqual([]);
   });

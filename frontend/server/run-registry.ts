@@ -5,7 +5,8 @@ import { randomUUID } from "node:crypto"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { buildKgConfig, type RunRequest } from "@/lib/kg-options"
+import { buildKgConfig, type KgGenConfig } from "@/lib/kg-options"
+import { getPath, setPath } from "@/lib/config-schema"
 import { getStoredRun, listStoredRuns, recordRun } from "@/server/run-store"
 import type {
   LogLine,
@@ -27,12 +28,16 @@ export interface RunRecord {
   child: ChildProcess
   bus: EventEmitter
   sigintSent: boolean
-  /** Original request — the full config, kept so the run can be re-run/resumed. */
-  req: RunRequest
-  /** Extra config fields imported from YAML and passed through to the CLI. */
-  passthrough?: Record<string, unknown>
+  /** Original nested config, kept so the run can be re-run/resumed. */
+  req: KgGenConfig
   /** Absolute output path the CLI was told to write (graph source). */
   resolvedOutput: string
+}
+
+/** Read a string field from a nested config by dotted path (display helpers). */
+function cfgStr(config: KgGenConfig, path: string): string | undefined {
+  const v = getPath(config, path)
+  return typeof v === "string" ? v : undefined
 }
 
 // Survive Next dev hot-reload: a fresh module instance would orphan running
@@ -90,26 +95,25 @@ export function listRuns(): RunSummary[] {
     .sort((a, b) => b.startedAt - a.startedAt)
 }
 
+/** A nested config as the flat display fields the runs list shows. */
+function configToListItem(summary: RunSummary, config: KgGenConfig): RunListItem {
+  return {
+    ...summary,
+    input: cfgStr(config, "input"),
+    model: cfgStr(config, "llm.model"),
+    provider: cfgStr(config, "llm.provider"),
+    exportFormat: cfgStr(config, "export.format"),
+  }
+}
+
 /** A registry record as a config-enriched list item. */
 function toListItem(record: RunRecord): RunListItem {
-  return {
-    ...record.summary,
-    input: record.req.input,
-    model: record.req.model,
-    provider: record.req.provider,
-    exportFormat: record.req.exportFormat,
-  }
+  return configToListItem(record.summary, record.req)
 }
 
 /** A persisted run as a config-enriched list item. */
 function storedToListItem(stored: StoredRun): RunListItem {
-  return {
-    ...stored.summary,
-    input: stored.config.input,
-    model: stored.config.model,
-    provider: stored.config.provider,
-    exportFormat: stored.config.exportFormat,
-  }
+  return configToListItem(stored.summary, stored.config)
 }
 
 /**
@@ -137,17 +141,17 @@ export function getRunOutput(id: string): string | undefined {
   return getStoredRun(id)?.summary.output
 }
 
-/** The full config (+ passthrough) needed to re-run or re-export a past run. */
+/** The full config needed to re-run or re-export a past run. */
 export function getRunConfig(
   id: string
-): { config: RunRequest; passthrough?: Record<string, unknown>; output?: string } | undefined {
+): { config: KgGenConfig; output?: string } | undefined {
   const record = runs.get(id)
   if (record) {
-    return { config: record.req, passthrough: record.passthrough, output: record.resolvedOutput }
+    return { config: record.req, output: record.resolvedOutput }
   }
   const stored = getStoredRun(id)
   if (stored) {
-    return { config: stored.config, passthrough: stored.passthrough, output: stored.summary.output }
+    return { config: stored.config, output: stored.summary.output }
   }
   return undefined
 }
@@ -167,22 +171,21 @@ export function rerunRun(id: string, mode: RerunMode): RunSummary | undefined {
       // a missing/locked checkpoint must not block a restart
     }
   }
-  return startRun(found.config, found.passthrough)
+  return startRun(found.config)
 }
 
-export function startRun(
-  req: RunRequest,
-  passthrough?: Record<string, unknown>
-): RunSummary {
+export function startRun(req: KgGenConfig): RunSummary {
   const id = randomUUID().slice(0, 8)
 
   // The CLI runs with cwd = repo root, so a *relative* output (the form default
   // is "knowledge-graph.json") — and its "<output>.checkpoint.jsonl" sidecar —
   // would land in the kg-gen project root. Resolve it to an absolute path next
   // to the input directory instead, where a project's graph is expected to live.
-  const config = buildKgConfig(req, passthrough)
-  const resolvedOutput = resolveOutputPath(req.input, req.output)
-  config.output = resolvedOutput
+  const config = buildKgConfig(req)
+  const input = cfgStr(config, "input") ?? "."
+  const output = cfgStr(config, "output") ?? "knowledge-graph.json"
+  const resolvedOutput = resolveOutputPath(input, output)
+  setPath(config, "output", resolvedOutput)
 
   // Write the request as a temp JSON config; the CLI reads it via --config so
   // array fields (filter/exclude) and nested groups survive intact.
@@ -215,7 +218,6 @@ export function startRun(
     bus: new EventEmitter(),
     sigintSent: false,
     req,
-    passthrough,
     resolvedOutput,
   }
   record.bus.setMaxListeners(0)
@@ -369,6 +371,5 @@ function finalize(record: RunRecord, state: RunState, error?: string): void {
   recordRun({
     summary: record.summary,
     config: record.req,
-    passthrough: record.passthrough,
   })
 }

@@ -8,6 +8,7 @@ import {
   launchCmd,
   repoCwd,
 } from "@/server/run-registry"
+import { getPath } from "@/lib/config-schema"
 import { loadGraph } from "@/server/graph-loader"
 
 export const EXPORT_FORMATS = [
@@ -46,15 +47,18 @@ export async function exportGraph(
     const outPath = path.join(dir, `export.${format}`)
     writeFileSync(srcPath, JSON.stringify(graph))
 
-    // Carry the run's dotOptions / groundingMinScore so dot/lora keep fidelity.
-    const stored = getRunConfig(id)?.passthrough ?? {}
+    // Carry the run's export.dot / grounding.minScore so dot/lora keep fidelity.
+    const stored = getRunConfig(id)?.config ?? {}
+    const exportCfg: Record<string, unknown> = { format }
+    const dot = getPath(stored, "export.dot")
+    if (dot) exportCfg.dot = dot
     const cfg: Record<string, unknown> = {
       input: srcPath,
       output: outPath,
-      exportFormat: format,
+      export: exportCfg,
     }
-    if (stored.dotOptions) cfg.dotOptions = stored.dotOptions
-    if (stored.groundingMinScore != null) cfg.groundingMinScore = stored.groundingMinScore
+    const minScore = getPath(stored, "grounding.minScore")
+    if (minScore != null) cfg.grounding = { minScore }
     const cfgPath = path.join(dir, "config.json")
     writeFileSync(cfgPath, JSON.stringify(cfg))
 

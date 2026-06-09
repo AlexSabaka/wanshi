@@ -2,8 +2,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { CorpusAnalyzer } from "./CorpusAnalyzer";
-import { stubLogger } from "../../__tests__/helpers";
-import { ProcessingOptions } from "../../types";
+import { stubLogger, makeConfig } from "../../__tests__/helpers";
 
 describe("CorpusAnalyzer", () => {
   let tmp: string;
@@ -45,16 +44,15 @@ describe("CorpusAnalyzer", () => {
       getModelCapabilities: async () => [],
     } as any);
 
-  const makeOptions = (over: Partial<ProcessingOptions> = {}): ProcessingOptions =>
-    ({
+  const makeOptions = (over: Record<string, any> = {}) =>
+    makeConfig({
       input: "/corpus",
       output: path.join(tmp, "kg.json"),
-      model: "m1",
-      classifier: "llm",
-      corpusProfiling: "enabled",
-      corpusTopTerms: 50,
+      llm: { model: "m1" },
+      classifier: { mode: "llm" },
+      corpus: { profiling: "enabled", topTerms: 50 },
       ...over,
-    } as any);
+    });
 
   it("builds a profile: top terms, aggregated class, cached per-file classes, glossary", async () => {
     const calls = { n: 0 };
@@ -110,8 +108,8 @@ describe("CorpusAnalyzer", () => {
       stubLogger()
     );
 
-    await analyzer.analyzeOrLoad(files, makeOptions({ model: "m1" }));
-    await analyzer.analyzeOrLoad(files, makeOptions({ model: "m2" }));
+    await analyzer.analyzeOrLoad(files, makeOptions({ llm: { model: "m1" } }));
+    await analyzer.analyzeOrLoad(files, makeOptions({ llm: { model: "m2" } }));
     expect(calls.n).toBe(2);
   });
 });

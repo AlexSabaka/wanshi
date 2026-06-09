@@ -6,6 +6,7 @@ import {
   CorpusProfile,
   ICorpusAnalyzer,
   ILLMProvider,
+  IPromptManager,
   LLMMessage,
   ProcessingOptions,
   TermCount,
@@ -19,6 +20,16 @@ import { toRelPathId } from "./relPath";
 
 /** Per-file text read for the pre-pass is capped to bound frequency + classifier cost. */
 const PER_FILE_CHAR_CAP = 16_000;
+
+/** Inline glossary system prompt, used when no versioned template is available. */
+const FALLBACK_GLOSSARY_SYSTEM =
+  "You design a controlled vocabulary (glossary) for knowledge-graph extraction " +
+  "over a document corpus. Given the dominant content type and the most frequent " +
+  "terms, propose: (1) canonical ENTITY NAMES — the real recurring proper nouns / " +
+  "key concepts, each normalized to ONE canonical spelling so extraction stays " +
+  "consistent; (2) ENTITY TYPES appropriate to this corpus; (3) RELATION TYPES " +
+  "appropriate to this corpus. Prefer terms that actually appear. Be concise — a " +
+  "few dozen names at most. Return JSON only.";
 
 const GlossarySchema = z.object({
   entityNames: z.array(z.string()).describe("Canonical entity names recurring in this corpus"),
@@ -37,7 +48,8 @@ export class CorpusAnalyzer implements ICorpusAnalyzer {
     private readonly llm: ILLMProvider,
     private readonly classifier: IContentClassifier | undefined,
     private readonly readerFactory: FileReaderFactory,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly promptManager?: IPromptManager
   ) {}
 
   async analyzeOrLoad(
@@ -45,9 +57,9 @@ export class CorpusAnalyzer implements ICorpusAnalyzer {
     options: ProcessingOptions
   ): Promise<CorpusProfile> {
     const inputRoot = options.input ?? "";
-    const topN = Number(options.corpusTopTerms) || 100;
+    const topN = options.corpus.topTerms;
     const profilePath =
-      options.corpusProfilePath || `${options.output}.corpus-profile.json`;
+      options.corpus.profilePath || `${options.output}.corpus-profile.json`;
     const store = new CorpusProfileStore(profilePath, this.logger);
     const key = this.computeKey(files, inputRoot, options, topN);
 
@@ -63,7 +75,7 @@ export class CorpusAnalyzer implements ICorpusAnalyzer {
         `Corpus profile at ${profilePath} is stale (corpus/model changed); rebuilding`
       );
     }
-    if (options.corpusClustering) {
+    if (options.corpus.clustering) {
       this.logger.info(
         "corpusClustering is not implemented yet (deferred to a follow-up); ignoring the flag"
       );
@@ -142,7 +154,7 @@ export class CorpusAnalyzer implements ICorpusAnalyzer {
     const rels = files.map((f) => toRelPathId(inputRoot, f)).sort();
     const hash = crypto.createHash("sha1");
     hash.update(
-      `${options.model} ${topN} ${options.classifier} ${rels.length}\n${rels.join("\n")}`
+      `${options.llm.model} ${topN} ${options.classifier.mode} ${rels.length}\n${rels.join("\n")}`
     );
     return hash.digest("hex");
   }
@@ -167,18 +179,19 @@ export class CorpusAnalyzer implements ICorpusAnalyzer {
       .map((t, i) => `--- sample ${i + 1} ---\n${t.slice(0, 600)}`)
       .join("\n\n");
 
-    const system =
-      "You design a controlled vocabulary (glossary) for knowledge-graph extraction " +
-      "over a document corpus. Given the dominant content type and the most frequent " +
-      "terms, propose: (1) canonical ENTITY NAMES — the real recurring proper nouns / " +
-      "key concepts, each normalized to ONE canonical spelling so extraction stays " +
-      "consistent; (2) ENTITY TYPES appropriate to this corpus; (3) RELATION TYPES " +
-      "appropriate to this corpus. Prefer terms that actually appear. Be concise — a " +
-      "few dozen names at most. Return JSON only.";
+    // Prefer the versioned glossary templates (v5); fall back to inline strings
+    // when the current prompt version ships none (e.g. v4.5) or rendering fails.
+    const rendered = await this.promptManager?.getGlossaryPrompt({
+      classLine,
+      termList,
+      snippets,
+    });
+    const system = rendered?.system ?? FALLBACK_GLOSSARY_SYSTEM;
     const user =
+      rendered?.user ??
       `Corpus content type: ${classLine}\n\n` +
-      `Most frequent terms (with counts):\n${termList}\n\n` +
-      `Representative snippets:\n${snippets}`;
+        `Most frequent terms (with counts):\n${termList}\n\n` +
+        `Representative snippets:\n${snippets}`;
 
     const messages: LLMMessage[] = [
       { role: "system", content: system },

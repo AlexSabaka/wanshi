@@ -138,6 +138,11 @@ temp/
 kg_tests/
 data/
 examples/
+# The bare `examples/` rule above is for the repo-root sample-integrations dir, but it
+# also matches the prompt example partials, which are source (gold extraction examples).
+# Re-include them.
+!src/core/llm/prompts/templates/partials/examples/
+!src/core/llm/prompts/templates/partials/examples/**
 output/
 test_configs/
 doc-classifier/

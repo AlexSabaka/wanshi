@@ -1,4 +1,11 @@
-import type { RunRequest } from "@/lib/kg-options"
+/**
+ * The config form is driven entirely by the backend schema — there is no
+ * hardcoded option list here anymore. `kg-gen schema` (served via
+ * `/api/config-schema`) returns the JSON Schema + UI group metadata; this module
+ * adapts that payload into the form's `ConfigGroup`/`ConfigField` shapes and
+ * converts between the flat form values (keyed by nested dotted path, e.g.
+ * `llm.model`) and the nested config object the CLI consumes.
+ */
 
 /** Form value as stored in the flat `values` record. */
 export type FieldValue = string | boolean
@@ -15,7 +22,7 @@ export type FieldType =
   | "host"
 
 export interface ConfigField {
-  /** Dotted for nested groups, e.g. "dotOptions.layout". */
+  /** Nested dotted path into the config, e.g. "llm.model". */
   key: string
   label: string
   type: FieldType
@@ -24,7 +31,7 @@ export interface ConfigField {
   placeholder?: string
   help?: string
   required?: boolean
-  /** For "model"/"host" fields: sibling keys the picker/credential UI reads. */
+  /** For "model"/"host" fields: sibling paths the picker/credential UI reads. */
   providerKey?: string
   hostKey?: string
   apiKeyKey?: string
@@ -38,204 +45,166 @@ export interface ConfigGroup {
   fields: ConfigField[]
 }
 
-/** Fields that map onto the typed RunRequest core; everything else is passthrough. */
-export const CORE_KEYS = new Set([
-  "input",
-  "filter",
-  "exclude",
-  "provider",
-  "model",
-  "host",
-  "apiKey",
-  "output",
-  "exportFormat",
-  "chunkSize",
-])
+// ── backend payload shapes (from `kg-gen schema --json`) ────────────────────
 
-/** Path fields resolved to absolute on import (NOT `system` — it may be prompt text). */
-export const PATH_KEYS = ["input", "output", "logFile", "checkpointPath"]
+interface JsonSchemaNode {
+  type?: string | string[]
+  enum?: string[]
+  default?: unknown
+  description?: string
+  properties?: Record<string, JsonSchemaNode>
+  items?: JsonSchemaNode
+}
 
-/** Keys the frontend controls itself — never imported or sent. */
-const CONTROLLED = new Set(["resume", "progressNdjson", "config", "watch", "exportOnly"])
+interface SchemaFieldMeta {
+  path: string
+  label: string
+  widget: FieldType
+  placeholder?: string
+  required?: boolean
+  core?: boolean
+  pathLike?: boolean
+  controlled?: boolean
+  providerPath?: string
+  hostPath?: string
+  apiKeyPath?: string
+}
 
-export const CONFIG_GROUPS: ConfigGroup[] = [
-  {
-    id: "input",
-    title: "Input",
-    description: "Directory and file patterns to process.",
-    defaultOpen: true,
-    fields: [
-      { key: "input", label: "Input directory", type: "path", required: true, placeholder: "/path/to/project" },
-      { key: "filter", label: "Include patterns (one per line)", type: "lines", default: "**/*", required: true },
-      { key: "exclude", label: "Exclude patterns (one per line)", type: "lines", default: "**/node_modules/**\n**/.git/**" },
-      { key: "description", label: "Description", type: "text", placeholder: "short description for the LLM" },
-    ],
-  },
-  {
-    id: "generation",
-    title: "Generation",
-    description: "LLM provider and sampling.",
-    defaultOpen: true,
-    fields: [
-      { key: "provider", label: "Provider", type: "select", options: ["ollama", "openai"], default: "ollama" },
-      { key: "model", label: "Model", type: "model", default: "llama3.2", required: true, providerKey: "provider", hostKey: "host", apiKeyKey: "apiKey" },
-      { key: "host", label: "Host / base URL", type: "host", default: "http://localhost:11434", apiKeyKey: "apiKey", providerKey: "provider" },
-      { key: "apiKey", label: "API key", type: "password", help: "OpenAI-compatible only; falls back to $OPENAI_API_KEY" },
-      { key: "temperature", label: "Temperature", type: "number", default: "0.1" },
-      { key: "repeatPenalty", label: "Repeat penalty (Ollama)", type: "number", default: "0.3" },
-      { key: "contextLength", label: "Context length (Ollama)", type: "number", default: "8192" },
-      { key: "maxTokens", label: "Max output tokens", type: "number", placeholder: "(provider default)" },
-      { key: "seed", label: "Seed (Ollama)", type: "number", placeholder: "(none)" },
-      { key: "system", label: "System prompt or template path", type: "text" },
-      { key: "promptVersion", label: "Prompt version", type: "text", placeholder: "v4.5" },
-    ],
-  },
-  {
-    id: "output",
-    title: "Output",
-    description: "Where and how to write the graph.",
-    defaultOpen: true,
-    fields: [
-      { key: "output", label: "Output file", type: "path", default: "knowledge-graph.json", required: true },
-      { key: "exportFormat", label: "Export format", type: "select", options: ["json", "jsonl", "mcp-jsonl", "dot", "kblam", "lora", "graphiti"], default: "json" },
-    ],
-  },
-  {
-    id: "embeddings",
-    title: "Embeddings",
-    description: "Independent provider for dedup / retrieval.",
-    fields: [
-      { key: "embeddingsProvider", label: "Provider", type: "select", options: ["ollama", "openai"], default: "ollama" },
-      { key: "embeddingsModel", label: "Model", type: "model", default: "mxbai-embed-large:335m", providerKey: "embeddingsProvider", hostKey: "embeddingsHost", apiKeyKey: "embeddingsApiKey" },
-      { key: "embeddingsHost", label: "Host / base URL", type: "host", default: "http://localhost:11434", apiKeyKey: "embeddingsApiKey", providerKey: "embeddingsProvider" },
-      { key: "embeddingsApiKey", label: "API key", type: "password" },
-      { key: "embeddingsMaxInputChars", label: "Max input chars", type: "number", default: "1024" },
-    ],
-  },
-  {
-    id: "chunking",
-    title: "Text & chunking",
-    fields: [
-      { key: "chunking", label: "Chunking", type: "select", options: ["enabled", "disabled", "auto"], default: "enabled" },
-      { key: "chunkSize", label: "Chunk size (chars)", type: "number", default: "2000" },
-      { key: "overlapSize", label: "Overlap size (chars)", type: "number", default: "100" },
-    ],
-  },
-  {
-    id: "media",
-    title: "Media (images · ASR · documents)",
-    fields: [
-      { key: "images", label: "Images", type: "select", options: ["auto", "enabled", "disabled"], default: "auto" },
-      { key: "asr", label: "Audio (ASR)", type: "select", options: ["enabled", "disabled", "auto"], default: "enabled" },
-      { key: "whisperModel", label: "Whisper model", type: "text", default: "medium" },
-      { key: "language", label: "Language", type: "text", default: "auto" },
-      { key: "translate", label: "Translate to English", type: "boolean", default: false },
-      { key: "docling", label: "Use Docling for PDF/Office", type: "boolean", default: false },
-    ],
-  },
-  {
-    id: "jsonReader",
-    title: "JSON reader",
-    fields: [
-      { key: "jsonReader.strategy", label: "Strategy", type: "select", options: ["structural", "raw"], default: "structural" },
-      { key: "jsonReader.maxChunkSize", label: "Max chunk size", type: "number", placeholder: "(inherits chunk size)" },
-    ],
-  },
-  {
-    id: "classifier",
-    title: "Classifier (experimental)",
-    fields: [
-      { key: "classifier", label: "Classifier", type: "select", options: ["disabled", "heuristic", "llm", "bert"], default: "disabled" },
-    ],
-  },
-  {
-    id: "retrieval",
-    title: "Retrieval",
-    fields: [
-      { key: "retrieval", label: "Retrieval", type: "select", options: ["enabled", "disabled", "auto"], default: "enabled" },
-      { key: "retrievalLimit", label: "Limit", type: "number", default: "3" },
-      { key: "retrievalScope", label: "Scope", type: "select", options: ["chunk", "file"], default: "chunk" },
-    ],
-  },
-  {
-    id: "grounding",
-    title: "Grounding",
-    fields: [
-      { key: "grounding", label: "Grounding gate", type: "select", options: ["disabled", "flag", "drop"], default: "disabled" },
-      { key: "groundingMinScore", label: "Min score", type: "number", default: "0.5" },
-    ],
-  },
-  {
-    id: "merging",
-    title: "Merging",
-    fields: [
-      { key: "entitySimilarityThreshold", label: "Entity similarity threshold", type: "number", default: "0.9" },
-      { key: "observationSimilarityThreshold", label: "Observation similarity threshold", type: "number", default: "0.9" },
-      { key: "enableSimilarityMerging", label: "Enable similarity merging", type: "boolean", default: true },
-    ],
-  },
-  {
-    id: "dot",
-    title: "DOT export options",
-    description: "Used when export format is dot.",
-    fields: [
-      { key: "dotOptions.layout", label: "Layout", type: "select", options: ["dot", "neato", "fdp", "sfdp", "circo", "twopi"], default: "dot" },
-      { key: "dotOptions.rankdir", label: "Rank direction", type: "select", options: ["TB", "BT", "LR", "RL"], default: "TB" },
-      { key: "dotOptions.nodeShape", label: "Node shape", type: "text", default: "box" },
-      { key: "dotOptions.edgeStyle", label: "Edge style", type: "text", default: "solid" },
-      { key: "dotOptions.colorScheme", label: "Color scheme", type: "select", options: ["default", "scientific", "code", "minimal"], default: "default" },
-      { key: "dotOptions.includeObservations", label: "Include observations", type: "boolean", default: true },
-      { key: "dotOptions.maxObservationsPerNode", label: "Max observations / node", type: "number", default: "3" },
-      { key: "dotOptions.clusterByEntityType", label: "Cluster by entity type", type: "boolean", default: false },
-      { key: "dotOptions.clusterByFile", label: "Cluster by file", type: "boolean", default: false },
-      { key: "dotOptions.showLegend", label: "Show legend", type: "boolean", default: true },
-    ],
-  },
-  {
-    id: "outline",
-    title: "Document outline",
-    fields: [
-      { key: "outline.enabled", label: "Enabled", type: "boolean", default: true },
-      { key: "outline.maxDepth", label: "Max depth", type: "number", placeholder: "(no limit)" },
-      { key: "outline.includeLineNumbers", label: "Include line numbers", type: "boolean", default: false },
-      { key: "outline.includePrivate", label: "Include private members", type: "boolean", default: false },
-      { key: "outline.includeComments", label: "Include comments", type: "boolean", default: false },
-    ],
-  },
-  {
-    id: "logging",
-    title: "Logging & checkpoint",
-    fields: [
-      { key: "logLevel", label: "Log level", type: "select", options: ["info", "debug", "warning", "error"], default: "info" },
-      { key: "logFile", label: "Log file", type: "path" },
-      { key: "debug", label: "Debug", type: "boolean", default: false },
-      { key: "silent", label: "Silent", type: "boolean", default: false },
-      { key: "checkpointPath", label: "Checkpoint path", type: "path", placeholder: "<output>.checkpoint.jsonl" },
-    ],
-  },
-]
+interface SchemaGroupMeta {
+  id: string
+  title: string
+  description?: string
+  defaultOpen?: boolean
+  fields: SchemaFieldMeta[]
+}
 
-export const ALL_FIELDS: ConfigField[] = CONFIG_GROUPS.flatMap((g) => g.fields)
+export interface SchemaPayload {
+  jsonSchema: {
+    properties?: Record<string, JsonSchemaNode>
+    definitions?: Record<string, JsonSchemaNode>
+  }
+  groups: SchemaGroupMeta[]
+  controlledPaths: string[]
+}
 
-/** Initial flat values from the metadata defaults. */
-export function buildDefaultValues(): Record<string, FieldValue> {
+// ── JSON Schema navigation ──────────────────────────────────────────────────
+
+/** zod-to-json-schema wraps the schema under definitions.KgGenConfig when named. */
+function rootNode(payload: SchemaPayload): JsonSchemaNode {
+  const js = payload.jsonSchema
+  return (js.definitions?.KgGenConfig as JsonSchemaNode) ?? (js as JsonSchemaNode)
+}
+
+function nodeAt(payload: SchemaPayload, path: string): JsonSchemaNode | undefined {
+  let node: JsonSchemaNode | undefined = rootNode(payload)
+  for (const part of path.split(".")) {
+    node = node?.properties?.[part]
+    if (!node) return undefined
+  }
+  return node
+}
+
+function enumAt(payload: SchemaPayload, path: string): string[] | undefined {
+  return nodeAt(payload, path)?.enum
+}
+
+function defaultAt(payload: SchemaPayload, path: string): unknown {
+  return nodeAt(payload, path)?.default
+}
+
+// ── path helpers ────────────────────────────────────────────────────────────
+
+export function getPath(obj: Record<string, unknown>, path: string): unknown {
+  let node: unknown = obj
+  for (const part of path.split(".")) {
+    if (node == null || typeof node !== "object") return undefined
+    node = (node as Record<string, unknown>)[part]
+  }
+  return node
+}
+
+export function setPath(obj: Record<string, unknown>, path: string, value: unknown): void {
+  const parts = path.split(".")
+  let node = obj
+  for (let i = 0; i < parts.length - 1; i++) {
+    const k = parts[i]
+    if (typeof node[k] !== "object" || node[k] === null) node[k] = {}
+    node = node[k] as Record<string, unknown>
+  }
+  node[parts[parts.length - 1]] = value
+}
+
+// ── adapt payload → form metadata ───────────────────────────────────────────
+
+/** Convert the backend schema payload into the form's group/field metadata. */
+export function adaptGroups(payload: SchemaPayload): ConfigGroup[] {
+  return payload.groups.map((g) => ({
+    id: g.id,
+    title: g.title,
+    description: g.description,
+    defaultOpen: g.defaultOpen,
+    fields: g.fields.map<ConfigField>((f) => ({
+      key: f.path,
+      label: f.label,
+      type: f.widget,
+      options: enumAt(payload, f.path),
+      placeholder: f.placeholder,
+      required: f.required,
+      help: nodeAt(payload, f.path)?.description,
+      providerKey: f.providerPath,
+      hostKey: f.hostPath,
+      apiKeyKey: f.apiKeyPath,
+    })),
+  }))
+}
+
+function allFields(payload: SchemaPayload): SchemaFieldMeta[] {
+  return payload.groups.flatMap((g) => g.fields)
+}
+
+/** Path fields (resolved to absolute on import). */
+export function pathFieldKeys(payload: SchemaPayload): string[] {
+  return allFields(payload)
+    .filter((f) => f.pathLike)
+    .map((f) => f.path)
+}
+
+/** Field paths the run form treats as secrets (never persisted to localStorage). */
+export function secretFieldKeys(payload: SchemaPayload): string[] {
+  return allFields(payload)
+    .filter((f) => f.widget === "password")
+    .map((f) => f.path)
+}
+
+// ── values ⇄ nested config ──────────────────────────────────────────────────
+
+function toFieldValue(widget: FieldType, val: unknown): FieldValue {
+  if (widget === "boolean") return Boolean(val)
+  if (widget === "lines") return Array.isArray(val) ? val.map(String).join("\n") : String(val)
+  return String(val)
+}
+
+/** Initial flat form values from the schema defaults. */
+export function buildDefaultValues(payload: SchemaPayload): Record<string, FieldValue> {
   const values: Record<string, FieldValue> = {}
-  for (const f of ALL_FIELDS) {
-    values[f.key] = f.default ?? (f.type === "boolean" ? false : "")
+  for (const f of allFields(payload)) {
+    const def = defaultAt(payload, f.path)
+    values[f.path] =
+      def != null ? toFieldValue(f.widget, def) : f.widget === "boolean" ? false : ""
   }
   return values
 }
 
 /** Coerce a form value to its real type, or undefined to omit it from the config. */
-function coerce(field: ConfigField, raw: FieldValue | undefined): unknown {
-  if (field.type === "boolean") return Boolean(raw)
+function coerce(widget: FieldType, raw: FieldValue | undefined): unknown {
+  if (widget === "boolean") return Boolean(raw)
   const s = raw == null ? "" : String(raw)
-  if (field.type === "number") {
+  if (widget === "number") {
     if (s.trim() === "") return undefined
     const n = Number(s)
     return Number.isFinite(n) ? n : undefined
   }
-  if (field.type === "lines") {
+  if (widget === "lines") {
     const arr = s.split("\n").map((x) => x.trim()).filter(Boolean)
     return arr.length ? arr : undefined
   }
@@ -243,74 +212,29 @@ function coerce(field: ConfigField, raw: FieldValue | undefined): unknown {
   return t === "" ? undefined : t
 }
 
-/** Convert a parsed YAML/JSON value into the form's flat representation. */
-function toFieldValue(field: ConfigField, val: unknown): FieldValue {
-  if (field.type === "boolean") return Boolean(val)
-  if (field.type === "lines") return Array.isArray(val) ? val.map(String).join("\n") : String(val)
-  return String(val)
-}
-
-/**
- * Flatten a parsed config into the form's flat values (nested groups → dotted
- * keys), plus any unknown top-level keys to pass through untouched.
- */
-export function flattenConfig(parsed: Record<string, unknown>): {
-  values: Record<string, FieldValue>
-  extra: Record<string, unknown>
-} {
-  const values: Record<string, FieldValue> = {}
-  const knownTop = new Set<string>()
-  for (const f of ALL_FIELDS) knownTop.add(f.key.includes(".") ? f.key.split(".")[0] : f.key)
-
-  for (const f of ALL_FIELDS) {
-    let val: unknown
-    if (f.key.includes(".")) {
-      const [g, sub] = f.key.split(".")
-      const grp = parsed[g]
-      val = grp && typeof grp === "object" ? (grp as Record<string, unknown>)[sub] : undefined
-    } else {
-      val = parsed[f.key]
-    }
-    if (val != null) values[f.key] = toFieldValue(f, val)
-  }
-
-  const extra: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(parsed)) {
-    if (!knownTop.has(k) && !CONTROLLED.has(k)) extra[k] = v
-  }
-  return { values, extra }
-}
-
-/**
- * Partition flat form values into the typed RunRequest core and the passthrough
- * config (nested groups reassembled), merging any imported unknown fields.
- */
-export function partitionValues(
+/** Assemble the nested config object the CLI consumes from flat form values. */
+export function valuesToConfig(
   values: Record<string, FieldValue>,
-  extra: Record<string, unknown> = {}
-): { req: RunRequest; passthrough?: Record<string, unknown> } {
-  const req: Record<string, unknown> = {}
-  const passthrough: Record<string, unknown> = { ...extra }
-
-  for (const f of ALL_FIELDS) {
-    const v = coerce(f, values[f.key])
-    if (v === undefined) continue
-    if (CORE_KEYS.has(f.key)) {
-      req[f.key] = v
-    } else if (f.key.includes(".")) {
-      const [g, sub] = f.key.split(".")
-      const grp =
-        passthrough[g] && typeof passthrough[g] === "object"
-          ? (passthrough[g] as Record<string, unknown>)
-          : ((passthrough[g] = {}) as Record<string, unknown>)
-      grp[sub] = v
-    } else {
-      passthrough[f.key] = v
-    }
+  payload: SchemaPayload
+): Record<string, unknown> {
+  const config: Record<string, unknown> = {}
+  for (const f of allFields(payload)) {
+    if (f.controlled) continue
+    const v = coerce(f.widget, values[f.path])
+    if (v !== undefined) setPath(config, f.path, v)
   }
+  return config
+}
 
-  return {
-    req: req as RunRequest,
-    passthrough: Object.keys(passthrough).length ? passthrough : undefined,
+/** Flatten an imported nested config into the form's flat values. */
+export function configToValues(
+  config: Record<string, unknown>,
+  payload: SchemaPayload
+): Record<string, FieldValue> {
+  const values: Record<string, FieldValue> = {}
+  for (const f of allFields(payload)) {
+    const v = getPath(config, f.path)
+    if (v != null) values[f.path] = toFieldValue(f.widget, v)
   }
+  return values
 }
