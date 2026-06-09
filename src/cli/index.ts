@@ -2,7 +2,12 @@
 
 import { Command } from "commander";
 import * as info from "../../package.json";
-import { processCommand, watchCommand, exportCommand } from "./commands";
+import {
+  processCommand,
+  watchCommand,
+  exportCommand,
+  metricsCommand,
+} from "./commands";
 import { ContainerFactory, TYPES } from "../core/di";
 import { readConfigurationFile, Logger } from "../shared";
 import {
@@ -228,6 +233,28 @@ program
   .action((opts: { json?: boolean }) => {
     const payload = configSchemaPayload();
     process.stdout.write(JSON.stringify(payload, null, opts.json ? 0 : 2) + "\n");
+  });
+
+// `kg-gen metrics <graph.json>` — the no-ground-truth A/B scorecard (entity/
+// relation-type counts, self-loops, bidirectional contradictions, referential
+// integrity, parallel edges). With --ground-truth it adds semantic triple
+// precision/recall + fabricated-edge rate. Used to capture the baseline numbers
+// and to score every canonicalization arm uniformly.
+program
+  .command("metrics")
+  .description("compute knowledge-graph health metrics (and ground-truth scores) for a json graph")
+  .argument("<graph.json>", "path to a json-format knowledge graph ({entities, relations})")
+  .option("--config <file>", "config file (for embeddings/provider settings, used only with --ground-truth)")
+  .option("--ground-truth <file.jsonl>", "JSONL of ground-truth triples/edges for precision/recall + fabricated-edge rate")
+  .option("--match-threshold <number>", "semantic match cosine threshold (default 0.80)")
+  .option("--output <file>", "also write the full metrics report as JSON to this path")
+  .action(async (graphPath: string, opts) => {
+    try {
+      await metricsCommand(graphPath, opts);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
   });
 
 program.parse();
