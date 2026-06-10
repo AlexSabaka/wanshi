@@ -26,7 +26,15 @@ llm:
 
 embeddings:
   provider: ollama
-  model: hf.co/unsloth/embeddinggemma-300m-GGUF:BF16
+  # Canon-clustering calibration (NR-3): mxbai@0.88 is validated precision-clean and
+  # fast here. embeddinggemma's geometry is differently scaled — at 0.88 it over-merged
+  # the 3 distinct Epicure siblings into one node and flooded the escalation band
+  # (26.5k adjudications / 4h). Making canon work natively on embeddinggemma
+  # (complete-linkage + threshold re-tune) is the follow-up brief
+  # docs/inbox/2026-06-10-cheetah-to-dove-canon-embeddinggemma.md.
+  # NOTE: this makes the canon arm's merge-dedup use mxbai too (arm A uses embeddinggemma),
+  # a minor A/B impurity accepted to isolate the canon-clustering effect.
+  model: mxbai-embed-large:335m
   host: http://localhost:11434
   maxInputChars: 2048
 
