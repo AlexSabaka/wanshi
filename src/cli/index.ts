@@ -93,6 +93,9 @@ program
   // Enable Docling PDF/DOC/DOCX/PPT/PPTX Processing
   .option("--docling", "use docling for PDF/DOC/DOCX/PPT/PPTX documents processing (default: false)")
 
+  // Quarantine trailing references/bibliography sections before extraction
+  .option("--strip-references", "quarantine trailing references/bibliography sections before extraction (PDF + markdown, default: false)")
+
   // JSON reading strategy
   .option(
     "--json-strategy <mode>",

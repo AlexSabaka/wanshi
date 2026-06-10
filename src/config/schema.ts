@@ -185,6 +185,7 @@ const OutlineSchema = z
 const ReadersSchema = z
   .object({
     docling: z.boolean().default(false).describe("Use Docling for PDF/DOC/DOCX/PPT/PPTX"),
+    stripReferences: z.boolean().default(false).describe("Quarantine trailing references/bibliography sections before extraction (PDF + markdown)"),
     images: ImageProcessingModeEnum.default("auto").describe("Image processing mode"),
     json: JsonReaderSchema.default({}),
     asr: AsrSchema.default({}),

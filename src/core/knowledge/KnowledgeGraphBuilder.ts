@@ -246,7 +246,44 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       graphs.push(kg);
     }
 
+    // Pin ingest-time document identity (reader metadata) as its own entity.
+    // Never trusted to extraction: body text is full of OTHER papers' IDs, and a
+    // cited paper's arXiv ID binding onto the host document is the worst-case
+    // provenance failure.
+    const identity = this.documentIdentityGraph(processedFile);
+    if (identity) graphs.push(identity);
+
     return graphs;
+  }
+
+  /** Build the pinned `document` entity from reader-supplied identity metadata. */
+  private documentIdentityGraph(processedFile: ProcessedFile): KnowledgeGraph | null {
+    const arxivId = processedFile.metadata?.arxivId as string | undefined;
+    const title = processedFile.metadata?.title as string | undefined;
+    if (!arxivId && !title) return null;
+
+    const createdAt = new Date().toISOString();
+    const observations: Observation[] = [];
+    if (title) {
+      observations.push({ text: `Title: ${title}`, source: processedFile.path, createdAt });
+    }
+    if (arxivId) {
+      observations.push({ text: `arXiv:${arxivId}`, source: processedFile.path, createdAt });
+    }
+
+    const name = title ?? path.basename(processedFile.path);
+    this.logger.info(`Pinned document identity for ${processedFile.path}: ${name}`);
+    return {
+      entities: [
+        {
+          name,
+          entityType: "document",
+          files: [processedFile.path],
+          observations,
+        },
+      ],
+      relations: [],
+    };
   }
 
   /**

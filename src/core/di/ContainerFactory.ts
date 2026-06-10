@@ -244,11 +244,15 @@ export class ContainerFactory {
         );
       } else {
         factory.registerReader(new RtfReader(chunker, logger));
-        factory.registerReader(new MarkdownReader(chunker, logger));
+        factory.registerReader(
+          new MarkdownReader(chunker, logger, options.readers.stripReferences)
+        );
         factory.registerReader(new HtmlReader(chunker, logger));
         factory.registerReader(new ImageReader(chunker, logger));
         factory.registerReader(new OfficeReader(chunker, logger));
-        factory.registerReader(new PdfReader(chunker, logger));
+        factory.registerReader(
+          new PdfReader(chunker, logger, options.readers.stripReferences)
+        );
       }
 
       // Transcript reader claims speaker-labeled text (.parakeet.txt, …) and
