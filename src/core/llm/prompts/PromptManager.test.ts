@@ -62,6 +62,15 @@ describe("PromptManager v5 system prompt — controlled vocabularies", () => {
     expect(prompt).not.toContain("${pwd}");
   });
 
+  it("interpolates the working directory in the legacy v4.5 prompt, not literal ${pwd} (KG-16)", async () => {
+    const m = manager();
+    m.setPromptVersion("v4.5");
+    const prompt = await m.getSystemPrompt("/repo", "**/*.ts");
+    expect(prompt).toContain("/repo");
+    expect(prompt).not.toContain("${pwd}");
+    expect(prompt).not.toContain("${filter}");
+  });
+
   it("renders the glossary's types as the closed vocabulary when supplied", async () => {
     const prompt = await manager().getSystemPrompt("/repo", "**/*.ts", undefined, undefined, {
       entityNames: ["KnowledgeGraphBuilder"],

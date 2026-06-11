@@ -81,8 +81,12 @@ export class PromptTemplateEngine {
       return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
     });
 
-    // Helper for conditional rendering
-    this.handlebars.registerHelper('when', (value1: any, operator: string, value2: any, options: any) => {
+    // Helper for conditional rendering. Must be a regular `function` (not an
+    // arrow): Handlebars binds `this` to the current template context when it
+    // invokes a block helper, and the body must render with that context. As an
+    // arrow, `this` was the engine instance, so the block rendered with no data
+    // — e.g. "Chunk  of  from " (KG-16).
+    this.handlebars.registerHelper('when', function (this: any, value1: any, operator: string, value2: any, options: any) {
       switch (operator) {
         case '==': return value1 == value2 ? options.fn(this) : options.inverse(this);
         case '===': return value1 === value2 ? options.fn(this) : options.inverse(this);

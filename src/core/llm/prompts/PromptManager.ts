@@ -49,6 +49,13 @@ export class PromptManager {
   private templatesDir: string;
   private logger: Logger;
 
+  /**
+   * Resolves once partials are registered. Every render path awaits it first so
+   * a first render can't race the fire-and-forget async init (KG-16) — which
+   * previously fell back to a weak prompt with no partials.
+   */
+  private ready: Promise<void>;
+
   /** Cache of loaded domain example partial contents keyed by filename */
   private domainPartialCache: Map<string, string> = new Map();
 
@@ -56,7 +63,7 @@ export class PromptManager {
     this.logger = logger;
     this.templateEngine = new PromptTemplateEngine(logger, outlineOptions);
     this.templatesDir = templatesDir || path.join(__dirname, 'templates');
-    this.initializeTemplates();
+    this.ready = this.initializeTemplates();
   }
 
   /**
@@ -102,6 +109,8 @@ export class PromptManager {
     if (this.customSystemPrompt) {
       return this.customSystemPrompt;
     }
+
+    await this.ready; // partials registered before first render (KG-16)
 
     try {
       const templatePath = path.join(
@@ -157,6 +166,7 @@ export class PromptManager {
    * Get the user prompt for a file, optionally enriched with domain hints
    */
   async getUserPrompt(context: PromptContext): Promise<string> {
+    await this.ready; // partials registered before first render (KG-16)
     try {
       const templatePath = path.join(
         this.templatesDir,
@@ -216,6 +226,7 @@ export class PromptManager {
    * Render a custom template with context
    */
   async renderCustomTemplate(templateString: string, context: TemplateContext): Promise<string> {
+    await this.ready; // partials registered before first render (KG-16)
     try {
       const template = this.templateEngine.compile(templateString);
       const enhancedContext = await this.templateEngine.enhanceContext(context);
@@ -316,6 +327,7 @@ export class PromptManager {
   async getGlossaryPrompt(
     vars: { classLine: string; termList: string; snippets: string }
   ): Promise<{ system: string; user: string } | undefined> {
+    await this.ready; // partials registered before first render (KG-16)
     const dir = path.join(this.templatesDir, this.systemPromptVersion, 'glossary');
     const systemPath = path.join(dir, 'system.hbs');
     const userPath = path.join(dir, 'user.hbs');
