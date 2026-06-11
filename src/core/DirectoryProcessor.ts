@@ -194,6 +194,21 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       }
     }
 
+    // Surface chunks whose extraction failed: they were left uncheckpointed (so
+    // --resume retries them) and must not pass silently as "done-and-empty". The
+    // partial graph still merges/exports; the run exits non-zero (KG-02).
+    const failedChunks = kgBuilder.getFailedChunks();
+    if (failedChunks.length > 0) {
+      logger.warn(
+        `${failedChunks.length} chunk(s) failed extraction and were left uncheckpointed — ` +
+          `re-run with --resume to retry them:`
+      );
+      for (const f of failedChunks) {
+        logger.warn(`  - ${f.filePath} [chunk ${f.chunkIndex}/${f.totalChunks}]: ${f.error}`);
+      }
+      process.exitCode = 1;
+    }
+
     return knowledgeGraphs;
   }
 

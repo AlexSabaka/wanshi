@@ -227,4 +227,60 @@ describe("KnowledgeGraphBuilder", () => {
     expect(grounded.grounded).toBe(true);
     expect(fabricated.grounded).toBe(false);
   });
+
+  // KG-02: a failed extraction must be recorded and left uncheckpointed, not
+  // swallowed into an empty graph and cached as done.
+  const throwingLlm = () =>
+    ({
+      generateStructured: async () => {
+        throw new Error("boom: retries exhausted");
+      },
+      getModelCapabilities: async () => [],
+    } as any);
+  const promptStub = () =>
+    ({ getUserPrompt: async () => "u", getSystemPrompt: async () => "s" } as any);
+  const oneChunkFile = () =>
+    ({
+      path: "f.txt",
+      content: "x",
+      chunks: [{ content: "c", index: 1, totalChunks: 1, startOffset: 0, endOffset: 1 }],
+    } as any);
+
+  it("records a failed chunk instead of swallowing the error", async () => {
+    const builder = new KnowledgeGraphBuilder(
+      { llmService: throwingLlm(), promptManager: promptStub(), model: "m" },
+      stubLogger()
+    );
+    const [kg] = await builder.build(oneChunkFile(), "s");
+    expect(kg.entities).toEqual([]);
+    const failed = builder.getFailedChunks();
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatchObject({ filePath: "f.txt", chunkIndex: 1, totalChunks: 1 });
+    expect(failed[0].error).toContain("boom");
+  });
+
+  it("leaves a failed chunk uncheckpointed so --resume retries it", async () => {
+    const appended: any[] = [];
+    const checkpoint = {
+      computeKey: () => "key1",
+      has: () => false,
+      get: () => undefined,
+      append: async (rec: any) => {
+        appended.push(rec);
+      },
+    } as any;
+    const builder = new KnowledgeGraphBuilder(
+      {
+        llmService: throwingLlm(),
+        promptManager: promptStub(),
+        model: "m",
+        resume: true,
+        checkpoint,
+      },
+      stubLogger()
+    );
+    await builder.build(oneChunkFile(), "s");
+    expect(appended).toHaveLength(0); // failure never written to the checkpoint
+    expect(builder.getFailedChunks()).toHaveLength(1);
+  });
 });

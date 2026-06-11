@@ -107,8 +107,21 @@ export class CorpusAnalyzer implements ICorpusAnalyzer {
     const topTerms = countTerms(texts, { topN });
     const corpusClasses = aggregateClasses(Object.values(perFileClasses));
 
-    // 3. One LLM call → glossary.
-    const glossary = await this.generateGlossary(corpusClasses, topTerms, texts);
+    // 3. One LLM call → glossary. A failure must NOT be cached as an empty
+    //    glossary and reused forever — run this pass without one and skip
+    //    persisting the sidecar so the next run retries (KG-02).
+    let glossary: CorpusGlossary;
+    let glossaryOk = true;
+    try {
+      glossary = await this.generateGlossary(corpusClasses, topTerms, texts);
+    } catch (error) {
+      this.logger.warn(
+        `Corpus glossary generation failed; running without it and NOT caching ` +
+          `the profile (will rebuild next run): ${error}`
+      );
+      glossary = { entityNames: [], entityTypes: [], relationTypes: [] };
+      glossaryOk = false;
+    }
 
     const profile: CorpusProfile = {
       generatedAt: new Date().toISOString(),
@@ -119,12 +132,14 @@ export class CorpusAnalyzer implements ICorpusAnalyzer {
       topTerms,
       glossary,
     };
-    await store.save(profile);
-    this.logger.info(
-      `Corpus profile built: ${topTerms.length} top terms, glossary ` +
-        `${glossary.entityNames.length} names / ${glossary.entityTypes.length} types / ` +
-        `${glossary.relationTypes.length} relations → ${profilePath}`
-    );
+    if (glossaryOk) {
+      await store.save(profile);
+      this.logger.info(
+        `Corpus profile built: ${topTerms.length} top terms, glossary ` +
+          `${glossary.entityNames.length} names / ${glossary.entityTypes.length} types / ` +
+          `${glossary.relationTypes.length} relations → ${profilePath}`
+      );
+    }
     return profile;
   }
 
@@ -198,17 +213,15 @@ export class CorpusAnalyzer implements ICorpusAnalyzer {
       { role: "user", content: user },
     ];
 
-    try {
-      const result = await this.llm.generateStructured(messages, GlossarySchema);
-      return {
-        entityNames: dedupe(result.entityNames),
-        entityTypes: dedupe(result.entityTypes),
-        relationTypes: dedupe(result.relationTypes),
-      };
-    } catch (error) {
-      this.logger.error(`Corpus glossary generation failed (continuing without it): ${error}`);
-      return { entityNames: [], entityTypes: [], relationTypes: [] };
-    }
+    // Let failures propagate: a failed glossary must NOT be cached as empty and
+    // reused forever (KG-02). The caller (analyzeOrLoad) catches, runs this pass
+    // without a glossary, and skips persisting the sidecar so the next run retries.
+    const result = await this.llm.generateStructured(messages, GlossarySchema);
+    return {
+      entityNames: dedupe(result.entityNames),
+      entityTypes: dedupe(result.entityTypes),
+      relationTypes: dedupe(result.relationTypes),
+    };
   }
 }
 

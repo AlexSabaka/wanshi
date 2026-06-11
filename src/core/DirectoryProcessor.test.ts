@@ -30,7 +30,9 @@ describe("DirectoryProcessor — double-count regression", () => {
     const container = new DIContainer();
     container.registerValue(TYPES.Logger, stubLogger());
     container.registerValue(TYPES.FileProcessor, {} as any);
-    container.registerValue(TYPES.KnowledgeGraphBuilder, {} as any);
+    container.registerValue(TYPES.KnowledgeGraphBuilder, {
+      getFailedChunks: () => [],
+    } as any);
     container.registerValue(TYPES.ProgressEmitter, { emit: () => undefined } as any);
 
     const dp = new DirectoryProcessor(container);

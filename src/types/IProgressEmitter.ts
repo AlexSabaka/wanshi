@@ -32,6 +32,14 @@ export type ProgressEvent =
       /** True when the chunk was restored from the resume checkpoint (no LLM call). */
       cached: boolean;
     }
+  | {
+      /** Extraction threw for this chunk; it is left uncheckpointed so --resume retries it. */
+      type: "chunk_failed";
+      path: string;
+      chunk: number;
+      totalChunks: number;
+      error: string;
+    }
   | { type: "merge"; graphCount: number }
   | {
       type: "export";

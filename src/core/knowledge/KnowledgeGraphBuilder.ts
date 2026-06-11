@@ -2,7 +2,7 @@ import * as path from 'path';
 import { z } from 'zod';
 import { ILLMProvider, LLMMessage } from '../../types/ILLMProvider';
 import { PromptManager, PromptContext } from '../llm/prompts/PromptManager';
-import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder, ClassificationResult, IProgressEmitter, ChunkProvenance, Observation, normalizeObservations, GroundingMode, CorpusGlossary } from '../../types';
+import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder, ClassificationResult, IProgressEmitter, ChunkProvenance, Observation, normalizeObservations, GroundingMode, CorpusGlossary, FailedChunk } from '../../types';
 import { CheckpointService } from '../checkpoint';
 import { NoopProgressEmitter } from '../progress';
 import { NER_DOMAIN_EXAMPLES } from '../processor/classifier/NER_DOMAIN_EXAMPLES';
@@ -128,6 +128,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   private grounding: GroundingMode;
   private groundingMinScore: number;
   private attachSourceSpans: boolean;
+  /** Chunks whose extraction threw this run — left uncheckpointed (KG-02). */
+  private failedChunks: FailedChunk[] = [];
 
   constructor(options: BuilderOptions, logger: Logger) {
     this.llmService = options.llmService;
@@ -142,6 +144,11 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     this.grounding = options.grounding ?? 'disabled';
     this.groundingMinScore = options.groundingMinScore ?? 0.5;
     this.attachSourceSpans = options.attachSourceSpans ?? false;
+  }
+
+  /** Chunks whose extraction failed this run (empty when all succeeded). */
+  getFailedChunks(): FailedChunk[] {
+    return this.failedChunks;
   }
 
   /**
@@ -336,7 +343,29 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       return cached;
     }
 
-    const raw = await generate();
+    let raw: RawGraph;
+    try {
+      raw = await generate();
+    } catch (error) {
+      // Extraction threw (retries exhausted, truncation, network/credits).
+      // Record it and return an empty graph WITHOUT checkpointing, so the chunk
+      // is retried on the next --resume rather than cached as done-and-empty.
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Extraction failed for chunk ${chunkIndex}/${totalChunks} of ${filePath} ` +
+          `— left uncheckpointed so --resume retries it: ${message}`
+      );
+      this.failedChunks.push({ filePath, chunkIndex, totalChunks, error: message });
+      this.progress.emit({
+        type: "chunk_failed",
+        path: filePath,
+        chunk: chunkIndex,
+        totalChunks,
+        error: message,
+      });
+      return { entities: [], relations: [] };
+    }
+
     const kg = this.applyGroundingGate(this.toGraph(raw, provenance, content), content);
     kg.entities.forEach(attachMetadata);
 
@@ -597,27 +626,20 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       }
     ];
 
-    try {
-      const result = await this.llmService.generateStructured(
-        messages,
-        buildGraphSchema(allowedTypes, allowedRelationTypes)
-      );
+    // Let failures propagate (generateStructured already retries 3× then throws).
+    // buildChunk catches, records the failed chunk, and skips its checkpoint so
+    // --resume retries it — do NOT swallow into an empty graph here (KG-02).
+    const result = await this.llmService.generateStructured(
+      messages,
+      buildGraphSchema(allowedTypes, allowedRelationTypes)
+    );
 
-      // Ensure arrays exist
-      result.entities ??= [];
-      result.relations ??= [];
+    // Ensure arrays exist
+    result.entities ??= [];
+    result.relations ??= [];
 
-      this.logger.debug(`Generated KG with ${result.entities.length} entities and ${result.relations.length} relations`);
+    this.logger.debug(`Generated KG with ${result.entities.length} entities and ${result.relations.length} relations`);
 
-      return result;
-    } catch (error) {
-      this.logger.error(`Failed to generate knowledge graph: ${error}`);
-      
-      // Return empty graph on failure
-      return {
-        entities: [],
-        relations: []
-      };
-    }
+    return result;
   }
 }
