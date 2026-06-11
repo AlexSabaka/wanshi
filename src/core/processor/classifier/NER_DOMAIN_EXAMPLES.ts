@@ -10,7 +10,7 @@ export const NER_DOMAIN_EXAMPLES: Record<ContentClass, ContentClassNERExample> =
     ],
     primaryRelationTypes: [
       "calls", "imports", "extends", "implements", "configures",
-      "depends_on", "exposes", "consumes",
+      "depends_on", "exposes", "consumes", "processes",
     ],
     examples: [
       {
@@ -52,7 +52,7 @@ export const NER_DOMAIN_EXAMPLES: Record<ContentClass, ContentClassNERExample> =
     ],
     primaryRelationTypes: [
       'owns', 'trades', 'reports', 'regulates', 'correlates_with',
-      'outperforms', 'invests_in', 'complies_with'
+      'outperforms', 'invests_in', 'complies_with', 'pays', 'owes'
     ],
     examples: [
       {
@@ -78,11 +78,12 @@ export const NER_DOMAIN_EXAMPLES: Record<ContentClass, ContentClassNERExample> =
     description: 'Medical records, research papers, and healthcare documentation',
     primaryEntityTypes: [
       'condition', 'treatment', 'medication', 'anatomy', 'procedure',
-      'symptom', 'diagnosis', 'patient', 'healthcare_provider', 'clinical_trial'
+      'symptom', 'diagnosis', 'patient', 'provider', 'clinical_trial', 'test'
     ],
     primaryRelationTypes: [
       'treats', 'causes', 'indicates', 'prevents', 'interacts_with',
-      'diagnoses', 'prescribes', 'contraindicates'
+      'diagnosed_with', 'prescribed', 'contraindicates', 'underwent',
+      'allergic_to', 'treated_by'
     ],
     examples: [
       {
@@ -124,7 +125,8 @@ export const NER_DOMAIN_EXAMPLES: Record<ContentClass, ContentClassNERExample> =
     ],
     primaryRelationTypes: [
       'contracts_with', 'obligates', 'grants_right_to', 'governs',
-      'precedent_for', 'jurisdiction_over', 'represents'
+      'precedent_for', 'jurisdiction_over', 'represents', 'signed',
+      'party_to', 'filed_in'
     ],
     examples: [
       {
@@ -204,11 +206,13 @@ export const NER_DOMAIN_EXAMPLES: Record<ContentClass, ContentClassNERExample> =
     description: 'Meeting minutes, interviews, and recorded conversations',
     primaryEntityTypes: [
       'speaker', 'topic', 'decision', 'action_item', 'timeline',
-      'participant', 'agenda_item', 'meeting', 'deadline', 'responsibility'
+      'participant', 'agenda_item', 'meeting', 'deadline', 'responsibility',
+      'pain_point', 'feature_request'
     ],
     primaryRelationTypes: [
       'discusses', 'decides', 'assigns', 'schedules', 'follows_up',
-      'reports_to', 'responsible_for', 'attends'
+      'reports_to', 'responsible_for', 'attends', 'facilitates',
+      'interviews', 'reports', 'requests'
     ],
     examples: [
       {
@@ -246,11 +250,12 @@ export const NER_DOMAIN_EXAMPLES: Record<ContentClass, ContentClassNERExample> =
     description: 'Structured data, spreadsheets, and database exports',
     primaryEntityTypes: [
       'column', 'row', 'metric', 'data_relationship', 'schema',
-      'table', 'field', 'record', 'aggregate', 'dimension'
+      'table', 'field', 'record', 'aggregate', 'dimension',
+      'category', 'supplier'
     ],
     primaryRelationTypes: [
       'contains', 'aggregates', 'relates_to', 'foreign_key_to',
-      'groups_by', 'sums_to', 'measures'
+      'groups_by', 'sums_to', 'measures', 'supplies'
     ],
     examples: [
       {
@@ -372,11 +377,13 @@ export const NER_DOMAIN_EXAMPLES: Record<ContentClass, ContentClassNERExample> =
     description: 'System logs, configurations, and infrastructure content',
     primaryEntityTypes: [
       'service', 'error', 'configuration', 'system_event', 'server',
-      'log_entry', 'performance_metric', 'alert', 'deployment'
+      'log_entry', 'performance_metric', 'alert', 'deployment',
+      'ip_address', 'request', 'user'
     ],
     primaryRelationTypes: [
       'logs_to', 'configures', 'monitors', 'alerts_on',
-      'depends_on', 'triggers', 'connects_to'
+      'depends_on', 'triggers', 'connects_to', 'requests',
+      'authenticates_as', 'reports'
     ],
     examples: [
       {
@@ -414,11 +421,14 @@ export const NER_DOMAIN_EXAMPLES: Record<ContentClass, ContentClassNERExample> =
     description: 'Articles, reports, and general prose content',
     primaryEntityTypes: [
       'topic', 'concept', 'person', 'event', 'location',
-      'organization', 'idea', 'theme', 'argument', 'conclusion'
+      'organization', 'idea', 'theme', 'argument', 'conclusion',
+      'market_segment', 'research_subject', 'methodology'
     ],
     primaryRelationTypes: [
       'discusses', 'mentions', 'relates_to', 'describes',
-      'analyzes', 'compares', 'concludes', 'argues'
+      'analyzes', 'compares', 'concludes', 'argues', 'develops',
+      'pilots', 'invests_in', 'used_to_create', 'silences',
+      'collaborates_with'
     ],
     examples: [
       {
@@ -456,11 +466,13 @@ export const NER_DOMAIN_EXAMPLES: Record<ContentClass, ContentClassNERExample> =
     description: 'Glossaries, catalogs, and structured reference material',
     primaryEntityTypes: [
       'definition', 'term', 'entry', 'category', 'reference',
-      'glossary_item', 'catalog_entry', 'specification', 'standard'
+      'glossary_item', 'catalog_entry', 'specification', 'standard',
+      'feature', 'tier'
     ],
     primaryRelationTypes: [
       'defines', 'categorizes', 'references', 'specifies',
-      'lists', 'indexes', 'cross_references'
+      'lists', 'indexes', 'cross_references', 'governed_by',
+      'included_in', 'requires'
     ],
     examples: [
       {

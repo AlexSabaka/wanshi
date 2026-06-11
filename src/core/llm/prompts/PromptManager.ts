@@ -3,7 +3,11 @@ import * as fs from 'fs';
 import { PromptTemplateEngine, TemplateContext } from './PromptTemplateEngine';
 import { Logger } from '../../../shared';
 import { ClassificationResult, ContentClass, CorpusGlossary, OutlineOptions } from '../../../types';
-import { NER_DOMAIN_EXAMPLES } from '../../processor/classifier/NER_DOMAIN_EXAMPLES';
+import {
+  activeDomainClasses,
+  domainVocabulary,
+  LOW_CONFIDENCE_THRESHOLD,
+} from '../../knowledge/vocabulary';
 
 export interface PromptContext {
   input: string;
@@ -18,12 +22,6 @@ export interface PromptContext {
   /** Corpus-specific glossary from the pre-pass, injected as soft naming hints. */
   corpusGlossary?: CorpusGlossary;
 }
-
-/** Minimum confidence to inject domain hints (below this = generic extraction) */
-const LOW_CONFIDENCE_THRESHOLD = 0.3;
-
-/** If top-2 class confidences are within this delta, treat as mixed domain */
-const MIXED_DOMAIN_THRESHOLD = 0.2;
 
 /** Maps content class to its example partial filename */
 const CLASS_TO_PARTIAL: Record<ContentClass, string> = {
@@ -247,49 +245,31 @@ export class PromptManager {
    * Handles mixed-domain case (top-2 classes within MIXED_DOMAIN_THRESHOLD).
    */
   private buildDomainHints(contentClasses?: ClassificationResult[]): string | undefined {
-    if (!contentClasses || contentClasses.length === 0) return undefined;
+    // Class selection + vocabulary come from the shared single source so the
+    // hints can never diverge from the Zod enum (KG-05).
+    const activeClasses = activeDomainClasses(contentClasses);
+    if (activeClasses.length === 0) return undefined;
 
-    const sorted = [...contentClasses].sort((a, b) => b.confidence - a.confidence);
-    const top = sorted[0];
-    if (top.confidence < LOW_CONFIDENCE_THRESHOLD) return undefined;
-
-    // Determine active classes (top 1, or top 2 if close in confidence)
-    const activeClasses: ContentClass[] = [top.class];
-    if (
-      sorted.length > 1 &&
-      sorted[1].confidence >= LOW_CONFIDENCE_THRESHOLD &&
-      top.confidence - sorted[1].confidence <= MIXED_DOMAIN_THRESHOLD
-    ) {
-      activeClasses.push(sorted[1].class);
-    }
-
+    const sorted = [...contentClasses!].sort((a, b) => b.confidence - a.confidence);
     const lines: string[] = [];
 
     if (activeClasses.length === 1) {
-      lines.push(`Detected content type: **${top.class}** (confidence: ${top.confidence.toFixed(2)})`);
+      lines.push(`Detected content type: **${sorted[0].class}** (confidence: ${sorted[0].confidence.toFixed(2)})`);
     } else {
       lines.push(
         `Detected content type: **${activeClasses[0]}** (${sorted[0].confidence.toFixed(2)}) / **${activeClasses[1]}** (${sorted[1].confidence.toFixed(2)}) — mixed domain`
       );
     }
 
-    // Gather entity and relation types from all active classes
-    const entityTypes = new Set<string>();
-    const relationTypes = new Set<string>();
+    const { entityTypes, relationTypes } = domainVocabulary(contentClasses);
+    const uniqueEntityTypes = Array.from(new Set(entityTypes));
+    const uniqueRelationTypes = Array.from(new Set(relationTypes));
 
-    for (const cls of activeClasses) {
-      const nerInfo = NER_DOMAIN_EXAMPLES[cls];
-      if (nerInfo) {
-        nerInfo.primaryEntityTypes.forEach(t => entityTypes.add(t));
-        nerInfo.primaryRelationTypes.forEach(t => relationTypes.add(t));
-      }
+    if (uniqueEntityTypes.length > 0) {
+      lines.push(`Prioritize these entity types: ${uniqueEntityTypes.join(', ')}`);
     }
-
-    if (entityTypes.size > 0) {
-      lines.push(`Prioritize these entity types: ${Array.from(entityTypes).join(', ')}`);
-    }
-    if (relationTypes.size > 0) {
-      lines.push(`Prioritize these relation types: ${Array.from(relationTypes).join(', ')}`);
+    if (uniqueRelationTypes.length > 0) {
+      lines.push(`Prioritize these relation types: ${uniqueRelationTypes.join(', ')}`);
     }
 
     return lines.join('\n');

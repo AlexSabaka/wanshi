@@ -79,6 +79,42 @@ describe("KnowledgeGraphBuilder", () => {
     );
   });
 
+  it("scopes relationType to the domain's predicates when a content class is detected (KG-05)", async () => {
+    let capturedSchema: any;
+    const promptManager = {
+      getUserPrompt: async () => "u",
+      getSystemPrompt: async () => "s",
+    } as any;
+    const llmService = {
+      generateStructured: async (_m: any, schema: any) => {
+        capturedSchema = schema;
+        return { entities: [], relations: [] };
+      },
+      getModelCapabilities: async () => [],
+    } as any;
+    const builder = new KnowledgeGraphBuilder(
+      { llmService, promptManager, model: "m" },
+      stubLogger()
+    );
+
+    const processedFile = {
+      path: "chart.txt",
+      content: "x",
+      metadata: { classes: [{ class: "medical", confidence: 0.9 }] },
+      chunks: [{ content: "c", index: 1, totalChunks: 1, startOffset: 0, endOffset: 1 }],
+    } as any;
+
+    await builder.build(processedFile, "s");
+
+    // Pre-Phase-2 the relation enum excluded the domain predicates the hints and
+    // gold examples teach, so an emitted `treats`/`diagnosed_with` failed Zod
+    // validation → empty graph. They must now be in the enum.
+    const relationType = capturedSchema.shape.relations.element.shape.relationType;
+    expect(relationType.element.options).toEqual(
+      expect.arrayContaining(["treats", "diagnosed_with", "related_to"])
+    );
+  });
+
   it("unions corpus-glossary entity types into the enum and injects the glossary", async () => {
     let capturedSchema: any;
     const capturedCtx: any[] = [];

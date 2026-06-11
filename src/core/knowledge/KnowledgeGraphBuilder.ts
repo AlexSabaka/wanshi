@@ -5,38 +5,9 @@ import { PromptManager, PromptContext } from '../llm/prompts/PromptManager';
 import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder, ClassificationResult, IProgressEmitter, ChunkProvenance, Observation, normalizeObservations, GroundingMode, CorpusGlossary, FailedChunk } from '../../types';
 import { CheckpointService } from '../checkpoint';
 import { NoopProgressEmitter } from '../progress';
-import { NER_DOMAIN_EXAMPLES } from '../processor/classifier/NER_DOMAIN_EXAMPLES';
+import { allowedEntityTypes, allowedRelationTypes } from './vocabulary';
 import { FactualEvaluator } from '../../quality';
 import { Logger, shutdown } from '../../shared';
-
-/**
- * Domain-agnostic entity types always offered alongside a detected domain's
- * vocabulary, plus an `other` escape hatch so the model is never forced to
- * mislabel when nothing fits.
- */
-/**
- * Base controlled vocabularies (v5). These mirror the `{{else}}` base lists in
- * `templates/v5/system.hbs` — keep the two in sync (a future refinement renders
- * the template list from these constants). The escape hatches (`other` for
- * entities, `related_to` for relations) keep the model from being forced to
- * mislabel and prevent validation-failure recall loss.
- */
-const BASE_ENTITY_TYPES = [
-  "person", "organization", "location", "role", "event", "time", "metric",
-  "concept", "term", "document", "product", "technology", "standard",
-  "class", "interface", "function", "module", "service", "dependency",
-  "data_structure", "config", "file",
-];
-
-const BASE_RELATION_TYPES = [
-  "uses", "depends_on", "calls", "implements", "extends", "contains", "part_of",
-  "produces", "consumes", "configures", "references", "defines", "targets",
-  "located_in", "works_at", "member_of", "precedes", "causes", "has_attribute",
-  "related_to",
-];
-
-/** Back-compat alias: generic entity types still used by the type resolver. */
-const GENERIC_ENTITY_TYPES = BASE_ENTITY_TYPES;
 
 /**
  * Build the extraction schema. Under v5 both vocabularies are *closed*: when an
@@ -396,42 +367,32 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   }
 
   /**
-   * Scope the entity-type enum: the detected content domain's `primaryEntityTypes`
-   * unioned with any corpus-glossary entity types + the base set + `other`. Under
-   * v5 the vocabulary is *always closed* — with no class and no glossary it still
-   * returns the base set (+`other`) rather than `undefined`, so `entityType` is an
-   * enforced enum even on an un-profiled, un-classified run. The `other` escape
-   * keeps the model from being forced to mislabel.
+   * Scope the entity-type enum: the active content domain's `primaryEntityTypes`
+   * ∪ corpus-glossary entity types ∪ base set ∪ `other`. Delegates to the shared
+   * {@link allowedEntityTypes} so the enum and the prompt hints derive from one
+   * source. Always closed — with no class and no glossary it still returns the
+   * base set (+`other`), so `entityType` is an enforced enum even on an
+   * un-profiled, un-classified run.
    */
   private resolveAllowedTypes(
     contentClasses?: ClassificationResult[],
     glossary?: CorpusGlossary
-  ): string[] | undefined {
-    const glossaryTypes = glossary?.entityTypes ?? [];
-    let domain: string[] = [];
-    if (contentClasses && contentClasses.length > 0) {
-      const top = contentClasses.reduce((a, b) =>
-        b.confidence > a.confidence ? b : a
-      );
-      domain = NER_DOMAIN_EXAMPLES[top.class]?.primaryEntityTypes ?? [];
-    }
-    return Array.from(
-      new Set([...domain, ...glossaryTypes, ...BASE_ENTITY_TYPES, "other"])
-    );
+  ): string[] {
+    return allowedEntityTypes(contentClasses, glossary?.entityTypes ?? []);
   }
 
   /**
-   * Scope the relation-predicate enum: corpus-glossary relation types unioned with
-   * the base predicate set + `related_to` catch-all. Always closed (mirror of
-   * {@link resolveAllowedTypes}), so `relationType` is an enforced enum — the
-   * prompt-side fix to the predicate explosion (523→826 distinct types) backed by
-   * schema validation.
+   * Scope the relation-predicate enum: the active domain's `primaryRelationTypes`
+   * ∪ corpus-glossary relation types ∪ base set ∪ `related_to`. Delegates to the
+   * shared {@link allowedRelationTypes}. Unlike the pre-Phase-2 resolver this
+   * passes `contentClasses`, so the domain predicates the hints/examples teach are
+   * actually emittable (KG-05) instead of triggering ZodError → empty graph.
    */
-  private resolveAllowedRelationTypes(glossary?: CorpusGlossary): string[] {
-    const glossaryRelations = glossary?.relationTypes ?? [];
-    return Array.from(
-      new Set([...glossaryRelations, ...BASE_RELATION_TYPES, "related_to"])
-    );
+  private resolveAllowedRelationTypes(
+    contentClasses?: ClassificationResult[],
+    glossary?: CorpusGlossary
+  ): string[] {
+    return allowedRelationTypes(contentClasses, glossary?.relationTypes ?? []);
   }
 
   /** Provenance to stamp on a chunk's observations (reader-supplied or file). */
@@ -566,7 +527,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       userPrompt,
       images,
       this.resolveAllowedTypes(contentClasses, glossary),
-      this.resolveAllowedRelationTypes(glossary)
+      this.resolveAllowedRelationTypes(contentClasses, glossary)
     );
   }
 
@@ -600,7 +561,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       userPrompt,
       images,
       this.resolveAllowedTypes(contentClasses, glossary),
-      this.resolveAllowedRelationTypes(glossary)
+      this.resolveAllowedRelationTypes(contentClasses, glossary)
     );
   }
 
