@@ -322,7 +322,12 @@ export class ContainerFactory {
             "The 'bert' classifier is not implemented. Use --classifier heuristic|llm, or disabled."
           );
         case "heuristic": return new HeuristicContentClassifier(logger);
-        case "llm": return new LlmContentClassifier(logger, { model: options.llm.model, host: options.llm.host });
+        case "llm": {
+          // Share the selected generation provider (KG-15) so --classifier llm
+          // works on cloud (OpenAI-compatible) backends, not just local Ollama.
+          const llm = await c.resolve<ILLMProvider>(TYPES.LLMService);
+          return new LlmContentClassifier(llm, logger);
+        }
         default: return undefined;
       }
     });

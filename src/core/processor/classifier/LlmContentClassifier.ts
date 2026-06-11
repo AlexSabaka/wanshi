@@ -1,8 +1,6 @@
 import z from "zod";
-import { Ollama } from "ollama";
-import zodToJsonSchema from "zod-to-json-schema";
 import { Logger } from "../../../shared";
-import { ClassificationResult } from "../../../types";
+import { ClassificationResult, ILLMProvider, LLMMessage } from "../../../types";
 import { IContentClassifier } from "./IContentTypeClassifier";
 
 const ResponseSchema = z.object({
@@ -63,57 +61,30 @@ Please provide your response in the following JSON schema:
 Ensure that your classification is accurate and that the confidence score reflects your certainty in the classification.
 `;
 
-export interface LlmClassifierOptions {
-  model: string;
-  host: string;
-}
-
 export class LlmContentClassifier implements IContentClassifier {
-  private model: string;
-  private ollama: Ollama;
-
-  constructor(private logger: Logger, options?: LlmClassifierOptions) {
-    this.model = options?.model ?? "gemma3:1b";
-    this.ollama = new Ollama({ host: options?.host ?? "http://localhost:11434" });
-  }
+  constructor(
+    private readonly llm: ILLMProvider,
+    private readonly logger: Logger
+  ) {}
 
   async classify(
     content: string,
     path: string
   ): Promise<ClassificationResult[]> {
-    const chatRequest = {
-      model: this.model,
-      messages: [
-        { role: "system", content: ClassifierSystemPrompt },
-        { role: "user", content: this.formatMessage(content, path) },
-      ],
-      format: zodToJsonSchema(ResponseSchema),
-      think: false,
-      options: {
-        num_ctx: 4096,
-      },
-    };
+    // Route through the provider-agnostic ILLMProvider (KG-15). Previously this
+    // hardcoded an Ollama client + host, so with `provider: openai` every call
+    // hit `/api/chat` on a cloud base URL and 404'd. generateStructured already
+    // does JSON-schema formatting, fence-stripping, zod-validation, and retry —
+    // so the manual chat/parse/validate dance is gone. Failures propagate (the
+    // caller — FileProcessor/CorpusAnalyzer — handles them gracefully).
+    const messages: LLMMessage[] = [
+      { role: "system", content: ClassifierSystemPrompt },
+      { role: "user", content: this.formatMessage(content, path) },
+    ];
 
-    const response = await this.ollama.chat(chatRequest);
-
-    // Parse the response
-    const responseContent = response.message.content.trim();
-
-    // Handle code block wrapped responses
-    let cleanContent = responseContent;
-    if (cleanContent.startsWith("```")) {
-      cleanContent = cleanContent.slice(
-        cleanContent.indexOf("\n") + 1,
-        cleanContent.lastIndexOf("\n")
-      );
-    }
-
-    const parsed = JSON.parse(cleanContent);
-
-    // Validate against schema
-    const validated = ResponseSchema.parse(parsed);
-
-    return [ validated ];
+    this.logger.debug(`Classifying ${path} via LLM provider`);
+    const validated = await this.llm.generateStructured(messages, ResponseSchema);
+    return [validated];
   }
 
   private formatMessage(content: string, path: string): string {
