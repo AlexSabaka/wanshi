@@ -49,7 +49,12 @@ export abstract class FileReader {
    */
   canRead(filePath: string): boolean {
     const ext = path.extname(filePath).toLowerCase();
-    return this.supportedExtensions.some(e => ext.startsWith(e));
+    const base = path.basename(filePath).toLowerCase();
+    // Exact match on the extension (".ts") or, for extensionless / named files
+    // (Makefile, Dockerfile, LICENSE), the full basename. Never a prefix match:
+    // `startsWith` plus an empty-string entry once let TextReader claim every
+    // file (so .mp3/.wav read as UTF-8 and the ASR path was unreachable).
+    return this.supportedExtensions.some(e => e !== '' && (ext === e || base === e));
   }
 
   /**

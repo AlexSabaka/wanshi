@@ -9,7 +9,7 @@ import { TextChunker } from '../chunking';
 export class TextReader extends FileReader {
   constructor(chunker: TextChunker, logger: Logger) {
     super([
-      '.txt', '.rst', '.asciidoc', '.csv', '',
+      '.txt', '.rst', '.asciidoc', '.csv',
       '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
       '.py', '.pyw', '.pyi', '.pyc', '.pyd', '.pyo',
       '.java', '.class', '.jar',
@@ -40,6 +40,11 @@ export class TextReader extends FileReader {
       '.gitignore', '.gitattributes', '.gitmodules',
       '.editorconfig', '.eslintrc', '.prettierrc',
       '.npmrc', '.yarnrc', '.nvmrc',
+      // Common extensionless text files (matched by basename now that the
+      // universal '' entry is gone). Keep this list curated — genuinely
+      // unknown / extensionless files fall through to BinaryReader (skipped).
+      'LICENSE', 'LICENCE', 'README', 'CHANGELOG', 'AUTHORS', 'NOTICE', 'COPYING',
+      'Dockerfile', 'Containerfile',
       'Makefile', 'makefile', 'GNUmakefile',
       'Rakefile', 'Gemfile', 'Guardfile',
       'Gruntfile', 'gulpfile',

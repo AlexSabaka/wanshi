@@ -1,4 +1,5 @@
 export * from './AudioReader';
+export * from './BinaryReader';
 export * from './DoclingReader';
 export * from './FileReader';
 export * from './FileReaderFactory';

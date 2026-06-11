@@ -241,6 +241,13 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     const cachedClasses =
       corpusProfile?.perFileClasses[toRelPathId(options.input, file)];
     const processedFile = await fileProcessor.processFile(file, cachedClasses);
+    // A reader can signal a graceful skip (BinaryReader for binary/unknown
+    // files) — honor it before the "no content extracted" guard turns an empty
+    // read into a per-file error.
+    if (processedFile.metadata?.skip) {
+      logger.info(`Skipped ${file} (binary / no extractable text)`);
+      return [];
+    }
     this.validateProcessedFile(processedFile, file, logger);
 
     const retrieve = await this.buildRetriever(

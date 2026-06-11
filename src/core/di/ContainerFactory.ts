@@ -217,6 +217,7 @@ export class ContainerFactory {
       const {
         FileReaderFactory,
         AudioReader,
+        BinaryReader,
         MarkdownReader,
         DoclingReader,
         HtmlReader,
@@ -276,8 +277,9 @@ export class ContainerFactory {
         )
       );
 
-      factory.registerReader(new TextReader(chunker, logger));
-
+      // ASR audio reader before TextReader so audio never falls through to text;
+      // only registered when ASR is enabled (otherwise audio routes to the
+      // BinaryReader catch-all below and is skipped gracefully).
       if (options.readers.asr.mode !== "disabled") {
         logger.info(`Using automatic speech recognition pipeline`);
         factory.registerReader(
@@ -288,11 +290,17 @@ export class ContainerFactory {
               translate: options.readers.asr.translate,
             },
             "./temp",
-            chunker, 
+            chunker,
             logger
           )
         );
       }
+
+      factory.registerReader(new TextReader(chunker, logger));
+
+      // Final catch-all: claims anything no specific reader recognized and skips
+      // it gracefully (no UTF-8 mojibake, no LLM call). MUST be registered last.
+      factory.registerReader(new BinaryReader(chunker, logger));
 
       return factory;
     });
