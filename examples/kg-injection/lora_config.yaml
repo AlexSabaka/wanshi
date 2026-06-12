@@ -1,0 +1,33 @@
+# Phase 9 — MLX LoRA knowledge-injection config (Qwen3-0.6B on the 16GB M4).
+# Mirrors the proven kbc-qwen3-mlx recipe; tuned for memorizing ~1K (name, property,
+# value) facts. 16GB gotchas honored: batch_size small, short-ish seqs, all on MPS.
+model: "Qwen/Qwen3-0.6B"
+train: true
+data: "./data"
+fine_tune_type: "lora"
+
+# Train all transformer blocks' LoRA (more capacity for memorization than the
+# default last-16); Qwen3-0.6B has 28 blocks, still tiny in params.
+num_layers: -1
+lora_parameters:
+  rank: 16
+  scale: 20.0
+  dropout: 0.0
+
+optimizer: "adamw"
+learning_rate: 1.0e-4
+
+# ~4 epochs over ~969 train examples at batch 2 (969/2 ≈ 485 steps/epoch).
+iters: 2000
+batch_size: 2
+max_seq_length: 1024
+# Compute loss only on the answer tokens (inject the fact, not the question).
+mask_prompt: true
+
+val_batches: 20
+steps_per_eval: 200
+steps_per_report: 25
+save_every: 500
+grad_checkpoint: false
+
+adapter_path: "./adapters/lora-r16"

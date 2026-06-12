@@ -1,0 +1,4 @@
+# Phase 9 knowledge-injection spike — MLX on Apple Silicon (Python 3.12).
+# Versions proven on the 16GB M4 (matches the kbc-qwen3-mlx precedent).
+mlx>=0.30,<0.31
+mlx-lm>=0.30,<0.31

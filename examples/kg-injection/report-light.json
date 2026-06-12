@@ -1,0 +1,15 @@
+{
+  "model": "Qwen/Qwen3-0.6B",
+  "adapter": "./adapters/lora-light",
+  "limit": 120,
+  "base": {
+    "recall": 0.017,
+    "refusal": 0.017,
+    "perplexity": 33.64
+  },
+  "adapter_metrics": {
+    "recall": 0.183,
+    "refusal": 0.0,
+    "perplexity": 61.87
+  }
+}

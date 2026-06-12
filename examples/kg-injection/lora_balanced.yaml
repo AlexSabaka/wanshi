@@ -1,0 +1,28 @@
+# Phase 9 — BALANCED LoRA (run 3). Between run 1 (recall 0.34 / ppl 6720, destroyed)
+# and run 2 (recall ~0.20 / ppl 62, preserved). Targets a usable operating point:
+# recall ~0.30 while keeping general-text ppl well under ~150 (≲5× base).
+model: "Qwen/Qwen3-0.6B"
+train: true
+data: "./data"
+fine_tune_type: "lora"
+
+num_layers: 12
+lora_parameters:
+  rank: 12
+  scale: 14.0
+  dropout: 0.05
+
+optimizer: "adamw"
+learning_rate: 4.0e-5
+
+iters: 1500
+batch_size: 2
+max_seq_length: 1024
+mask_prompt: true
+
+val_batches: 20
+steps_per_eval: 250
+steps_per_report: 25
+save_every: 250
+
+adapter_path: "./adapters/lora-balanced"

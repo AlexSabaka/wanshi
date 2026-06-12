@@ -1,0 +1,30 @@
+# Phase 9 — GENTLE LoRA (run 2). Run 1 (rank16/all-28-layers/LR1e-4/scale20) injected
+# (recall 0.34) but caused catastrophic forgetting (ppl 34 → 6720). This minimizes
+# disruption to the base: only the last 8 blocks, small rank/scale, 5× lower LR — to
+# inject facts while keeping general-text perplexity near baseline.
+model: "Qwen/Qwen3-0.6B"
+train: true
+data: "./data"
+fine_tune_type: "lora"
+
+num_layers: 8
+lora_parameters:
+  rank: 8
+  scale: 10.0
+  dropout: 0.05
+
+optimizer: "adamw"
+learning_rate: 2.0e-5
+
+iters: 1500
+batch_size: 2
+max_seq_length: 1024
+mask_prompt: true
+
+val_batches: 20
+steps_per_eval: 250
+steps_per_report: 25
+save_every: 250
+grad_checkpoint: false
+
+adapter_path: "./adapters/lora-light"

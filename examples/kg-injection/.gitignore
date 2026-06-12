@@ -1,0 +1,9 @@
+# Phase 9 — keep the harness + configs + results in git; exclude heavy artifacts.
+.venv/
+adapters/
+fused/
+models/
+data/*.jsonl
+*.npz
+__pycache__/
+.DS_Store

@@ -1,0 +1,36 @@
+{
+  "spike": "Phase 9 — knowledge injection (arm 1: LoRA SFT via MLX)",
+  "date": "2026-06-12",
+  "hardware": "Apple M4, 16GB; MLX-LoRA fp16, batch_size 2, max_seq 1024; peak mem 3.5-5.3GB, no reboot",
+  "base_model": "Qwen/Qwen3-0.6B",
+  "dataset": {
+    "source": "examples/kg-telegram-sink graph (738 ents / 1119 rels) via Phase-7 toKbTriples",
+    "train_examples": 969,
+    "recall_probes": 150,
+    "refusal_probes": 180,
+    "split": "by entity (eval entities unseen in training)"
+  },
+  "base_metrics": { "recall": 0.017, "refusal": 0.017, "perplexity": 33.64 },
+  "runs": [
+    {
+      "name": "aggressive", "config": "rank16, all-28-layers, LR1e-4, scale20, ~4ep",
+      "recall": 0.338, "refusal": 0.0, "perplexity": 6720,
+      "note": "injects strongest but CATASTROPHIC forgetting (ppl 200x base)"
+    },
+    {
+      "name": "gentle", "config": "rank8, last-8-layers, LR2e-5, scale10, ~3ep",
+      "recall": 0.183, "refusal": 0.0, "perplexity": 61.9,
+      "note": "general LM preserved (ppl 1.8x base), modest recall"
+    },
+    {
+      "name": "balanced", "config": "rank12, last-12-layers, LR4e-5, scale14, ~3ep",
+      "recall": 0.458, "refusal": 0.0, "perplexity": 131.0,
+      "note": "best operating point — recall 27x base, ppl 3.9x base (functional)"
+    }
+  ],
+  "decision": {
+    "injection": "GO — kg-gen triples inject into Qwen3-0.6B via MLX-LoRA; recall 27x base at a usable point",
+    "stability": "GO with care — forgetting is real & config-sensitive; light/balanced configs keep the model functional (recall<->forgetting tradeoff)",
+    "refusal": "NO for plain LoRA — 0% refusal across all configs (positive-only SFT). This is the decisive gap and the case for arm 2 (KBLaM native refusal / CURLoRA + refusal-negatives)"
+  }
+}
