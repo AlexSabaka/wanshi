@@ -15,6 +15,13 @@ export class DocumentOutlineGenerator {
     options?: OutlineGeneratorOptions
   ) {
     const generator = new DocumentOutline();
+    // Skip extensions the generator can't handle (e.g. .txt, and languages the
+    // installed build doesn't cover yet) instead of letting generateFromContent
+    // throw a "No generator found" per chunk — that warning was pure noise on a
+    // heterogeneous corpus (KG-17). This is the kg-gen-side stand-in for the
+    // upstream `generateFromContentSafe` (see docs/inbox outline-gen wiring note,
+    // task #1); swap to that once the rebuilt document-outline-gen is merged.
+    if (!generator.isSupported(extension)) return "";
     const outline = await generator.generateFromContent(content, extension, options);
     return DocumentOutlineGenerator.formatAsTree(outline);
   }

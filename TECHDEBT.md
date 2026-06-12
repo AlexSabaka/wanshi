@@ -59,10 +59,17 @@ short and link the file. Remove an item when it's paid down.
   ignored (logged as not-implemented in `CorpusAnalyzer`). Either implement the
   v2 embedding-clustering pass or drop the flag.
 
-- **Outline warnings on plain text.** Files without a known generator (e.g.
-  `.txt`) log `Cannot generate document outline … No generator found for file
-  extension` on every chunk. Cosmetic, but noisy — gate the warning by
-  `readers.outline.enabled` / known extensions.
+- **`document-outline-gen` rebuilt branch not merged — kg-gen wiring upgrades blocked.**
+  The dependency was rebuilt (tree-sitter WASM engine, 45 exts / 11 formats, a `formatOutline`
+  layer, `generateFromContentSafe`, a `compact` ascii-tree mode) but it sits **unpushed** on
+  `feat/wasm-engine-phase-0-1`; kg-gen's installed copy is the old commit `9dc67c5` (`generateFromContent`/
+  `generateFromFile` only, no Safe/`formatOutline`). Once Sabaka pushes + merges to master, do the
+  wiring (`docs/inbox/2026-06-12-from-cheetah-outline-gen-wiring.md`): swap the local guard for
+  upstream `generateFromContentSafe`; delete kg-gen's `formatAsTree`/`formatMetadata`
+  (`src/shared/utils/documentOutline.ts`) in favor of `formatOutline`; thread a `compact` option
+  through `readers.outline`; and pin `#semver:^1.x` instead of tracking master. Separately, outline-gen
+  **Phase 8** adds a deterministic Symbol API to seed kg-gen's own Phase 8 — its `kind` enum must map
+  1:1 into the Phase-2 type vocabulary, not fork; bring kg-gen's kind list to that planning session.
 
 - **Frontend needs a built backend.** The web UI fetches the config schema by
   spawning `kg-gen schema` (`frontend/app/api/config-schema/route.ts`); it can't
@@ -70,6 +77,12 @@ short and link the file. Remove an item when it's paid down.
   `KG_GEN_CMD`) before the run form renders.
 
 ## Paid down
+
+- **Outline warnings on plain text.** `generateOutlineFromContent`
+  (`src/shared/utils/documentOutline.ts`) now guards on the generator's `isSupported(extension)`
+  and returns `""` for unhandled extensions (e.g. `.txt`) instead of letting `generateFromContent`
+  throw a `No generator found` warning per chunk (KG-17). Local stand-in for the upstream
+  `generateFromContentSafe` until the rebuilt `document-outline-gen` is merged (see the Open item).
 
 - **Logger level mapping is off.** Fixed in Phase 1 (KG-19): `LoggerFactory.createLogger`
   now maps `logging.level` onto tslog's real scale (silly=0 … fatal=6) and `--silent`
