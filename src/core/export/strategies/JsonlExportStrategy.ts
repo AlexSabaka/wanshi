@@ -1,5 +1,6 @@
 import { KnowledgeGraph, Entity, Relation } from "../../../types/KnowledgeGraph";
 import { ProcessingOptions } from "../../../types/ProcessingOptions";
+import { normalizeObservations } from "../../../types/Observation";
 import { IExportStrategy } from "./IExportStrategy";
 
 /**
@@ -31,28 +32,34 @@ export class JsonlExportStrategy implements IExportStrategy {
     return format === "jsonl";
   }
 
-  // /**
-  //  * Parse JSONL content back to KnowledgeGraph
-  //  */
-  // static fromJSONL(jsonlContent: string): KnowledgeGraph {
-  //   const lines = jsonlContent.split("\n").filter((line) => line.trim() !== "");
-  //   const graph: KnowledgeGraph = { entities: [], relations: [] };
+  /**
+   * Parse JSONL/`mcp-jsonl` content back into a KnowledgeGraph (KG-11). Each line
+   * is one `{type:"entity"|"relation", …}` object; malformed lines are skipped
+   * silently (a truncated final line from an interrupted write is tolerated).
+   * `mcp-jsonl` downgrades observations to bare strings — `normalizeObservations`
+   * coerces those back into `Observation` objects so both shapes round-trip.
+   */
+  static fromJSONL(jsonlContent: string): KnowledgeGraph {
+    const graph: KnowledgeGraph = { entities: [], relations: [] };
 
-  //   lines.forEach((line) => {
-  //     try {
-  //       const item = JSON.parse(line);
-  //       if (item.type === "entity") {
-  //         const { type, ...entity } = item;
-  //         graph.entities.push(entity as Entity);
-  //       } else if (item.type === "relation") {
-  //         const { type, ...relation } = item;
-  //         graph.relations.push(relation as Relation);
-  //       }
-  //     } catch (error) {
-  //       logger.warn(`Failed to parse JSONL line: ${line}`);
-  //     }
-  //   });
+    for (const line of jsonlContent.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const { type, ...rest } = JSON.parse(trimmed);
+        if (type === "entity") {
+          graph.entities.push({
+            ...(rest as Entity),
+            observations: normalizeObservations((rest as Entity).observations),
+          });
+        } else if (type === "relation") {
+          graph.relations.push(rest as Relation);
+        }
+      } catch {
+        // skip a malformed / truncated line — the prior graph is a retrieval nicety
+      }
+    }
 
-  //   return graph;
-  // }
+    return graph;
+  }
 }

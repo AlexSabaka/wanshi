@@ -242,16 +242,32 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     logger: Logger
   ): Promise<KnowledgeGraph[]> {
     if (!outputPath || !fs.existsSync(outputPath)) return [];
+    const raw = fs.readFileSync(outputPath, "utf-8");
+
+    // JSONL / mcp-jsonl outputs aren't valid JSON documents — parse them
+    // line-by-line (KG-11) instead of warning every run. Route by extension, and
+    // also fall back to the JSONL reader if a `.json` somehow fails to parse.
+    const isJsonl = /\.(jsonl|mcp-jsonl)$/i.test(outputPath);
+    if (isJsonl) {
+      const { JsonlExportStrategy } = await import("./export/strategies/JsonlExportStrategy");
+      const graph = JsonlExportStrategy.fromJSONL(raw);
+      return graph.entities.length || graph.relations.length ? [graph] : [];
+    }
+
     try {
-      const parsed = JSON.parse(fs.readFileSync(outputPath, "utf-8"));
+      const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed as KnowledgeGraph[];
       if (parsed && typeof parsed === "object" && Array.isArray(parsed.entities)) {
         return [parsed as KnowledgeGraph];
       }
       return [];
-    } catch (error) {
+    } catch {
+      // Not a JSON document — try JSONL before giving up (covers a mislabeled file).
+      const { JsonlExportStrategy } = await import("./export/strategies/JsonlExportStrategy");
+      const graph = JsonlExportStrategy.fromJSONL(raw);
+      if (graph.entities.length || graph.relations.length) return [graph];
       logger.warn(
-        `Could not load prior graph at ${outputPath} for retrieval context (ignored): ${error}`
+        `Could not load prior graph at ${outputPath} for retrieval context (ignored)`
       );
       return [];
     }
