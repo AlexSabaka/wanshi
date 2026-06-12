@@ -27,11 +27,12 @@ llm:
 embeddings:
   provider: ollama
   # Canon-clustering calibration (NR-3): mxbai@0.88 is validated precision-clean and
-  # fast here. embeddinggemma's geometry is differently scaled — at 0.88 it over-merged
-  # the 3 distinct Epicure siblings into one node and flooded the escalation band
-  # (26.5k adjudications / 4h). Making canon work natively on embeddinggemma
-  # (complete-linkage + threshold re-tune) is the follow-up brief
-  # docs/inbox/2026-06-10-cheetah-to-dove-canon-embeddinggemma.md.
+  # fast here. embeddinggemma's geometry is differently scaled — at 0.88 it over-merged.
+  # RESOLVED (Phase 4): canon now defaults to complete-linkage (no more sibling chaining),
+  # and embeddinggemma's operating point is calibrated to entity threshold 0.92 — see
+  # docs/inbox/2026-06-12-cheetah-canon-embeddinggemma-calibration.md. To run canon natively
+  # on embeddinggemma, set this model to embeddinggemma and the canon entity threshold to 0.92.
+  # mxbai keeps its own validated 0.88 below (do NOT port 0.92 — the geometries differ).
   # NOTE: this makes the canon arm's merge-dedup use mxbai too (arm A uses embeddinggemma),
   # a minor A/B impurity accepted to isolate the canon-clustering effect.
   model: mxbai-embed-large:335m
@@ -94,16 +95,19 @@ pipeline:
     enabled: true
     target: [entities, relations]
     # hybrid: auto-merge ≥ 0.88, escalate [0.72, 0.88) to LLM adjudication, reject below.
-    # NOTE: 0.88 was tuned against mxbai embeddings; this arm now runs embeddinggemma
-    # (aligned to A), so NR-3 re-audits the merge log and re-tunes against it.
+    # Clustering is complete-linkage by default (Phase 4) — one borderline bridge no longer
+    # chains a whole sibling family. 0.88 here is mxbai's validated point; for embeddinggemma
+    # use 0.92 (calibration note 2026-06-12).
     method: hybrid
     canonicalSelection: frequency
     embeddings:
       entity:
         cluster: agglomerative
+        linkage: complete
         threshold: 0.88
       relation:
         cluster: agglomerative
+        linkage: complete
         threshold: 0.85
     hybrid:
       escalateBand: [0.72, 0.88]
