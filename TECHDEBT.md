@@ -69,6 +69,14 @@ short and link the file. Remove an item when it's paid down.
 
 ## Paid down
 
+- **KG-09 — KBLaM/LoRA exports collided on a constant `fact` key.** Both exports emitted every
+  observation as property `"fact"`, so an entity's N facts shared one key (KBLaM rectangular-attention
+  averaging / contradictory SFT signal). Both now build on a shared `toKbTriples`
+  (`src/core/export/strategies/kbTriples.ts`) that aggregates observations into one `description`
+  property and keys relations on their predicate (same-predicate targets joined), guaranteeing a
+  unique `(name, property)` per entry; KBLaM `key_string` aligned to the paper's `"The {property} of
+  {name}"` (capital T). LoRA filters ungrounded facts before aggregation.
+
 - **Phase 6 — data-model integrity (KG-07/10/11/13).**
   - **KG-13 entity identity + type election + files[] union.** Global merge now keys file/document
     artifacts by name+file (disambiguating colliding `package.json` rather than overwriting one — the

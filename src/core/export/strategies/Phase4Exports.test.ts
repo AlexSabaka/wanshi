@@ -4,7 +4,7 @@ import { GraphitiExportStrategy } from "./GraphitiExportStrategy";
 import { KnowledgeGraph } from "../../../types";
 
 describe("KBLaM export", () => {
-  it("emits DataPoint JSONL triples from observations and relations", () => {
+  it("emits DataPoint JSONL triples with a description property and capital-T key (KG-09)", () => {
     const g: KnowledgeGraph = {
       entities: [
         {
@@ -18,18 +18,45 @@ describe("KBLaM export", () => {
     };
     const lines = new KblamExportStrategy().export(g).split("\n").map((l) => JSON.parse(l));
     expect(lines).toHaveLength(2);
+    expect(lines.some((l) => l.description_type === "fact")).toBe(false); // no constant 'fact'
 
-    const fact = lines.find((l) => l.description_type === "fact");
-    expect(fact).toMatchObject({
+    const desc = lines.find((l) => l.description_type === "description");
+    expect(desc).toMatchObject({
       name: "Recursion",
       description: "a function that calls itself",
-      Q: "What is the fact of Recursion?",
-      A: "The fact of Recursion is a function that calls itself.",
-      key_string: "the fact of Recursion",
+      Q: "What is the description of Recursion?",
+      A: "The description of Recursion is a function that calls itself.",
+      key_string: "The description of Recursion",
     });
 
     const rel = lines.find((l) => l.description_type === "terminates_at");
     expect(rel).toMatchObject({ name: "Recursion", description: "BaseCase" });
+  });
+
+  it("guarantees unique (name, property) keys: aggregates many facts + same-predicate targets", () => {
+    const g: KnowledgeGraph = {
+      entities: [
+        {
+          name: "App",
+          entityType: "concept",
+          files: [],
+          observations: [{ text: "fact one" }, { text: "fact two" }, { text: "fact three" }],
+        },
+      ],
+      relations: [
+        { from: "App", to: "react", relationType: ["depends_on"] },
+        { from: "App", to: "vue", relationType: ["depends_on"] },
+      ],
+    };
+    const lines = new KblamExportStrategy().export(g).split("\n").map((l) => JSON.parse(l));
+    // one 'description' (3 facts joined) + one 'depends_on' (2 targets joined) = 2 entries
+    expect(lines).toHaveLength(2);
+    const keys = lines.map((l) => l.key_string);
+    expect(new Set(keys).size).toBe(keys.length); // all keys unique
+    expect(lines.find((l) => l.description_type === "description")!.description).toBe(
+      "fact one; fact two; fact three"
+    );
+    expect(lines.find((l) => l.description_type === "depends_on")!.description).toBe("react, vue");
   });
 });
 
@@ -51,16 +78,19 @@ describe("LoRA export", () => {
       relations: [],
     };
     const lines = new LoraExportStrategy()
-      .export(g, { groundingMinScore: 0.5 } as any)
+      .export(g, { grounding: { minScore: 0.5 } } as any)
       .split("\n")
       .filter(Boolean)
       .map((l) => JSON.parse(l));
 
-    expect(lines).toHaveLength(2);
-    const contents = lines.map((l) => l.messages[1].content);
-    expect(contents.some((c: string) => c.includes("grounded fact"))).toBe(true);
-    expect(contents.some((c: string) => c.includes("unscored fact"))).toBe(true);
-    expect(contents.some((c: string) => c.includes("hallucinated"))).toBe(false);
+    // The two grounded facts aggregate into one `description` example (KG-09); the
+    // ungrounded one is dropped before aggregation.
+    expect(lines).toHaveLength(1);
+    const answer = lines[0].messages[1].content;
+    expect(answer).toContain("grounded fact here");
+    expect(answer).toContain("unscored fact");
+    expect(answer).not.toContain("hallucinated");
+    expect(lines[0].messages[0].content).toBe("What is the description of X?");
     expect(lines[0].messages[0].role).toBe("user");
   });
 });

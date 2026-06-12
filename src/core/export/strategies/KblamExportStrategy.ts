@@ -1,7 +1,7 @@
 import { KnowledgeGraph } from "../../../types/KnowledgeGraph";
-import { obsText } from "../../../types/Observation";
 import { ProcessingOptions } from "../../../types/ProcessingOptions";
 import { IExportStrategy } from "./IExportStrategy";
+import { toKbTriples } from "./kbTriples";
 
 /**
  * One KBLaM "DataPoint" — the on-disk shape KBLaM's `dataset_generation` ingests
@@ -18,33 +18,17 @@ interface KblamDataPoint {
 }
 
 /**
- * Emits a kg-gen graph as KBLaM-format `(entity, property, value)` triples:
- *  - each observation → `(entity.name, "fact", obs.text)`
- *  - each relation    → `(from, relationType, to)`
- * Faithful to KBLaM's gen_synthetic_data DataPoint schema (Q/A/key_string derived
- * from the same templates), so the output can feed its KB-embedding step.
+ * Emits a kg-gen graph as KBLaM-format `(entity, property, value)` triples with
+ * **unique (name, property) keys** (KG-09): observations aggregate into one
+ * `description` property per entity, relations key on their predicate. Faithful to
+ * KBLaM's DataPoint schema — Q/A/key_string follow the paper's templates (key
+ * `"The {property} of {name}"`, Eq. 4) — so the output feeds its KB-embedding step.
  */
 export class KblamExportStrategy implements IExportStrategy {
   export(graph: KnowledgeGraph, _options?: ProcessingOptions): string {
-    const lines: string[] = [];
-
-    for (const entity of graph.entities) {
-      for (const obs of entity.observations || []) {
-        lines.push(JSON.stringify(this.dataPoint(entity.name, "fact", obsText(obs))));
-      }
-    }
-
-    for (const relation of graph.relations) {
-      const types = Array.isArray(relation.relationType)
-        ? relation.relationType
-        : [relation.relationType];
-      for (const type of types) {
-        if (!type) continue;
-        lines.push(JSON.stringify(this.dataPoint(relation.from, String(type), relation.to)));
-      }
-    }
-
-    return lines.join("\n");
+    return toKbTriples(graph)
+      .map((t) => JSON.stringify(this.dataPoint(t.name, t.property, t.value)))
+      .join("\n");
   }
 
   getFormat(): string {
@@ -62,7 +46,7 @@ export class KblamExportStrategy implements IExportStrategy {
       description: value,
       Q: `What is the ${property} of ${name}?`,
       A: `The ${property} of ${name} is ${value}.`,
-      key_string: `the ${property} of ${name}`,
+      key_string: `The ${property} of ${name}`,
     };
   }
 }
