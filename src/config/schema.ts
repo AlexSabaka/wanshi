@@ -327,6 +327,20 @@ const CanonicalizationSchema = z
     canonicalSelection: CanonicalSelectionEnum.default("frequency").describe(
       "Pick the cluster's canonical representative by frequency or graph degree"
     ),
+    blockTopN: z.coerce
+      .number()
+      .int()
+      .default(0)
+      .describe(
+        "Blocking: only an item's N nearest neighbours are merge-eligible (complete-linkage). 0 = off"
+      ),
+    maxAdjudications: z.coerce
+      .number()
+      .int()
+      .default(2000)
+      .describe(
+        "Safety cap on LLM adjudication calls per canon pass; further escalations reject (the 26K guard)"
+      ),
     embeddings: z
       .object({
         entity: CanonClusterSchema(0.82).default({}),

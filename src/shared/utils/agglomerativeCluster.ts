@@ -34,6 +34,31 @@ class UnionFind {
   }
 }
 
+/**
+ * Symmetric top-N eligibility matrix: `m[i][j]` is true iff j is among i's N most
+ * similar neighbours OR vice versa. Returns null when blocking is off (topN ≤ 0),
+ * meaning "all pairs eligible". Pure.
+ */
+function blockingEligibility(
+  sim: number[][],
+  n: number,
+  topN?: number
+): boolean[][] | null {
+  if (!topN || topN <= 0 || topN >= n - 1) return null;
+  const m: boolean[][] = Array.from({ length: n }, () => new Array<boolean>(n).fill(false));
+  for (let i = 0; i < n; i++) {
+    const neighbours = [...Array(n).keys()]
+      .filter((j) => j !== i)
+      .sort((a, b) => sim[i][b] - sim[i][a])
+      .slice(0, topN);
+    for (const j of neighbours) {
+      m[i][j] = true;
+      m[j][i] = true; // symmetric: eligible if in EITHER endpoint's top-N
+    }
+  }
+  return m;
+}
+
 /** Group item indices by their union-find root, returned as id clusters. */
 function clustersFromUF(items: Embedded[], uf: UnionFind): string[][] {
   const groups = new Map<number, string[]>();
@@ -93,6 +118,13 @@ export interface ClusterByEmbeddingOptions {
    * Epicure sibling fusion. See `completeLinkageCluster`.
    */
   linkage?: "single" | "complete";
+  /**
+   * Blocking (complete-linkage only): only each item's `blockTopN` nearest
+   * neighbours are merge-eligible candidate pairs; everything else is treated as a
+   * reject without ever calling decide/adjudicate. Cuts the O(n²) candidate set and
+   * bounds LLM adjudication on large graphs. 0/undefined = off (all pairs eligible).
+   */
+  blockTopN?: number;
 }
 
 /**
@@ -183,8 +215,21 @@ async function completeLinkageCluster(
 
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      const s = cosineSimilarity(items[i].embedding, items[j].embedding);
-      sim[i][j] = sim[j][i] = s;
+      sim[i][j] = sim[j][i] = cosineSimilarity(items[i].embedding, items[j].embedding);
+    }
+  }
+
+  // Blocking: keep only each item's top-N neighbours as merge-eligible; the rest are
+  // forced to "reject" so decide/adjudicate is never spent on them.
+  const eligible = blockingEligibility(sim, n, opts.blockTopN);
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const s = sim[i][j];
+      if (eligible && !eligible[i][j]) {
+        decision[i][j] = decision[j][i] = "reject";
+        continue;
+      }
       if (opts.band && s >= opts.band[0] && s < opts.band[1]) bandPairs.push({ i, j, sim: s });
       const d = opts.decide(s, items[i].id, items[j].id);
       decision[i][j] = decision[j][i] = d;

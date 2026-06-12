@@ -38,6 +38,9 @@ export interface StructuralStats {
 export class Canonicalizer implements GraphTransform {
   readonly stage = "canonicalization";
 
+  /** LLM adjudication calls in the current apply() (reset per pass; capped by cfg.maxAdjudications). */
+  private adjudications = 0;
+
   isEnabled(ctx: TransformContext): boolean {
     return ctx.options.pipeline.canonicalization.enabled;
   }
@@ -46,6 +49,7 @@ export class Canonicalizer implements GraphTransform {
     const cfg = ctx.options.pipeline.canonicalization;
     this.assertSupported(cfg);
 
+    this.adjudications = 0;
     const mergeLog: MergeRecord[] = [];
     let g = graph;
 
@@ -62,8 +66,14 @@ export class Canonicalizer implements GraphTransform {
     ctx.logger.info(
       `Canonicalization: ${graph.entities.length}→${g.entities.length} entities, ` +
         `${graph.relations.length}→${g.relations.length} relations ` +
-        `(${mergeLog.filter((m) => m.member_count > 1).length} clusters collapsed)`
+        `(${mergeLog.filter((m) => m.member_count > 1).length} clusters collapsed, ` +
+        `${this.adjudications} LLM adjudication(s))`
     );
+    if (this.adjudications >= cfg.maxAdjudications) {
+      ctx.logger.warn(
+        `Adjudication cap (${cfg.maxAdjudications}) hit — remaining borderline pairs were treated as distinct`
+      );
+    }
     await this.emitInspection(ctx, mergeLog, stats);
 
     return g;
@@ -239,6 +249,7 @@ export class Canonicalizer implements GraphTransform {
           !veto(a, b) && sim >= threshold ? "merge" : "reject",
         band: cfg.llm.band as [number, number],
         linkage,
+        blockTopN: cfg.blockTopN,
       };
     }
     // llm | hybrid: auto-merge above the band, escalate within it, reject below.
@@ -251,6 +262,7 @@ export class Canonicalizer implements GraphTransform {
         veto(a, b) ? "reject" : sim >= band[1] ? "merge" : sim >= band[0] ? "escalate" : "reject",
       band,
       linkage,
+      blockTopN: cfg.blockTopN,
       adjudicate: (a: string, b: string) => this.adjudicate(a, b, cfg, which, ctx),
     };
   }
@@ -264,6 +276,10 @@ export class Canonicalizer implements GraphTransform {
     ctx: TransformContext
   ): Promise<boolean> {
     const noun = which === "entity" ? "entity names" : "relation predicates";
+    // Safety cap (the 26K guard): once exhausted, escalations resolve as "distinct"
+    // without billing the LLM. Complete-linkage + blocking should keep us far below it.
+    if (this.adjudications >= cfg.maxAdjudications) return false;
+    this.adjudications++;
     const schema = z.object({ merge: z.boolean() });
     try {
       const res = await ctx.llm.generateStructured(

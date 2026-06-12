@@ -106,6 +106,38 @@ describe("clusterByEmbedding (complete linkage — KG-12)", () => {
   });
 });
 
+describe("clusterByEmbedding (blocking bounds adjudication — KG-12)", () => {
+  // 6 items around a ring; decide escalates every eligible pair so the adjudicator
+  // is the only gate. The count of adjudicator calls measures the candidate set.
+  const items: Embedded[] = [0, 36, 72, 108, 144, 180].map((d, i) => ({
+    id: `e${i}`,
+    embedding: vec(d),
+  }));
+  const decide = (): MergeDecision => "escalate";
+
+  it("without blocking, every pair reaches the adjudicator", async () => {
+    let calls = 0;
+    await clusterByEmbedding(items, {
+      decide,
+      linkage: "complete",
+      adjudicate: async () => (calls++, false),
+    });
+    expect(calls).toBe((items.length * (items.length - 1)) / 2); // 15
+  });
+
+  it("blockTopN caps adjudication to each item's nearest neighbours", async () => {
+    let calls = 0;
+    await clusterByEmbedding(items, {
+      decide,
+      linkage: "complete",
+      blockTopN: 1,
+      adjudicate: async () => (calls++, false),
+    });
+    expect(calls).toBeGreaterThan(0);
+    expect(calls).toBeLessThanOrEqual(items.length); // only top-1 neighbour pairs, well below 15
+  });
+});
+
 describe("clusterByEmbedding (escalation)", () => {
   const items: Embedded[] = [
     { id: "p", embedding: vec(0) },
