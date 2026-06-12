@@ -2,11 +2,11 @@ import * as path from 'path';
 import { z } from 'zod';
 import { ILLMProvider, LLMMessage } from '../../types/ILLMProvider';
 import { PromptManager, PromptContext } from '../llm/prompts/PromptManager';
-import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder, ClassificationResult, IProgressEmitter, ChunkProvenance, Observation, normalizeObservations, GroundingMode, CorpusGlossary, FailedChunk } from '../../types';
+import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder, ClassificationResult, IProgressEmitter, ChunkProvenance, Observation, normalizeObservations, GroundingMode, CorpusGlossary, FailedChunk, GroundingRejection, IGroundingChecker } from '../../types';
 import { CheckpointService } from '../checkpoint';
 import { NoopProgressEmitter } from '../progress';
 import { allowedEntityTypes, allowedRelationTypes } from './vocabulary';
-import { FactualEvaluator } from '../../quality';
+import { KeywordGroundingChecker, verbalizeRelation } from './grounding';
 import { Logger, shutdown } from '../../shared';
 
 /**
@@ -76,6 +76,13 @@ export interface BuilderOptions {
   // chunk and flag/drop ungrounded ones. Defaults to disabled.
   grounding?: GroundingMode;
   groundingMinScore?: number;
+  // The checker the gate routes through (keyword overlap | MiniCheck NLI).
+  // Defaults to a keyword checker, preserving pre-Phase-5 behavior.
+  groundingChecker?: IGroundingChecker;
+  // Folded into the checkpoint key so toggling grounding between --resume runs
+  // re-extracts affected chunks instead of reusing a differently-gated graph
+  // (scoped slice of KG-07). Built by ContainerFactory from the grounding config.
+  groundingSignature?: string;
   // When set, stamp each relation with the chunk text it was extracted from
   // (`Relation.sourceSpan`), so the post-merge co-occurrence grounding gate (and
   // Experiment 2) can judge edges. Off by default — keeps the baseline graph
@@ -98,9 +105,13 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   private progress: IProgressEmitter;
   private grounding: GroundingMode;
   private groundingMinScore: number;
+  private groundingChecker: IGroundingChecker;
+  private groundingSignature: string;
   private attachSourceSpans: boolean;
   /** Chunks whose extraction threw this run — left uncheckpointed (KG-02). */
   private failedChunks: FailedChunk[] = [];
+  /** Claims the grounding gate rejected this run (WI3 manifest trace). */
+  private groundingRejections: GroundingRejection[] = [];
 
   constructor(options: BuilderOptions, logger: Logger) {
     this.llmService = options.llmService;
@@ -114,12 +125,20 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     this.progress = options.progress ?? new NoopProgressEmitter();
     this.grounding = options.grounding ?? 'disabled';
     this.groundingMinScore = options.groundingMinScore ?? 0.5;
+    this.groundingChecker =
+      options.groundingChecker ?? new KeywordGroundingChecker(this.groundingMinScore);
+    this.groundingSignature = options.groundingSignature ?? '';
     this.attachSourceSpans = options.attachSourceSpans ?? false;
   }
 
   /** Chunks whose extraction failed this run (empty when all succeeded). */
   getFailedChunks(): FailedChunk[] {
     return this.failedChunks;
+  }
+
+  /** Claims the inline grounding gate rejected this run (empty when none/off). */
+  getGroundingRejections(): GroundingRejection[] {
+    return this.groundingRejections;
   }
 
   /**
@@ -293,7 +312,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
             chunkIndex,
             content,
             this.model,
-            this.promptVersion
+            this.promptVersion,
+            this.groundingSignature
           )
         : undefined;
 
@@ -337,7 +357,12 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       return { entities: [], relations: [] };
     }
 
-    const kg = this.applyGroundingGate(this.toGraph(raw, provenance, content), content);
+    const kg = await this.applyGroundingGate(
+      this.toGraph(raw, provenance, content),
+      content,
+      filePath,
+      chunkIndex
+    );
     kg.entities.forEach(attachMetadata);
 
     this.progress.emit({
@@ -449,36 +474,92 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   }
 
   /**
-   * Inline grounding gate: score each observation against its source chunk and
-   * either flag (annotate, keep) or drop the ungrounded ones. No-op when
-   * disabled. The score is a cheap keyword-overlap heuristic (FactualEvaluator),
-   * which is the seam for a stronger check later.
+   * Inline grounding gate (Phase 5): check each observation fact AND each
+   * relation triple against its source chunk via the injected checker (keyword
+   * overlap | MiniCheck NLI), then either flag (annotate, keep) or drop the
+   * ungrounded ones. No-op when disabled. Every rejection is recorded
+   * (`groundingRejections`) so it leaves a trace in the run manifest (WI3).
    */
-  private applyGroundingGate(kg: KnowledgeGraph, source: string): KnowledgeGraph {
+  private async applyGroundingGate(
+    kg: KnowledgeGraph,
+    source: string,
+    filePath: string,
+    chunkIndex: number
+  ): Promise<KnowledgeGraph> {
     if (this.grounding === 'disabled' || !source) return kg;
-    const min = this.groundingMinScore;
-    let dropped = 0;
+    const drop = this.grounding === 'drop';
+    let droppedObs = 0;
+    let droppedRel = 0;
+
+    // Observations — the claim is the fact text.
     for (const e of kg.entities) {
-      if (this.grounding === 'drop') {
-        const before = e.observations.length;
-        e.observations = e.observations.filter(
-          (o) => FactualEvaluator.observationGroundingScore(o.text, source) >= min
-        );
-        dropped += before - e.observations.length;
-      } else {
-        for (const o of e.observations) {
-          const score = FactualEvaluator.observationGroundingScore(o.text, source);
-          o.groundingScore = score;
-          o.grounded = score >= min;
+      const kept: Observation[] = [];
+      for (const o of e.observations) {
+        const v = await this.groundingChecker.check(o.text, source);
+        if (v.supported) {
+          if (!drop) {
+            o.groundingScore = v.score;
+            o.grounded = true;
+          }
+          kept.push(o);
+          continue;
+        }
+        this.recordRejection(filePath, chunkIndex, 'observation', e.name, o.text, v.score, drop);
+        if (drop) {
+          droppedObs++;
+        } else {
+          o.groundingScore = v.score;
+          o.grounded = false;
+          kept.push(o);
         }
       }
+      e.observations = kept;
     }
-    if (dropped > 0) {
+
+    // Relation triples — verbalize `{from} {predicate} {to}` and check it.
+    const keptRel: typeof kg.relations = [];
+    for (const r of kg.relations) {
+      const claim = verbalizeRelation(r.from, r.relationType, r.to);
+      const v = await this.groundingChecker.check(claim, source);
+      if (v.supported) {
+        if (!drop) {
+          r.groundingScore = v.score;
+          r.grounded = true;
+        }
+        keptRel.push(r);
+        continue;
+      }
+      this.recordRejection(filePath, chunkIndex, 'relation', `${r.from}→${r.to}`, claim, v.score, drop);
+      if (drop) {
+        droppedRel++;
+      } else {
+        r.groundingScore = v.score;
+        r.grounded = false;
+        keptRel.push(r);
+      }
+    }
+    kg.relations = keptRel;
+
+    if (droppedObs > 0 || droppedRel > 0) {
       this.logger.debug(
-        `Grounding gate dropped ${dropped} ungrounded observation(s) (min ${min})`
+        `Grounding gate dropped ${droppedObs} observation(s) and ${droppedRel} relation(s) ` +
+          `in ${filePath} [chunk ${chunkIndex}]`
       );
     }
     return kg;
+  }
+
+  /** Record one grounding rejection for the run manifest (WI3). */
+  private recordRejection(
+    filePath: string,
+    chunkIndex: number,
+    kind: GroundingRejection['kind'],
+    subject: string,
+    claim: string,
+    score: number,
+    dropped: boolean
+  ): void {
+    this.groundingRejections.push({ filePath, chunkIndex, kind, subject, claim, score, dropped });
   }
 
   /** Normalize a (possibly legacy string-observation) graph from the checkpoint. */

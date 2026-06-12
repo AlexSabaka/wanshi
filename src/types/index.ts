@@ -10,6 +10,7 @@ export * from './IProcessingService';
 export * from './IDirectoryProcessor';
 export * from './IKnowledgeGraphExporter';
 export * from './IKnowledgeGraphBuilder';
+export * from './IGroundingChecker';
 export * from './IKnowledgeGraphMerger';
 export * from './IKnowledgeGraphSearch';
 export * from './IProgressEmitter';

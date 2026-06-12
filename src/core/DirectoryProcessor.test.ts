@@ -32,6 +32,7 @@ describe("DirectoryProcessor — double-count regression", () => {
     container.registerValue(TYPES.FileProcessor, {} as any);
     container.registerValue(TYPES.KnowledgeGraphBuilder, {
       getFailedChunks: () => [],
+      getGroundingRejections: () => [],
     } as any);
     container.registerValue(TYPES.ProgressEmitter, { emit: () => undefined } as any);
 

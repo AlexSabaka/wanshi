@@ -56,6 +56,8 @@ export const FLAG_TO_PATH: Record<string, string> = {
   // grounding
   grounding: "grounding.mode",
   groundingMinScore: "grounding.minScore",
+  groundingChecker: "grounding.checker",
+  groundingModel: "grounding.model",
   // corpus
   corpusProfiling: "corpus.profiling",
   corpusTopTerms: "corpus.topTerms",

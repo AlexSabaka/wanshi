@@ -151,6 +151,9 @@ export const CONFIG_GROUPS: ConfigGroupMeta[] = [
     fields: [
       { path: "grounding.mode", label: "Grounding gate", widget: "select" },
       { path: "grounding.minScore", label: "Min score", widget: "number" },
+      { path: "grounding.checker", label: "Checker", widget: "select" },
+      { path: "grounding.model", label: "MiniCheck model", widget: "text" },
+      { path: "grounding.escalateAbove", label: "Keyword pre-filter band", widget: "number" },
     ],
   },
   {

@@ -5,6 +5,7 @@ import {
   IPromptManager,
   IKnowledgeGraphMerger,
   IProgressEmitter,
+  IGroundingChecker,
 } from "../../types";
 import { DIContainer } from "./DIContainer";
 import { EmbeddingService } from "../llm";
@@ -403,6 +404,25 @@ export class ContainerFactory {
         TYPES.ProgressEmitter
       );
 
+      // Inline grounding checker: minicheck (local NLI, with keyword pre-filter)
+      // when selected & active; otherwise the builder defaults to the keyword
+      // checker. The grounding signature is folded into the checkpoint key so
+      // toggling the gate between --resume runs re-extracts affected chunks
+      // (disabled ⇒ empty signature == legacy key, preserving old checkpoints).
+      const g = options.grounding;
+      const groundingSignature =
+        g.mode === "disabled" ? "" : `${g.mode}|${g.checker}|${g.minScore}|${g.model}`;
+      let groundingChecker: IGroundingChecker | undefined;
+      if (g.mode !== "disabled" && g.checker === "minicheck") {
+        const { MiniCheckGroundingChecker } = await import(
+          "../knowledge/grounding"
+        );
+        groundingChecker = new MiniCheckGroundingChecker(
+          { model: g.model, host: g.host, min: g.minScore, escalateAbove: g.escalateAbove },
+          logger
+        );
+      }
+
       return new KnowledgeGraphBuilder(
         {
           llmService,
@@ -415,6 +435,8 @@ export class ContainerFactory {
           progress,
           grounding: options.grounding.mode,
           groundingMinScore: options.grounding.minScore,
+          groundingChecker,
+          groundingSignature,
           // Stamp edge source spans only when the pipeline grounding gate needs
           // them, so the baseline graph stays free of the extra weight.
           attachSourceSpans: options.pipeline.grounding.enabled,

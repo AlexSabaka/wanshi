@@ -264,6 +264,50 @@ describe("KnowledgeGraphBuilder", () => {
     expect(fabricated.grounded).toBe(false);
   });
 
+  const relationLlm = () =>
+    ({
+      generateStructured: async () => ({
+        entities: [],
+        relations: [
+          { from: "function", to: "itself", relationType: ["calls"] }, // grounded
+          { from: "Zorblax", to: "Recursion", relationType: ["invented"] }, // fabricated
+        ],
+      }),
+      getModelCapabilities: async () => [],
+    } as any);
+
+  it("grounding gate (drop) removes a relation triple absent from the source", async () => {
+    const builder = new KnowledgeGraphBuilder(
+      {
+        llmService: relationLlm(),
+        promptManager: { getUserPrompt: async () => "u", getSystemPrompt: async () => "s" } as any,
+        model: "m",
+        grounding: "drop",
+        groundingMinScore: 0.5,
+      },
+      stubLogger()
+    );
+    const [kg] = await builder.build(groundingFile(), "s");
+    expect(kg.relations.map((r) => r.from)).toEqual(["function"]); // Zorblax edge dropped
+  });
+
+  it("records grounding rejections for the run manifest (WI3 trace)", async () => {
+    const builder = new KnowledgeGraphBuilder(
+      {
+        llmService: relationLlm(),
+        promptManager: { getUserPrompt: async () => "u", getSystemPrompt: async () => "s" } as any,
+        model: "m",
+        grounding: "drop",
+        groundingMinScore: 0.5,
+      },
+      stubLogger()
+    );
+    await builder.build(groundingFile(), "s");
+    const rej = builder.getGroundingRejections();
+    expect(rej).toHaveLength(1);
+    expect(rej[0]).toMatchObject({ kind: "relation", subject: "Zorblax→Recursion", dropped: true });
+  });
+
   // KG-02: a failed extraction must be recorded and left uncheckpointed, not
   // swallowed into an empty graph and cached as done.
   const throwingLlm = () =>

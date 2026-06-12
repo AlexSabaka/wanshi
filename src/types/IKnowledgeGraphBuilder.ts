@@ -15,6 +15,25 @@ export interface FailedChunk {
 }
 
 /**
+ * A claim (observation fact or verbalized relation triple) that the inline
+ * grounding gate judged ungrounded against its source chunk (Phase 5, KG-08).
+ * In `drop` mode it was removed from the graph; in `flag` mode it was annotated
+ * and kept. Either way it is recorded so rejections leave a trace in the run
+ * manifest rather than vanishing silently.
+ */
+export interface GroundingRejection {
+  filePath: string;
+  chunkIndex: number;
+  kind: "observation" | "relation";
+  /** Entity name (observation) or `from→to` (relation). */
+  subject: string;
+  claim: string;
+  score: number;
+  /** Whether the claim was removed (`drop`) or merely flagged (`flag`). */
+  dropped: boolean;
+}
+
+/**
  * Interface for Knowledge Graph Building services
  */
 
@@ -32,4 +51,7 @@ export interface IKnowledgeGraphBuilder {
 
   /** Chunks whose extraction failed this run (empty when all succeeded). */
   getFailedChunks(): FailedChunk[];
+
+  /** Claims the inline grounding gate rejected this run (empty when none/off). */
+  getGroundingRejections(): GroundingRejection[];
 }

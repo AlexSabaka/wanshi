@@ -1,0 +1,170 @@
+[
+  {
+    "id": "snake-1",
+    "kind": "snake_case",
+    "source": "The cosine similarity helper compares two embedding vectors and returns a score between minus one and one.",
+    "claim": "cosine_similarity returns a value between -1 and 1.",
+    "label": "grounded"
+  },
+  {
+    "id": "para-1",
+    "kind": "paraphrase",
+    "source": "Knowledge graphs store entities and the relationships that connect them.",
+    "claim": "A knowledge graph holds nodes and the links between them.",
+    "label": "grounded"
+  },
+  {
+    "id": "snake-2",
+    "kind": "snake_case",
+    "source": "The build step compiles TypeScript into the dist directory.",
+    "claim": "build_step emits compiled output into dist.",
+    "label": "grounded"
+  },
+  {
+    "id": "para-2",
+    "kind": "paraphrase",
+    "source": "Ollama runs large language models locally on your own machine.",
+    "claim": "LLMs execute on the user's own hardware, with no cloud involved.",
+    "label": "grounded"
+  },
+  {
+    "id": "verb-1",
+    "kind": "verbatim",
+    "source": "The merger deduplicates observations using cosine similarity of embeddings.",
+    "claim": "Observations are deduplicated by embedding cosine similarity.",
+    "label": "grounded"
+  },
+  {
+    "id": "snake-3",
+    "kind": "snake_case",
+    "source": "Each chunk is checkpointed so an interrupted run can resume without re-billing.",
+    "claim": "The checkpoint_service lets an interrupted run resume from saved chunks.",
+    "label": "grounded"
+  },
+  {
+    "id": "para-3",
+    "kind": "paraphrase",
+    "source": "Embeddings are sent to Ollama in batches of ten.",
+    "claim": "Ten vectors are embedded per request.",
+    "label": "grounded"
+  },
+  {
+    "id": "para-4",
+    "kind": "paraphrase",
+    "source": "The classifier routes a file to a content domain before extraction.",
+    "claim": "Before extraction, each file is classified into a domain.",
+    "label": "grounded"
+  },
+  {
+    "id": "snake-4",
+    "kind": "snake_case",
+    "source": "A recursive function calls itself until a base case is reached.",
+    "claim": "recursive_function repeats until it hits the base case.",
+    "label": "grounded"
+  },
+  {
+    "id": "para-5",
+    "kind": "paraphrase",
+    "source": "The reader factory maps a file extension to the right reader implementation.",
+    "claim": "File extensions are dispatched to their matching reader by the factory.",
+    "label": "grounded"
+  },
+  {
+    "id": "verb-2",
+    "kind": "verbatim",
+    "source": "Relations point from a source entity to a target entity by name.",
+    "claim": "A relation connects a source entity to a target entity.",
+    "label": "grounded"
+  },
+  {
+    "id": "snake-5",
+    "kind": "snake_case",
+    "source": "The grounding gate drops observations that are not supported by the source text.",
+    "claim": "grounding_gate removes facts the document does not support.",
+    "label": "grounded"
+  },
+  {
+    "id": "hall-1",
+    "kind": "fabrication",
+    "source": "The cosine similarity helper compares two embedding vectors.",
+    "claim": "The cosine similarity helper was patented in 1987 by IBM.",
+    "label": "ungrounded"
+  },
+  {
+    "id": "hall-2",
+    "kind": "fabrication",
+    "source": "Knowledge graphs store entities and the relationships between them.",
+    "claim": "Knowledge graphs are primarily used to mine cryptocurrency.",
+    "label": "ungrounded"
+  },
+  {
+    "id": "num-1",
+    "kind": "wrong_number",
+    "source": "Embeddings are sent to Ollama in batches of ten.",
+    "claim": "Embeddings are sent to Ollama in batches of five thousand.",
+    "label": "ungrounded"
+  },
+  {
+    "id": "unrel-1",
+    "kind": "unrelated",
+    "source": "The build step compiles TypeScript into the dist directory.",
+    "claim": "The garden needs watering twice a week during the summer.",
+    "label": "ungrounded"
+  },
+  {
+    "id": "contra-1",
+    "kind": "contradiction",
+    "source": "Ollama runs models locally and never sends your data anywhere.",
+    "claim": "Ollama automatically uploads your data to a public server.",
+    "label": "ungrounded"
+  },
+  {
+    "id": "contra-2",
+    "kind": "contradiction",
+    "source": "Facts are superseded, never deleted, so history is preserved.",
+    "claim": "Facts are permanently deleted as soon as they are superseded.",
+    "label": "ungrounded"
+  },
+  {
+    "id": "unrel-2",
+    "kind": "unrelated",
+    "source": "The merger deduplicates observations using embeddings.",
+    "claim": "Mount Everest is the tallest mountain above sea level on Earth.",
+    "label": "ungrounded"
+  },
+  {
+    "id": "hall-3",
+    "kind": "fabrication",
+    "source": "A recursive function calls itself until a base case is reached.",
+    "claim": "Recursion was invented in the year 1742 by a mathematician named Zorblax.",
+    "label": "ungrounded"
+  },
+  {
+    "id": "hall-4",
+    "kind": "fabrication",
+    "source": "The classifier routes a file to a content domain before extraction.",
+    "claim": "The classifier permanently deletes any file it cannot read.",
+    "label": "ungrounded"
+  },
+  {
+    "id": "contra-3",
+    "kind": "contradiction",
+    "source": "Embeddings stay local and free by default, even when generation is in the cloud.",
+    "claim": "Embeddings are always billed to a cloud provider.",
+    "label": "ungrounded"
+  },
+  {
+    "id": "unrel-3",
+    "kind": "unrelated",
+    "source": "Relations point from a source entity to a target entity.",
+    "claim": "The recipe calls for two cups of flour and a pinch of salt.",
+    "label": "ungrounded"
+  },
+  {
+    "id": "hall-5",
+    "kind": "fabrication",
+    "source": "Each chunk is checkpointed so a run can resume after an interruption.",
+    "claim": "Each chunk is encrypted with AES-256 before it is stored on disk.",
+    "label": "ungrounded"
+  }
+]

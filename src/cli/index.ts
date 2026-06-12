@@ -125,6 +125,14 @@ program
     "--grounding-min-score <number>",
     "minimum keyword-overlap grounding score (0..1) an observation must reach"
   )
+  .option(
+    "--grounding-checker <checker>",
+    "grounding checker: keyword (overlap) | minicheck (local NLI fact-checker)"
+  )
+  .option(
+    "--grounding-model <model>",
+    "Ollama model for the minicheck grounding checker (default bespoke-minicheck:7b)"
+  )
 
   // Corpus Analysis Pre-pass (experimental)
   .option(

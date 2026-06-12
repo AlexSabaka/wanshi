@@ -209,6 +209,25 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       process.exitCode = 1;
     }
 
+    // Surface claims the inline grounding gate rejected (WI3 manifest trace):
+    // in `drop` mode they were removed from the graph, in `flag` mode annotated
+    // and kept — either way they must leave a visible trace, not vanish.
+    const rejections = kgBuilder.getGroundingRejections();
+    if (rejections.length > 0) {
+      const dropped = rejections.filter((r) => r.dropped).length;
+      logger.warn(
+        `Grounding gate flagged ${rejections.length} ungrounded claim(s)` +
+          (dropped > 0 ? ` (${dropped} dropped, ${rejections.length - dropped} flagged)` : ` (all flagged)`) +
+          `:`
+      );
+      for (const r of rejections) {
+        logger.debug(
+          `  - [${r.kind}] ${r.subject} (score ${r.score.toFixed(2)}, ` +
+            `${r.dropped ? "dropped" : "flagged"}) in ${r.filePath} [chunk ${r.chunkIndex}]: ${r.claim}`
+        );
+      }
+    }
+
     return knowledgeGraphs;
   }
 

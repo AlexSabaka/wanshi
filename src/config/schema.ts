@@ -45,6 +45,7 @@ export const ContentClassifierModeEnum = z.enum([
   "bert",
 ]);
 export const GroundingModeEnum = z.enum(["disabled", "flag", "drop"]);
+export const GroundingCheckerEnum = z.enum(["keyword", "minicheck"]);
 export const CorpusProfilingModeEnum = z.enum(["disabled", "enabled"]);
 export const ExportFormatEnum = z.enum([
   "json",
@@ -136,6 +137,20 @@ const GroundingSchema = z
       "Inline grounding gate: disabled | flag (annotate) | drop (remove ungrounded)"
     ),
     minScore: num(0.5).describe("Minimum keyword-overlap grounding score (0..1)"),
+    checker: GroundingCheckerEnum.default("keyword").describe(
+      "Grounding checker: keyword (overlap heuristic) | minicheck (local NLI fact-checker, with keyword pre-filter)"
+    ),
+    model: z
+      .string()
+      .default("bespoke-minicheck:7b")
+      .describe("Ollama model for the minicheck checker (a (document, claim)→Yes/No NLI model)"),
+    host: z
+      .string()
+      .optional()
+      .describe("Ollama host for the minicheck checker; defaults to the generation/embeddings host"),
+    escalateAbove: num(0.8).describe(
+      "Keyword score at/above which minicheck accepts without an NLI call (cheap pre-filter)"
+    ),
   })
   .strict();
 

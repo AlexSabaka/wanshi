@@ -25,6 +25,17 @@ describe("CheckpointService", () => {
     expect(a).not.toBe(c);
   });
 
+  it("computeKey is sensitive to the grounding signature (extra)", () => {
+    const s = svc();
+    const base = s.computeKey("a.txt", 1, "content", "m", "v");
+    const same = s.computeKey("a.txt", 1, "content", "m", "v", "");
+    const grounded = s.computeKey("a.txt", 1, "content", "m", "v", "drop|minicheck|0.5");
+    // Default extra "" must not change the legacy key (back-compat).
+    expect(same).toBe(base);
+    // A different grounding signature re-keys the chunk (no silent mode mixing).
+    expect(grounded).not.toBe(base);
+  });
+
   it("append/has/get round-trips and load() restores from disk", async () => {
     const s = svc();
     const key = s.computeKey("a.txt", 1, "x", "m", "v");

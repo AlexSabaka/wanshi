@@ -22,6 +22,11 @@ export interface Relation {
   sourceSpan?: string;
   /** Bi-temporal valid time, mirrored from the chunk provenance when known. */
   validAt?: string;
+  // Inline grounding gate (Phase 5): set when `grounding.mode: flag` checks edges.
+  // The triple is verbalized (`{from} {predicate} {to}`) and scored against the
+  // source span; `grounded === false` marks an ungrounded edge that `drop` removes.
+  grounded?: boolean;
+  groundingScore?: number; // 0..1 grounding score for the verbalized triple
 }
 
 export interface KnowledgeGraph {
