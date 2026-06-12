@@ -62,6 +62,8 @@ export const FLAG_TO_PATH: Record<string, string> = {
   corpusProfiling: "corpus.profiling",
   corpusTopTerms: "corpus.topTerms",
   corpusProfilePath: "corpus.profilePath",
+  // ast
+  ast: "ast.mode",
   // merging
   entitySimilarityThreshold: "merging.entitySimilarityThreshold",
   observationSimilarityThreshold: "merging.observationSimilarityThreshold",

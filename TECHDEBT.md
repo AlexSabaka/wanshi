@@ -69,6 +69,18 @@ short and link the file. Remove an item when it's paid down.
 
 ## Paid down
 
+- **AST-seeded code extraction (Phase 8).** A deterministic Tree-sitter symbol pass
+  (`src/core/processor/ast/AstSeedService.ts`, via the pinned `document-outline-gen` Symbol API) now
+  seeds code definitions + exported members as entities (+ `calls`/`imports` edges) **before** the LLM,
+  so the model augments the symbol set rather than originating it — the exported `countTerms` (missed by
+  all five models) is now seeded. Symbol kinds map onto the existing Phase-2 vocab (no `vocabulary.ts`
+  change); content-hash cached (`<output>.ast-cache.json`) so an unchanged file is a no-op; `ast.mode`
+  config (default enabled). **Follow-ups (logged, not blocking):** the parser doesn't surface top-level
+  `const`/`let` symbols, so module-level constants aren't seeded; relative import specifiers (`./z`)
+  over-merge across files (LSP/cross-file resolution is the deferred Codebase-Memory hybrid step);
+  prompt-injecting the seeded symbol names (so the LLM augments in-context, not only via the merge) is a
+  possible enhancement.
+
 - **KG-09 — KBLaM/LoRA exports collided on a constant `fact` key.** Both exports emitted every
   observation as property `"fact"`, so an entity's N facts shared one key (KBLaM rectangular-attention
   averaging / contradictory SFT signal). Both now build on a shared `toKbTriples`

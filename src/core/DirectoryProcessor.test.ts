@@ -35,6 +35,11 @@ describe("DirectoryProcessor — double-count regression", () => {
       getGroundingRejections: () => [],
     } as any);
     container.registerValue(TYPES.ProgressEmitter, { emit: () => undefined } as any);
+    container.registerValue(TYPES.AstSeedService, {
+      loadCache: async () => undefined,
+      saveCache: async () => undefined,
+      seedGraph: async () => null,
+    } as any);
 
     const dp = new DirectoryProcessor(container);
     // No files this run; the prior graph must be used for retrieval only, never

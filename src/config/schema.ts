@@ -48,6 +48,7 @@ export const GroundingModeEnum = z.enum(["disabled", "flag", "drop"]);
 export const GroundingCheckerEnum = z.enum(["keyword", "minicheck"]);
 export const SupersessionModeEnum = z.enum(["disabled", "heuristic", "llm"]);
 export const CorpusProfilingModeEnum = z.enum(["disabled", "enabled"]);
+export const AstModeEnum = z.enum(["enabled", "disabled"]);
 export const ExportFormatEnum = z.enum([
   "json",
   "jsonl",
@@ -153,6 +154,13 @@ const GroundingSchema = z
     escalateAbove: num(0.8).describe(
       "Keyword score at/above which minicheck accepts without an NLI call (cheap pre-filter)"
     ),
+  })
+  .strict();
+
+const AstSchema = z
+  .object({
+    mode: AstModeEnum.default("enabled").describe("AST symbol seed (Phase 8): seed code definitions + exported members as entities (+ calls/imports edges) before the LLM, so the model augments rather than originates the symbol set"),
+    cachePath: z.string().optional().describe("AST symbol cache sidecar path (default <output>.ast-cache.json)"),
   })
   .strict();
 
@@ -452,6 +460,7 @@ export const ConfigSchema = z
     merging: MergingSchema.default({}),
     grounding: GroundingSchema.default({}),
     corpus: CorpusSchema.default({}),
+    ast: AstSchema.default({}),
     classifier: ClassifierSchema.default({}),
     readers: ReadersSchema.default({}),
     export: ExportSchema.default({}),

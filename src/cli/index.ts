@@ -142,6 +142,12 @@ program
   .option("--corpus-top-terms <number>", "number of most-frequent terms fed to the glossary call")
   .option("--corpus-profile-path <path>", "corpus profile sidecar path (default: <output>.corpus-profile.json)")
 
+  // AST symbol seed (code extraction)
+  .option(
+    "--ast <mode>",
+    "AST symbol seed: enabled | disabled (seed code definitions + exported members as entities before the LLM)"
+  )
+
   // Knowledge Graph Merging
   .option("--entity-similarity-threshold <number>", "Jaro-Winkler similarity threshold for entity names merging")
   .option(

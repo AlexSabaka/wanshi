@@ -18,6 +18,7 @@ import {
   CorpusProfile
 } from "../types";
 import { PromptManager } from "./llm";
+import { AstSeedService } from "./processor/ast";
 import { toRelPathId } from "./corpus";
 import {
   PipelineRunner,
@@ -154,6 +155,15 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       TYPES.KnowledgeGraphBuilder
     );
 
+    // Deterministic AST symbol seed (Phase 8): seed code definitions + exported
+    // members (and calls/imports edges) per file so the LLM augments the symbol
+    // set rather than originating it. Content-hash cached across the run.
+    const astSeed =
+      options.ast.mode === "enabled"
+        ? await this.container.resolve<AstSeedService>(TYPES.AstSeedService)
+        : undefined;
+    await astSeed?.loadCache();
+
     const total = files.length;
     let index = 0;
     for (const file of files) {
@@ -177,7 +187,8 @@ export class DirectoryProcessor implements IDirectoryProcessor {
           kgBuilder,
           retrievalContext,
           logger,
-          corpusProfile
+          corpusProfile,
+          astSeed
         );
         knowledgeGraphs.push(...fileGraphs);
 
@@ -193,6 +204,9 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         progress.emit({ type: "file_complete", index, total, path: file, entities: 0, relations: 0 });
       }
     }
+
+    // Persist the AST symbol cache so an unchanged file is a no-op next run.
+    await astSeed?.saveCache();
 
     // Surface chunks whose extraction failed: they were left uncheckpointed (so
     // --resume retries them) and must not pass silently as "done-and-empty". The
@@ -283,7 +297,8 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     kgBuilder: IKnowledgeGraphBuilder,
     existingGraphs: KnowledgeGraph[],
     logger: Logger,
-    corpusProfile?: CorpusProfile
+    corpusProfile?: CorpusProfile,
+    astSeed?: AstSeedService
   ): Promise<KnowledgeGraph[]> {
     logger.info(`Processing: ${file}`);
 
@@ -318,12 +333,19 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       corpusProfile?.glossary
     );
 
-    return await kgBuilder.build(
+    const graphs = await kgBuilder.build(
       processedFile,
       systemPrompt,
       retrieve,
       corpusProfile?.glossary
     );
+
+    // Append the deterministic AST symbol seed (Phase 8) so it merges with the
+    // LLM's per-chunk graphs — the model augments the symbol set, not originates it.
+    const seed = astSeed ? await astSeed.seedGraph(processedFile) : null;
+    if (seed) graphs.push(seed);
+
+    return graphs;
   }
 
   /**

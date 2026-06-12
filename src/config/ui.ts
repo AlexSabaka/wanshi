@@ -176,6 +176,14 @@ export const CONFIG_GROUPS: ConfigGroupMeta[] = [
     ],
   },
   {
+    id: "ast",
+    title: "AST symbol seed (code)",
+    fields: [
+      { path: "ast.mode", label: "AST symbol seed", widget: "select" },
+      { path: "ast.cachePath", label: "AST cache sidecar path", widget: "path", pathLike: true },
+    ],
+  },
+  {
     id: "dot",
     title: "DOT export options",
     description: "Used when export format is dot.",

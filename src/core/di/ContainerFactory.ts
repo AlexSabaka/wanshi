@@ -37,6 +37,7 @@ export const TYPES = {
   CheckpointService: Symbol.for("CheckpointService"),
   ProgressEmitter: Symbol.for("ProgressEmitter"),
   CorpusAnalyzer: Symbol.for("CorpusAnalyzer"),
+  AstSeedService: Symbol.for("AstSeedService"),
 };
 
 /**
@@ -363,6 +364,16 @@ export class ContainerFactory {
       const logger = await c.resolve<Logger>(TYPES.Logger);
       const promptManager = await c.resolve<IPromptManager>(TYPES.PromptManager);
       return new CorpusAnalyzer(llmService, classifier, factory, logger, promptManager);
+    });
+
+    // Register the AST symbol seed service (Phase 8; used when ast.mode=enabled)
+    container.register(TYPES.AstSeedService, async (c) => {
+      const { AstSeedService, AstSymbolStore } = await import("../processor/ast");
+      const options = await c.resolve<ProcessingOptions>(TYPES.ProcessingOptions);
+      const logger = await c.resolve<Logger>(TYPES.Logger);
+      const cachePath = options.ast.cachePath || `${options.output}.ast-cache.json`;
+      const store = new AstSymbolStore(cachePath, logger);
+      return new AstSeedService(store, logger, options.input);
     });
 
     // Register Checkpoint service (used only when --resume is set)
