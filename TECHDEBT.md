@@ -6,16 +6,6 @@ short and link the file. Remove an item when it's paid down.
 
 ## Open
 
-- **Entity identity is name-only — same-basename files fuse (KG-13 / Phase-4 WI6).**
-  `KnowledgeMerger` keys entities by `name` and relations reference by `name`, so two
-  distinct entities sharing a basename (`package.json`, `index.ts` — one per project)
-  can't coexist: the exact-match path fuses them, and *not* merging them just makes the
-  name-keyed map overwrite one (data loss — found while attempting WI6, reverted). A real
-  fix needs identity = name+file and relation re-keying by qualified id. Bundle with the
-  rest of KG-13: restore the cross-file `files[]` union (computed in `mergeGlobally` then
-  discarded, `src/core/knowledge/merging/KnowledgeMerger.ts:497`) and fix
-  entityType election (currently longest-string wins, so `other` beats `file`). → Phase 6.
-
 - **Canon should not embed with embeddinggemma — switch to nomic + recalibrate.**
   The separation bench (`examples/sandbox/embedding-bench.ts`, note
   `docs/inbox/2026-06-12-cheetah-embedding-model-bench.md`) found embeddinggemma *sub-random*
@@ -78,6 +68,25 @@ short and link the file. Remove an item when it's paid down.
   `KG_GEN_CMD`) before the run form renders.
 
 ## Paid down
+
+- **Phase 6 — data-model integrity (KG-07/10/11/13).**
+  - **KG-13 entity identity + type election + files[] union.** Global merge now keys file/document
+    artifacts by name+file (disambiguating colliding `package.json` rather than overwriting one — the
+    reverted WI6 data loss), re-keys relations per-graph, elects entityType by vote (specific beats
+    `other`), and writes back the cross-file `files[]` union (`KnowledgeMerger.ts`). Conceptual
+    same-name entities still merge cross-file.
+  - **KG-10 bi-temporal + conversation boundaries.** `parseChatExport` splits on conversation
+    boundaries (no cross-conversation chunk; per-conversation `validAt`, `TranscriptReader.ts`).
+    Merge-time supersession (`merging.supersession: heuristic|llm`) now writes `invalidAt`/`expiredAt`
+    on an older contradicted fact instead of deleting it (Graphiti model), via the new
+    `IContradictionChecker` seam (`src/core/knowledge/contradiction/`). `validAt` is stamped from the
+    source's `occurredAt`, never the ingestion time.
+  - **KG-07 checkpoint key.** `KnowledgeGraphBuilder` folds glossary + classifier classes + retrieved
+    context + system-prompt (resolved vocab/schema) + grounding into the checkpoint key's `extra`, so
+    toggling any extraction-affecting input between `--resume` runs re-extracts the affected chunks.
+  - **KG-11 JSONL retrieval seeding.** `JsonlExportStrategy.fromJSONL` implemented and `loadPriorGraphs`
+    routes jsonl/mcp-jsonl line-by-line, so the README-recommended jsonl output round-trips without the
+    per-run warning.
 
 - **Outline warnings on plain text + duplicated renderer (KG-17).** After pinning the rebuilt
   `document-outline-gen` (1.0.0), `generateOutlineFromContent` (`src/shared/utils/documentOutline.ts`)
