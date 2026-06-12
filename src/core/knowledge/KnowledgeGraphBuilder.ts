@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { z } from 'zod';
 import { ILLMProvider, LLMMessage } from '../../types/ILLMProvider';
 import { PromptManager, PromptContext } from '../llm/prompts/PromptManager';
@@ -156,6 +157,35 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   }
 
   /**
+   * Everything that affects a chunk's extraction *other than its own text* (KG-07),
+   * folded into the checkpoint key's `extra` so toggling any of it between
+   * `--resume` runs re-extracts the affected chunks instead of silently reusing a
+   * graph built under different settings: the grounding signature (Phase 5), the
+   * rendered system prompt (which already encodes the resolved entity/relation
+   * vocabulary + domain examples → the "schema shape"), the corpus glossary, the
+   * classifier classes, and this chunk's retrieved context.
+   */
+  private extractionExtra(
+    systemPrompt: string,
+    glossary: CorpusGlossary | undefined,
+    contentClasses: ClassificationResult[] | undefined,
+    retrievedContext: unknown
+  ): string {
+    const h = crypto.createHash('sha1');
+    for (const part of [
+      this.groundingSignature,
+      systemPrompt,
+      glossary ? JSON.stringify(glossary) : '',
+      contentClasses ? JSON.stringify(contentClasses) : '',
+      retrievedContext ? JSON.stringify(retrievedContext) : '',
+    ]) {
+      h.update(part);
+      h.update(' ');
+    }
+    return h.digest('hex');
+  }
+
+  /**
    * Build a knowledge graph from a processed file
    */
   async build(
@@ -209,7 +239,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
             entity.files = [processedFile.path];
             entity.chunk = chunk.index;
             entity.totalChunks = chunk.totalChunks;
-          }
+          },
+          this.extractionExtra(systemPrompt, glossary, contentClasses, retrievedContext)
         );
 
         graphs.push(kg);
@@ -237,7 +268,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
           ),
         (entity) => {
           entity.files = [processedFile.path];
-        }
+        },
+        this.extractionExtra(systemPrompt, glossary, contentClasses, retrievedContext)
       );
 
       graphs.push(kg);
@@ -295,7 +327,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     content: string,
     provenance: ChunkProvenance,
     generate: () => Promise<RawGraph>,
-    attachMetadata: (entity: KnowledgeGraph['entities'][number]) => void
+    attachMetadata: (entity: KnowledgeGraph['entities'][number]) => void,
+    extractionExtra: string
   ): Promise<KnowledgeGraph> {
     this.progress.emit({
       type: "chunk_start",
@@ -313,7 +346,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
             content,
             this.model,
             this.promptVersion,
-            this.groundingSignature
+            extractionExtra
           )
         : undefined;
 

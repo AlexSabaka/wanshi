@@ -363,4 +363,39 @@ describe("KnowledgeGraphBuilder", () => {
     expect(appended).toHaveLength(0); // failure never written to the checkpoint
     expect(builder.getFailedChunks()).toHaveLength(1);
   });
+
+  // KG-07: the checkpoint key must fold in everything that changes extraction
+  // semantics (glossary, classifier classes, grounding, system prompt, retrieval),
+  // so toggling any of them between --resume runs re-extracts instead of reusing a
+  // graph built under different settings.
+  it("checkpoint key (extra) is sensitive to glossary and grounding", async () => {
+    const extras: string[] = [];
+    const checkpoint = {
+      computeKey: (...args: any[]) => {
+        extras.push(String(args[5])); // the extractionExtra signature
+        return args.join("|");
+      },
+      has: () => false,
+      get: () => undefined,
+      append: async () => {},
+    } as any;
+    const build = async (opts: any, systemPrompt: string, glossary?: any) => {
+      const builder = new KnowledgeGraphBuilder(
+        { llmService: hallucinatingLlm(), promptManager: promptStub(), model: "m", resume: true, checkpoint, ...opts },
+        stubLogger()
+      );
+      await builder.build(oneChunkFile(), systemPrompt, undefined, glossary);
+    };
+
+    await build({}, "sysA"); // [0] baseline
+    await build({}, "sysA"); // [1] identical → same extra
+    await build({}, "sysA", { entityNames: ["X"], entityTypes: [], relationTypes: [] }); // [2] glossary differs
+    await build({ groundingSignature: "drop|minicheck|0.5" }, "sysA"); // [3] grounding differs
+    await build({}, "sysB"); // [4] system prompt (schema/vocab) differs
+
+    expect(extras[1]).toBe(extras[0]); // identical inputs → identical key
+    expect(extras[2]).not.toBe(extras[0]); // glossary change re-keys
+    expect(extras[3]).not.toBe(extras[0]); // grounding change re-keys
+    expect(extras[4]).not.toBe(extras[0]); // system-prompt/schema change re-keys
+  });
 });
