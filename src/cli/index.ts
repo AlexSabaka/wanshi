@@ -99,6 +99,7 @@ program
   // Reference & link resolution (Phase 0, network-free; off by default)
   .option("--reference-links", "resolve internal links ([x](./other.md), [[wikilinks]], HTML href) to corpus files as links_to edges (default: false)")
   .option("--reference-citations", "parse bibliography + inline arXiv/DOI/PMID into cites edges (network-free; default: false)")
+  .option("--reference-follow", "follow internal links to discover & process referenced files (each once); network-free, confined to input (default: false)")
 
   // JSON reading strategy
   .option(

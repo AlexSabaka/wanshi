@@ -50,6 +50,7 @@ export const FLAG_TO_PATH: Record<string, string> = {
   // references (Phase 0, network-free; off by default)
   referenceLinks: "references.internalLinks.enabled",
   referenceCitations: "references.citations.enabled",
+  referenceFollow: "references.follow.enabled",
   // classifier
   classifier: "classifier.mode",
   // retrieval

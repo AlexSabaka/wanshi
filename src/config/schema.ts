@@ -249,6 +249,22 @@ const ReferencesSchema = z
       })
       .strict()
       .default({}),
+    follow: z
+      .object({
+        enabled: z
+          .boolean()
+          .default(false)
+          .describe(
+            "Reference-driven ingestion: follow internal links to discover & process files (each once). Network-free, confined to input; auto-enables internalLinks"
+          ),
+        seeds: stringList([]).describe(
+          "Entry docs (relative to input) to crawl from; empty = crawl from the discovered glob set"
+        ),
+        maxDepth: num(0).describe("Link-follow depth from a seed (0 = unlimited, within maxFiles)"),
+        maxFiles: num(5000).describe("Hard cap on files processed per run (cycle/runaway guard)"),
+      })
+      .strict()
+      .default({}),
   })
   .strict();
 
