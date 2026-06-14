@@ -1,8 +1,8 @@
-# CLAUDE.md — Agent Instructions for kg-gen
+# CLAUDE.md — Agent Instructions for wanshi
 
 ## Project Overview
 
-**kg-gen** is a TypeScript CLI tool that transforms files and codebases into structured knowledge graphs using local LLMs via Ollama or any OpenAI-compatible API provider. It extracts entities, observations (facts), and relations, then merges them into a queryable knowledge graph exportable in JSON, JSONL, MCP-compatible JSONL, or GraphViz DOT formats.
+**wanshi** is a TypeScript CLI tool that transforms files and codebases into structured knowledge graphs using local LLMs via Ollama or any OpenAI-compatible API provider. It extracts entities, observations (facts), and relations, then merges them into a queryable knowledge graph exportable in JSON, JSONL, MCP-compatible JSONL, or GraphViz DOT formats.
 
 **LLM providers**: generation runs on local Ollama *or* any OpenAI-compatible endpoint (OpenAI, OpenRouter, vLLM, Ollama Cloud, …), selected via `provider`/`host`/`apiKey`. Embeddings are configured independently (`embeddingsProvider`/`embeddingsHost`/`embeddingsApiKey`) and default to local Ollama, so dedup/retrieval stays free even when generation is on a metered cloud. See [LLM Providers & Resume](#llm-providers--resume).
 
@@ -20,7 +20,7 @@
 | Prompt templating | Handlebars |
 | Embeddings | Ollama embeddings API or OpenAI-compatible (default: local `mxbai-embed-large:335m`) |
 | Logging | `tslog` via `LoggerFactory` |
-| Testing | Jest + ts-jest (installed, no test files yet) |
+| Testing | Jest + ts-jest (active unit/integration suite, network-free via mocked `ILLMProvider`) |
 
 ## Development Commands
 
@@ -40,12 +40,12 @@ npm run benchmark -- --dataset crossre --data-path ./data/crossre/crossre_data/a
 #          --output ./results/run.json  (saves full per-sample JSON report)
 ```
 
-> `npm test` in package.json runs against a hardcoded personal config path — not a real test suite.
+> `npm test` runs the Jest suite (`jest`). `npm run benchmark` is a separate extraction-quality harness against external RE/KG datasets, not unit tests.
 
 ## Project Structure
 
 ```plain
-kg-gen/
+wanshi/
 ├── src/
 │   ├── index.ts                          # Main re-export entry point
 │   ├── cli/
@@ -69,7 +69,7 @@ kg-gen/
 │   │   │       ├── PromptManager.ts      # Prompt orchestration
 │   │   │       ├── PromptTemplateEngine.ts # Handlebars rendering + context enhancement
 │   │   │       └── templates/
-│   │   │           ├── v1 … v4, v4.5/    # Versioned prompt templates (v4.5 = default; v5 removed)
+│   │   │           ├── v1 … v4.5, v5/    # Versioned prompt templates (v5 = default; v4.5 = legacy)
 │   │   │           └── partials/         # Reusable partials + domain examples
 │   │   ├── checkpoint/
 │   │   │   └── CheckpointService.ts      # Per-chunk resume sidecar (JSONL) for --resume
@@ -101,7 +101,7 @@ kg-gen/
 ├── data/crossre/crossre_data/            # Downloaded CrossRE domain splits (gitignored)
 ├── scripts/benchmark.ts                 # Standalone benchmark CLI (ts-node)
 ├── examples/                             # Sample integrations (each a standalone subproject)
-│   ├── kg-telegram-sink/                # Telegram → kg-gen graph bot (+ A/B canon config)
+│   ├── kg-telegram-sink/                # Telegram → wanshi graph bot (+ A/B canon config)
 │   ├── kg-mail-assistant/                # Full Gmail-to-KG example
 │   ├── canon/                            # Canonicalization A/B arm configs
 │   └── sandbox/                          # Ad-hoc throwaway scripts (t3–t6)
@@ -181,7 +181,7 @@ interface KnowledgeGraph {
 `ConfigSchema` from which everything derives — the `ProcessingOptions` type
 (`z.infer`, re-exported through `src/types/ProcessingOptions.ts`), runtime
 validation + **all defaults** (`parseConfig`), and the JSON Schema served to the
-frontend (`configJsonSchema` / the `kg-gen schema` command). The shape is
+frontend (`configJsonSchema` / the `wanshi schema` command). The shape is
 **nested** (`llm`, `embeddings`, `chunking`, `retrieval`, `merging`, `grounding`,
 `corpus`, `classifier`, `readers`, `export`, `resume`, `logging`, `runtime`; with
 `input`/`filter`/`exclude`/`output`/`description` top-level). Config files use
@@ -390,7 +390,7 @@ Both backends implement `ILLMProvider.generateStructured<T>()` (zod → JSON sch
 
 ## Testing
 
-No automated test suite exists yet. `jest` + `ts-jest` are installed.
+There is an active Jest suite — run it with `npm test` (or `npx jest`). It is network-free: the LLM provider is always mocked, so no Ollama/API dependency in CI.
 
 When writing new tests:
 
@@ -423,7 +423,7 @@ When writing new tests:
 
 ### Modify prompt templates
 
-Templates are in `src/core/llm/prompts/templates/v4.5/` (current default):
+Templates are in `src/core/llm/prompts/templates/v5/` (current default):
 
 - `system.hbs` — system prompt with context (directory tree, description, examples)
 - `user.hbs` — per-chunk user prompt (file path, chunk info, retrieved context, content)
