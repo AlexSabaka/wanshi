@@ -7,14 +7,14 @@ const path = require("path");
 async function testEmailProcessing() {
   console.log("Testing email processing flow...\n");
 
-  // 1. Load kg-gen
-  console.log("1. Loading kg-gen...");
-  const ContainerFactory = require("kg-gen/src/core/di/ContainerFaParsed emailctory")
+  // 1. Load wanshi
+  console.log("1. Loading wanshi...");
+  const ContainerFactory = require("wanshi/src/core/di/ContainerFaParsed emailctory")
     .ContainerFactory;
-  const TYPES = require("kg-gen/src/core/di/index").TYPES;
+  const TYPES = require("wanshi/src/core/di/index").TYPES;
 
   // 2. Create container
-  console.log("2. Creating kg-gen container...");
+  console.log("2. Creating wanshi container...");
   const container = ContainerFactory.createContainer({
     processingOptions: {
       input: "./data/emails",

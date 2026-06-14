@@ -4,7 +4,7 @@
 # LLM extraction calls (only local embeddings + the hybrid adjudication band).
 #
 #   npx ts-node ../../src/index.ts --config config-canon.yaml
-#   kg-gen inspect-merges ./data/output/canon-merges/merges.jsonl
+#   wanshi inspect-merges ./data/output/canon-merges/merges.jsonl
 #
 # Brief §5 reminder: tune thresholds against the merge log, never against type counts.
 

@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as YAML from "yaml";
 import * as dotenv from "dotenv";
-import { parseConfig, ProcessingOptions } from "kg-gen/src/config";
+import { parseConfig, ProcessingOptions } from "wanshi/src/config";
 
 dotenv.config();
 
@@ -14,7 +14,7 @@ export interface BotEnv {
 }
 
 export interface AppConfig {
-  options: ProcessingOptions; // fully-resolved kg-gen config (nested + defaults)
+  options: ProcessingOptions; // fully-resolved wanshi config (nested + defaults)
   env: BotEnv;
   inboxDir: string; // absolute
   outputPath: string; // absolute
@@ -44,10 +44,11 @@ export function loadConfig(): AppConfig {
   raw.input = resolveFromRoot(raw.input);
   raw.output = resolveFromRoot(raw.output);
 
-  // API keys may come from the environment instead of config.yaml. kg-gen's CLI
+  // API keys may come from the environment instead of config.yaml. wanshi's CLI
   // does this env→config injection itself; calling parseConfig directly bypasses
   // it, so we replicate it here (otherwise the OpenAI provider gets "not-needed").
-  const envApiKey = process.env.OPENAI_API_KEY || process.env.KG_API_KEY;
+  const envApiKey =
+    process.env.OPENAI_API_KEY || process.env.WANSHI_API_KEY || process.env.KG_API_KEY;
   if (envApiKey) {
     raw.llm = { ...(raw.llm ?? {}) };
     raw.embeddings = { ...(raw.embeddings ?? {}) };

@@ -1,9 +1,9 @@
 # Canonicalization experiment (Experiment 1)
 
-Tests whether kg-gen's entity-/relation-type **sprawl** comes from *extraction
+Tests whether wanshi's entity-/relation-type **sprawl** comes from *extraction
 order* or from the **absence of a global merge pass** — by bolting a global
 canonicalization stage onto the existing schema-first pipeline and measuring.
-Spec: [`docs/inbox/kg-gen-canon-brief.md`](../../docs/inbox/kg-gen-canon-brief.md).
+Spec: [`docs/inbox/wanshi-canon-brief.md`](../../docs/inbox/wanshi-canon-brief.md).
 
 ## Arms
 
@@ -22,21 +22,21 @@ the A/B isolates the canonicalization variable. Only the
 
 ```bash
 # 1. Produce each arm's graph (local Ollama, or uncomment the OpenRouter llm block)
-kg-gen --config examples/canon/baseline.yaml
-kg-gen --config examples/canon/canon_embed.yaml
+wanshi --config examples/canon/baseline.yaml
+wanshi --config examples/canon/canon_embed.yaml
 
 # 2. Score every arm with the same scorecard
-kg-gen metrics kg_tests/canon/baseline.json
-kg-gen metrics kg_tests/canon/canon_embed.json
+wanshi metrics kg_tests/canon/baseline.json
+wanshi metrics kg_tests/canon/canon_embed.json
 #   add --ground-truth observations_87.jsonl for ER precision/recall + fabricated-edge rate
 
 # 3. Audit the merge decisions — the deliverable, not the graph
-kg-gen inspect-merges kg_tests/canon/canon_embed.merges.jsonl
+wanshi inspect-merges kg_tests/canon/canon_embed.merges.jsonl
 ```
 
-`kg-gen metrics` reports the no-ground-truth scorecard (entity/relation-type
+`wanshi metrics` reports the no-ground-truth scorecard (entity/relation-type
 counts, self-loops, bidirectional contradictions, referential integrity,
-parallel edges). `kg-gen inspect-merges` lists every collapsed cluster,
+parallel edges). `wanshi inspect-merges` lists every collapsed cluster,
 **suspicious over-merges first** (low intra-cluster similarity) — e.g. distinct
 model sizes fused, or a format collapsed with its parse functions.
 

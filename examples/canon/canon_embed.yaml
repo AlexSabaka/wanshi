@@ -3,9 +3,9 @@
 # Identical to baseline.yaml except the pipeline.canonicalization block below.
 # The cheap-and-informative test: does a global embedding-clustering pass collapse
 # the entity/relation-type sprawl?  Run + score + audit the merge log:
-#   kg-gen --config examples/canon/canon_embed.yaml
-#   kg-gen metrics kg_tests/canon/canon_embed.json
-#   kg-gen inspect-merges kg_tests/canon/canon_embed.merges.jsonl
+#   wanshi --config examples/canon/canon_embed.yaml
+#   wanshi metrics kg_tests/canon/canon_embed.json
+#   wanshi inspect-merges kg_tests/canon/canon_embed.merges.jsonl
 #
 # IMPORTANT (brief §5): do NOT tune `threshold` to minimize the type-count number
 # — that directly incentivizes over-merge. Tune against the merge log.
@@ -16,7 +16,7 @@ filter:
 exclude:
   - "**/*.test.ts"
 output: ./kg_tests/canon/canon_embed-cloud.json
-description: kg-gen TypeScript sources (canonicalization experiment corpus).
+description: wanshi TypeScript sources (canonicalization experiment corpus).
 
 llm:
   # provider: ollama

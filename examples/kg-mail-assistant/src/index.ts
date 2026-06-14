@@ -34,7 +34,7 @@ class KGMailAssistant {
   async initialize(): Promise<void> {
     logger.info("Initializing KG Mail Assistant...");
 
-    // Initialize kg-gen builder
+    // Initialize wanshi builder
     this.kgBuilder = new KnowledgeGraphBuilder(this.config.kgGenOptions);
     await this.kgBuilder.initialize();
 
@@ -108,7 +108,7 @@ class KGMailAssistant {
     logger.info(`📧 Processing email from ${email.from}: ${email.subject}`);
 
     try {
-      // Add email to kg-gen for processing
+      // Add email to wanshi for processing
       if (this.kgBuilder) {
         await this.kgBuilder.processEmail(email);
         logger.info(`✅ Email processed successfully`);

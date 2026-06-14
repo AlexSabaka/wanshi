@@ -28,7 +28,7 @@ export interface ProvenanceHeader {
 
 /**
  * Write a markdown content file into the inbox with a small provenance header so
- * kg-gen's readers see clean text and the extracted graph keeps an origin.
+ * wanshi's readers see clean text and the extracted graph keeps an origin.
  * Returns the absolute path written.
  */
 export function writeMarkdown(

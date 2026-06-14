@@ -3,7 +3,7 @@
 A Telegram bot you use as a **personal content sink**: forward it articles, videos,
 posts, files or contacts, and it continuously folds them into a **knowledge graph in
 `mcp-jsonl`** that you wire into **Claude Desktop's memory MCP server** — so you can
-watch, live, what kg-gen extracts well and badly.
+watch, live, what wanshi extracts well and badly.
 
 ## How it works
 
@@ -11,7 +11,7 @@ watch, live, what kg-gen extracts well and badly.
 Telegram msg ─► SourceRouter (first-match handler) ─► writes a file into data/inbox/
                                                           │
                                                           ▼  (debounced, single-flight)
-        kg-gen DirectoryProcessor.processDirectory(resume:true)
+        wanshi DirectoryProcessor.processDirectory(resume:true)
         discover inbox → extract NEW files only → merge / dedup / canonicalize → export
                                                           │
                                                           ▼
@@ -22,7 +22,7 @@ Telegram msg ─► SourceRouter (first-match handler) ─► writes a file into
 ```
 
 The trick: we don't reimplement merging. Each new item becomes a file in `data/inbox/`,
-then we re-run kg-gen's whole pipeline. `resume: true` restores already-extracted chunks
+then we re-run wanshi's whole pipeline. `resume: true` restores already-extracted chunks
 from a checkpoint sidecar (no re-billing the LLM), re-merges everything, and re-exports
 the **complete** graph. Claude Desktop's memory server re-reads its file on every tool
 call, so the overwrite shows up with no restart.
@@ -74,14 +74,14 @@ Add the official memory server, pointed at this bot's output file, to
 Restart Claude Desktop, then ask it to read the knowledge graph. Send the bot more
 content and ask again — new entities appear without restarting Desktop.
 
-> Treat the file as **kg-gen-owned / read-mostly** in Claude. If Claude *writes*
+> Treat the file as **wanshi-owned / read-mostly** in Claude. If Claude *writes*
 > memories into it, the next rebuild overwrites them. That's fine for a "watch what
 > extraction does" showcase.
 
 ## Supported sources
 
 The ingest layer is an extensible **first-match-wins handler registry** (`src/ingest/`),
-the same idiom as kg-gen's `FileReaderFactory`.
+the same idiom as wanshi's `FileReaderFactory`.
 
 | Source | Status | Notes |
 | --- | --- | --- |
@@ -89,10 +89,10 @@ the same idiom as kg-gen's `FileReaderFactory`.
 | YouTube videos | ✅ full | Caption transcript + title/author; says so when captions are missing |
 | Plain / forwarded text | ✅ full | Saved verbatim |
 | Contacts | ✅ full | Name + phone → person record |
-| PDF / Office docs | ✅ full | Downloaded; handled by kg-gen's `PdfReader`/`OfficeReader` |
-| Photos / audio | ⚙️ needs models | Downloaded; need Ollama vision / whisper on the kg-gen side |
+| PDF / Office docs | ✅ full | Downloaded; handled by wanshi's `PdfReader`/`OfficeReader` |
+| Photos / audio | ⚙️ needs models | Downloaded; need Ollama vision / whisper on the wanshi side |
 | **TikTok videos** | 🚧 metadata only | Transcript needs video download + ASR (ffmpeg → whisper) |
-| **Generic / TG video** | 🚧 metadata only | Same ASR path; kg-gen has no video reader yet |
+| **Generic / TG video** | 🚧 metadata only | Same ASR path; wanshi has no video reader yet |
 | **Channel links** (YT/TikTok) | 🚧 metadata only | Auto-following new uploads is a separate subscription/scheduler feature |
 
 Stub handlers still save *something* (metadata) so the graph isn't empty, and the bot

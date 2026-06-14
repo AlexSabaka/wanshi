@@ -3,7 +3,7 @@
 ## Gmail API migration (Phase 1)
 
 Migrated the mail listener from **IMAP to the Gmail API** with OAuth2, and wired the
-mail watcher into the kg-gen pipeline + Telegram controls.
+mail watcher into the wanshi pipeline + Telegram controls.
 
 **Email client**
 - `imap-simple`/`mailparser`/`nodemailer` → `googleapis` + `google-auth-library`.
@@ -18,7 +18,7 @@ mail watcher into the kg-gen pipeline + Telegram controls.
 - `scripts/gmail-auth.ts` — new `npm run gmail:auth` helper: validates
   `credentials.json`, runs the OAuth2 flow, writes `token.json`.
 - `src/services/{KnowledgeGraphBuilder,TelegramBot}.ts` + `src/index.ts` — mail →
-  kg-gen graph build, surfaced through Telegram chat controls.
+  wanshi graph build, surfaced through Telegram chat controls.
 
 **Setup docs** (kept alongside this file): `README.md`, `QUICK_START.md`,
 `GMAIL_SETUP.md`, `ENV_SETUP.md`, `TROUBLESHOOTING.md`.

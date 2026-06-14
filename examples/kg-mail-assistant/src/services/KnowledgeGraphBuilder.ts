@@ -4,7 +4,7 @@ import * as path from "path";
 
 /**
  * KnowledgeGraphBuilder service
- * Integrates with kg-gen to build and manage the knowledge graph
+ * Integrates with wanshi to build and manage the knowledge graph
  */
 export class KnowledgeGraphBuilder {
   private options: Record<string, any>;
@@ -26,7 +26,7 @@ export class KnowledgeGraphBuilder {
   }
 
   async initialize(): Promise<void> {
-    console.log("[KG] Initializing Knowledge Graph Builder with kg-gen...");
+    console.log("[KG] Initializing Knowledge Graph Builder with wanshi...");
     console.log(`[KG] Output directory: ${this.outputDir}`);
     console.log(`[KG] Email input directory: ${this.emailInputDir}`);
     console.log(`[KG] Model: ${this.options.model}`);
@@ -52,7 +52,7 @@ export class KnowledgeGraphBuilder {
     );
 
     try {
-      // Setup kg-gen container with processing options
+      // Setup wanshi container with processing options
       this.processingOptions = {
         input: this.emailInputDir,
         output: this.currentGraphFile,
@@ -90,19 +90,19 @@ export class KnowledgeGraphBuilder {
         silent: this.options.silent !== false,
       };
 
-      // Dynamically load kg-gen components
-      const ContainerFactory = require("kg-gen/src/core/di/ContainerFactory")
+      // Dynamically load wanshi components
+      const ContainerFactory = require("wanshi/src/core/di/ContainerFactory")
         .ContainerFactory;
-      const TYPES = require("kg-gen/src/core/di/index").TYPES;
+      const TYPES = require("wanshi/src/core/di/index").TYPES;
 
       const container = ContainerFactory.createContainer({
         processingOptions: this.processingOptions,
       });
 
       this.directoryProcessor = await container.resolve(TYPES.DirectoryProcessor);
-      console.log("[KG] kg-gen initialized successfully");
+      console.log("[KG] wanshi initialized successfully");
     } catch (error) {
-      console.error(`[KG] Failed to initialize kg-gen: ${error}`);
+      console.error(`[KG] Failed to initialize wanshi: ${error}`);
       console.warn("[KG] Will use fallback JSONL-only mode");
       this.directoryProcessor = null;
     }
@@ -120,7 +120,7 @@ export class KnowledgeGraphBuilder {
     );
 
     try {
-      // Step 1: Save email to temporary text file for kg-gen processing
+      // Step 1: Save email to temporary text file for wanshi processing
       const emailFileName = `email-${Date.now()}.txt`;
       const emailFilePath = path.join(this.emailInputDir, emailFileName);
 
@@ -129,18 +129,18 @@ export class KnowledgeGraphBuilder {
       console.log(`[KG] Saved email to file: ${emailFileName}`);
       console.log(`[KG] Content length: ${emailContent.length} chars`);
 
-      // Step 2: Process with kg-gen if available
+      // Step 2: Process with wanshi if available
       let kgGenResult: any = null;
       if (this.directoryProcessor) {
         try {
-          console.log(`[KG] Starting kg-gen processing...`);
+          console.log(`[KG] Starting wanshi processing...`);
           kgGenResult = await this.directoryProcessor.processFiles(
             [emailFilePath],
             this.processingOptions
           );
           
           console.log(
-            `[KG] ✅ kg-gen processed email, extracted entities: ${
+            `[KG] ✅ wanshi processed email, extracted entities: ${
               kgGenResult?.entities?.length || 0
             }`
           );
@@ -153,12 +153,12 @@ export class KnowledgeGraphBuilder {
             );
           }
         } catch (error) {
-          console.warn(`[KG] ⚠️  kg-gen processing failed: ${error}`);
+          console.warn(`[KG] ⚠️  wanshi processing failed: ${error}`);
           console.warn(`[KG] Using fallback metadata extraction`);
         }
       }
 
-      // Step 3: Build graph entry combining email metadata and kg-gen results
+      // Step 3: Build graph entry combining email metadata and wanshi results
       const graphEntry = this.buildGraphEntry(email, kgGenResult);
 
       // Step 4: Save to JSONL
@@ -204,22 +204,22 @@ export class KnowledgeGraphBuilder {
   }
 
   /**
-   * Build graph entry from email and kg-gen results
+   * Build graph entry from email and wanshi results
    */
   private buildGraphEntry(email: Email, kgGenResult: any): Record<string, any> {
     const senderName = email.from.split("<")[0].trim();
     const senderEmail = email.from.match(/<([^>]+)>/)?.[1] || email.from;
 
-    // Extract entities from kg-gen if available
+    // Extract entities from wanshi if available
     const entities: any[] = [];
     const relationships: any[] = [];
 
-    // Use kg-gen results if available
+    // Use wanshi results if available
     if (kgGenResult?.entities) {
       entities.push(...kgGenResult.entities);
     }
 
-    // Use kg-gen relationships if available
+    // Use wanshi relationships if available
     if (kgGenResult?.relations) {
       relationships.push(...kgGenResult.relations);
     }
@@ -442,7 +442,7 @@ export class KnowledgeGraphBuilder {
     }
 
     if (status.contentClasses && Object.keys(status.contentClasses).length > 0) {
-      summary += `\n📂 Content Classes (from kg-gen):\n`;
+      summary += `\n📂 Content Classes (from wanshi):\n`;
       const sortedClasses = Object.entries(status.contentClasses).sort(
         ([, a], [, b]) => (b as number) - (a as number)
       );

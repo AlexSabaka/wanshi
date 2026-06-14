@@ -1,7 +1,7 @@
 {
   "name": "kg-telegram-sink",
   "version": "0.1.0",
-  "description": "Telegram bot that ingests web content (articles, videos, posts, files) and continuously updates a kg-gen knowledge graph in mcp-jsonl for Claude Desktop.",
+  "description": "Telegram bot that ingests web content (articles, videos, posts, files) and continuously updates a wanshi knowledge graph in mcp-jsonl for Claude Desktop.",
   "main": "dist/index.js",
   "scripts": {
     "start": "ts-node src/index.ts",
@@ -13,7 +13,7 @@
   "dependencies": {
     "@extractus/article-extractor": "^8.0.16",
     "dotenv": "^16.4.5",
-    "kg-gen": "file:../../",
+    "wanshi": "file:../../",
     "node-telegram-bot-api": "^0.66.0",
     "yaml": "^2.5.1",
     "youtube-transcript": "^1.2.1"

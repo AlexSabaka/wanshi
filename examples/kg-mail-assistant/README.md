@@ -1,19 +1,19 @@
 # KG Mail Assistant
 
-Example on how to integrate a kg-gen tool with Gmail API to make a smart agentic personal assistant with Telegram chat controls.
+Example on how to integrate a wanshi tool with Gmail API to make a smart agentic personal assistant with Telegram chat controls.
 
 ## Tech Stack
 
 - NodeJs
 - TypeScript
-- kg-gen
+- wanshi
 - Gmail API (OAuth2)
 - node-telegram-bot-api
 
 ## Agents Structure
 
 - Telegram chatbot interface model
-- kg-gen graph builder (each new message updates existing graph)
+- wanshi graph builder (each new message updates existing graph)
 - once a day agent that summarizes knowledge graph for past day and sends message with report if any
 - agent that sends message to a user immediately if important email received
 
@@ -114,7 +114,7 @@ Knowledge graphs are stored in `./data/graphs/` as JSONL files (one per day):
 
 ### Phase 2: KG-Gen Integration 🚀 (In Progress)
 
-- [ ] Integrate with kg-gen ContainerFactory
+- [ ] Integrate with wanshi ContainerFactory
   - [ ] File processing pipeline
   - [ ] Entity extraction from email content
   - [ ] Relationship building
@@ -191,7 +191,7 @@ Knowledge graphs are stored in `./data/graphs/` as JSONL files (one per day):
 │   Mail    │        │ Knowledge  │
 │ Listener  │        │  Graph     │
 │ (IMAP)    │        │  Builder   │
-└───┬──────┘        │ (kg-gen)   │
+└───┬──────┘        │ (wanshi)   │
     │               └────┬───────┘
     │                    │
 ┌───▼─────────────────────▼────┐

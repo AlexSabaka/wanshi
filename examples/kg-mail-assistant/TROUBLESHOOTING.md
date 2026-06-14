@@ -124,11 +124,11 @@ LOG_LEVEL=debug npm run start
 1. Check error logs first - they often indicate the exact issue
 2. Verify all environment variables are set correctly
 3. Test IMAP/Telegram credentials independently
-4. Check that required services are running (kg-gen, Ollama if using local LLM)
+4. Check that required services are running (wanshi, Ollama if using local LLM)
 
 ## Known Limitations
 
 - Only processes UNSEEN emails (after processing, emails are marked READ)
 - Uses polling-based approach (30-second intervals) instead of IDLE for stability
-- JSONL format used instead of full kg-gen integration (Phase 2 planned)
+- JSONL format used instead of full wanshi integration (Phase 2 planned)
 - No retry mechanism for failed email processing

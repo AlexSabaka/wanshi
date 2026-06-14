@@ -13,12 +13,12 @@ const EXT_BY_MIME: Record<string, string> = {
 
 /**
  * Document / photo / audio / voice uploads → downloaded into the inbox as-is and
- * left for kg-gen's own readers (PdfReader, OfficeReader, ImageReader, AudioReader)
+ * left for wanshi's own readers (PdfReader, OfficeReader, ImageReader, AudioReader)
  * to handle on the next pipeline run. Generic video is NOT handled here — see
  * VideoHandler (stub).
  *
  * Note: image extraction needs an Ollama vision model and audio needs whisper —
- * both kg-gen-side. Without them those files are skipped gracefully downstream.
+ * both wanshi-side. Without them those files are skipped gracefully downstream.
  */
 export class FileUploadHandler implements SourceHandler {
   readonly name = "file-upload";
@@ -41,7 +41,7 @@ export class FileUploadHandler implements SourceHandler {
         title: suggested,
         note:
           att.kind === "photo" || att.kind === "audio" || att.kind === "voice"
-            ? `saved ${att.kind} — extraction needs the matching kg-gen reader (Ollama vision / whisper)`
+            ? `saved ${att.kind} — extraction needs the matching wanshi reader (Ollama vision / whisper)`
             : undefined,
       },
     ];

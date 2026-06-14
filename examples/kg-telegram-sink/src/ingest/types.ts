@@ -2,8 +2,8 @@
  * Ingest layer contracts.
  *
  * A `SourceHandler` turns one incoming Telegram message into zero or more files
- * written into the kg-gen inbox. Handlers are tried in priority order (first
- * `canHandle` wins) by `SourceRouter` — the same strategy idiom kg-gen uses for
+ * written into the wanshi inbox. Handlers are tried in priority order (first
+ * `canHandle` wins) by `SourceRouter` — the same strategy idiom wanshi uses for
  * its `FileReaderFactory`. Add a source = implement this interface and register
  * it in `SourceRouter`.
  */
@@ -48,7 +48,7 @@ export interface NormalizedMessage {
 
 /** Services a handler may use while ingesting. */
 export interface IngestContext {
-  /** Absolute path of the inbox directory kg-gen scans. */
+  /** Absolute path of the inbox directory wanshi scans. */
   inboxDir: string;
   /** Download a Telegram file by id into the inbox, returning its absolute path. */
   downloadFile(fileId: string, suggestedName: string): Promise<string>;

@@ -4,8 +4,8 @@ import { writeMarkdown } from "../inboxWriter";
 /**
  * STUB. Generic / Telegram-native video uploads.
  *
- * TODO: kg-gen has no video reader. The real path is ffmpeg audio-extract →
- * whisper (kg-gen's AudioReader already does whisper for audio files), then drop
+ * TODO: wanshi has no video reader. The real path is ffmpeg audio-extract →
+ * whisper (wanshi's AudioReader already does whisper for audio files), then drop
  * the resulting transcript into the inbox. For now we record that a video was
  * received so it's visible in the graph and the user knows it wasn't transcribed.
  */

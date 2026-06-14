@@ -9,7 +9,7 @@ import { ContactHandler } from "./handlers/ContactHandler";
 import { PlainTextHandler } from "./handlers/PlainTextHandler";
 
 /**
- * First-match-wins registry, same idiom as kg-gen's FileReaderFactory. Order is
+ * First-match-wins registry, same idiom as wanshi's FileReaderFactory. Order is
  * priority: most specific source kinds first, the verbatim text fallback last.
  *
  * To add a source: implement SourceHandler, import it, and slot it into this

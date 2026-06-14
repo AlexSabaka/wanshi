@@ -29,7 +29,7 @@
     }
   ],
   "decision": {
-    "injection": "GO — kg-gen triples inject into Qwen3-0.6B via MLX-LoRA; recall 27x base at a usable point",
+    "injection": "GO — wanshi triples inject into Qwen3-0.6B via MLX-LoRA; recall 27x base at a usable point",
     "stability": "GO with care — forgetting is real & config-sensitive; light/balanced configs keep the model functional (recall<->forgetting tradeoff)",
     "refusal": "NO for plain LoRA — 0% refusal across all configs (positive-only SFT). This is the decisive gap and the case for arm 2 (KBLaM native refusal / CURLoRA + refusal-negatives)"
   }

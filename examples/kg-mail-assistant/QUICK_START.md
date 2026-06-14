@@ -34,7 +34,7 @@ TELEGRAM_TOKEN=123456:ABCDEfghijklmnop
 # Your numeric Telegram user ID
 TELEGRAM_USER_ID=987654321
 
-# Optional: kg-gen configuration
+# Optional: wanshi configuration
 # KG_GEN_HOST=http://localhost:3000
 # KG_GEN_MODEL=neural-net
 ```
@@ -202,7 +202,7 @@ npm run start
 
 Once everything works, we'll add:
 
-- [ ] Entity extraction (kg-gen integration)
+- [ ] Entity extraction (wanshi integration)
 - [ ] Daily summaries (AI-generated)
 - [ ] Important email detection
 - [ ] Custom filtering rules

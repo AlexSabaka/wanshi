@@ -1,7 +1,7 @@
 {
   "name": "kg-mail-assistant",
   "version": "0.1.0",
-  "description": "Smart agentic personal assistant with kg-gen, mail listener (IMAP/SMTP), and Telegram chat controls",
+  "description": "Smart agentic personal assistant with wanshi, mail listener (IMAP/SMTP), and Telegram chat controls",
   "main": "dist/index.js",
   "scripts": {
     "start": "ts-node src/index.ts",
@@ -11,7 +11,7 @@
     "gmail:auth": "ts-node scripts/gmail-auth.ts"
   },
   "keywords": [
-    "kg-gen",
+    "wanshi",
     "knowledge-graph",
     "telegram",
     "imap",
@@ -25,7 +25,7 @@
     "dotenv": "^16.3.1",
     "google-auth-library": "^9.4.1",
     "googleapis": "^118.0.0",
-    "kg-gen": "file:../../",
+    "wanshi": "file:../../",
     "node-telegram-bot-api": "^0.64.0"
   },
   "devDependencies": {

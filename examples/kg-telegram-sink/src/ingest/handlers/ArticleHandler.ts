@@ -53,7 +53,7 @@ function htmlToText(html: string): string {
 /**
  * Any plain web URL. Fetches once and branches on content-type:
  *  - PDF (incl. arxiv `/pdf/<id>`, which has no `.pdf` extension) → downloaded into
- *    the inbox so kg-gen's PdfReader extracts the real document.
+ *    the inbox so wanshi's PdfReader extracts the real document.
  *  - HTML → Readability-style article extraction.
  *  - anything else / failure → a bare-link stub so nothing is silently lost.
  */
@@ -88,7 +88,7 @@ export class ArticleHandler implements SourceHandler {
             path: dest,
             kind: "pdf",
             title,
-            note: "PDF downloaded — kg-gen's PdfReader extracts the full document on this run",
+            note: "PDF downloaded — wanshi's PdfReader extracts the full document on this run",
           });
           continue;
         }

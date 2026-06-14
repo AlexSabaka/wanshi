@@ -5,10 +5,10 @@ const path = require("path");
 
 async function testKgGenProcessing() {
   try {
-    console.log("Loading kg-gen...");
-    const ContainerFactory = require("kg-gen/src/core/di/ContainerFactory")
+    console.log("Loading wanshi...");
+    const ContainerFactory = require("wanshi/src/core/di/ContainerFactory")
       .ContainerFactory;
-    const TYPES = require("kg-gen/src/core/di/index").TYPES;
+    const TYPES = require("wanshi/src/core/di/index").TYPES;
 
     console.log("Creating container...");
     const processingOptions = {
@@ -37,10 +37,10 @@ This is a test email about job opportunities and software development.
     fs.writeFileSync(testEmailPath, testEmailContent);
     console.log("Created test email:", testEmailPath);
 
-    console.log("Processing email with kg-gen...");
+    console.log("Processing email with wanshi...");
     const result = await fileProcessor.processFile(testEmailPath);
 
-    console.log("\n✅ kg-gen processing successful!");
+    console.log("\n✅ wanshi processing successful!");
     console.log("Result metadata:", result.metadata);
 
     // Clean up

@@ -1,4 +1,4 @@
-# kg-gen configuration for the Telegram sink.
+# wanshi configuration for the Telegram sink.
 # The bot loads this once at startup and re-runs the full pipeline (with resume)
 # every time you forward something new. Defaults to cloud generation + free local
 # embeddings — flip `llm.provider` to `ollama` to run fully local.

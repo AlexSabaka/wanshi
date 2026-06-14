@@ -1,10 +1,10 @@
-# kg-injection — knowledge-injection spike (kg-gen Phase 9)
+# kg-injection — knowledge-injection spike (wanshi Phase 9)
 
-Train a small local model to **absorb kg-gen's extracted facts** and measure whether it can
+Train a small local model to **absorb wanshi's extracted facts** and measure whether it can
 recover them (recall), decline on absent ones (refusal), and stay healthy (perplexity) — the
 ROADMAP's north-star milestone. First arm: **LoRA SFT via MLX on `Qwen/Qwen3-0.6B`**, on the 16 GB M4.
 
-Why MLX-LoRA first: kg-gen's Phase-7 `lora` export is already mlx-lm's chat format, MLX is
+Why MLX-LoRA first: wanshi's Phase-7 `lora` export is already mlx-lm's chat format, MLX is
 Apple-silicon native (no fp16-NaN / bf16-blocked MPS issues), and a ~1K-example run is minutes.
 KBLaM (rectangular-attention injection, native refusal) is the planned second arm — its reference
 impl is A100/CUDA-oriented, so it's a separate port effort, not done here.
@@ -13,7 +13,7 @@ impl is A100/CUDA-oriented, so it's a separate port effort, not done here.
 
 | file | what |
 |---|---|
-| `build-dataset.ts` | kg-gen graph (`.mcp-jsonl`) → `train/valid/recall/refusal.jsonl` (reuses Phase-7 `toKbTriples` + `fromJSONL`) |
+| `build-dataset.ts` | wanshi graph (`.mcp-jsonl`) → `train/valid/recall/refusal.jsonl` (reuses Phase-7 `toKbTriples` + `fromJSONL`) |
 | `lora_config.yaml` | mlx-lm LoRA config (Qwen3-0.6B; mirrors the proven kbc-qwen3-mlx recipe) |
 | `eval.py` | base vs adapter: recall / refusal / perplexity → `report.json` |
 | `requirements.txt` | `mlx` + `mlx-lm` (Python 3.12) |
@@ -24,7 +24,7 @@ impl is A100/CUDA-oriented, so it's a separate port effort, not done here.
 # 0. env (once) — Python 3.12; MLX needs Apple silicon
 python3.12 -m venv .venv && ./.venv/bin/pip install -r requirements.txt
 
-# 1. dataset from a kg-gen graph (default: telegram-sink; ~1K train triples)
+# 1. dataset from a wanshi graph (default: telegram-sink; ~1K train triples)
 npx ts-node build-dataset.ts                       # → ./data/*.jsonl
 
 # 2. train LoRA (≈ a few minutes on M4; ~4 GB peak)

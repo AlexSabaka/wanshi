@@ -4,7 +4,7 @@
  * Phase 4 showed embeddinggemma separates poorly (anisotropic, 0.92 knife-edge). This
  * ranks the 5 local Ollama embedding models by how well they separate TRUE co-referents
  * (curated synonym pairs) from near-miss HOMONYMS/siblings (curated hard negatives) on two
- * domains — a mixed corpus (telegram-sink) and a code corpus (kg-gen self). The ranking
+ * domains — a mixed corpus (telegram-sink) and a code corpus (wanshi self). The ranking
  * metric is scale-invariant (AUC + d′), because raw cosine thresholds aren't comparable
  * across anisotropic models. Two domains also test the "does the best model change by
  * domain" (domain→model-mapper) premise cheaply.
@@ -78,7 +78,7 @@ const CORPORA: Corpus[] = [
     ],
   },
   {
-    name: "kg-gen self (code/technical)",
+    name: "wanshi self (code/technical)",
     graph: "kg_tests/self/kggt5-knowledge-graph.mcp-jsonl",
     positives: [
       ["calculateSimilarity", "cosineSimilarity"],

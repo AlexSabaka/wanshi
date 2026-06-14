@@ -1,6 +1,6 @@
 import * as fs from "fs";
-import { ContainerFactory, TYPES } from "kg-gen/src/core/di";
-import { IDirectoryProcessor, ProcessingOptions } from "kg-gen/src/types";
+import { ContainerFactory, TYPES } from "wanshi/src/core/di";
+import { IDirectoryProcessor, ProcessingOptions } from "wanshi/src/types";
 
 export interface GraphCounts {
   entities: number;
@@ -29,7 +29,7 @@ export function readGraphCounts(outputPath: string): GraphCounts {
 }
 
 /**
- * Owns the kg-gen container (built once) and the debounced, single-flight rebuild
+ * Owns the wanshi container (built once) and the debounced, single-flight rebuild
  * loop. Each rebuild runs the full pipeline over the inbox; `resume` makes it skip
  * already-extracted chunks, so re-processing the whole inbox per new item is cheap.
  */

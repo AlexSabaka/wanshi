@@ -11,7 +11,7 @@ interface OEmbed {
  * STUB (metadata-only). A TikTok video URL → oEmbed title/author + caption.
  *
  * TODO: full transcript needs downloading the video and running ASR
- * (ffmpeg audio-extract → whisper, reusing kg-gen's AudioReader path). That's a
+ * (ffmpeg audio-extract → whisper, reusing wanshi's AudioReader path). That's a
  * self-contained follow-up; this handler intentionally captures metadata only so
  * the graph isn't empty and the user is told what was (and wasn't) captured.
  */

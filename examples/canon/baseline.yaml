@@ -1,8 +1,8 @@
 # Canonicalization A/B — arm 1: BASELINE (canonicalization OFF).
 #
 # The current pipeline, fresh numbers. Score with:
-#   kg-gen --config examples/canon/baseline.yaml
-#   kg-gen metrics kg_tests/canon/baseline.json
+#   wanshi --config examples/canon/baseline.yaml
+#   wanshi metrics kg_tests/canon/baseline.json
 #
 # Hold corpus / seed / model / embedding identical across all three arms — only
 # the `pipeline.canonicalization` block differs. Swap the llm block for the
@@ -14,7 +14,7 @@ filter:
 exclude:
   - "**/*.test.ts"
 output: ./kg_tests/canon/baseline-cloud.json
-description: kg-gen TypeScript sources (canonicalization experiment corpus).
+description: wanshi TypeScript sources (canonicalization experiment corpus).
 
 llm:
   # provider: ollama

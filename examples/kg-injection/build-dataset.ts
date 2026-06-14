@@ -1,5 +1,5 @@
 /**
- * Phase 9 — build the knowledge-injection dataset from a kg-gen graph.
+ * Phase 9 — build the knowledge-injection dataset from a wanshi graph.
  *
  * Reuses the Phase-7 export path: load an `.mcp-jsonl` graph → `toKbTriples`
  * (unique (name, property) triples) → split BY ENTITY so eval entities are unseen
