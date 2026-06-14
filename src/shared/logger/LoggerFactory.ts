@@ -16,7 +16,7 @@ export class LoggerFactory {
     } = options.logging ?? {};
 
     const logger = new TSLogger<any>({
-      name: "kg-gen",
+      name: "wanshi",
       // In NDJSON progress mode, suppress tslog's built-in pretty output so it
       // can't pollute the structured stdout stream; we re-emit logs ourselves as
       // `channel: "log"` lines below.

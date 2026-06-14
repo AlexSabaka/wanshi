@@ -21,7 +21,7 @@ export interface InspectMergesOptions {
 }
 
 /**
- * `kg-gen inspect-merges <merges.jsonl>` — a CLI table over the canonicalization
+ * `wanshi inspect-merges <merges.jsonl>` — a CLI table over the canonicalization
  * merge log (canon brief §7). The merge log, not the graph, is the deliverable:
  * over/under-merge are silent in aggregate counts, so this surfaces what got
  * fused, how tight each cluster was, and which pairs were borderline. Rows are

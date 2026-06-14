@@ -1,10 +1,18 @@
 {
-  "name": "kg-gen",
+  "name": "wanshi",
   "version": "1.0.0",
   "description": "Knowledge Graph Generator",
   "main": "./src/index.ts",
   "bin": {
-    "kg-gen": "./dist/index.js"
+    "wanshi": "./dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlexSabaka/wanshi.git"
+  },
+  "homepage": "https://github.com/AlexSabaka/wanshi#readme",
+  "bugs": {
+    "url": "https://github.com/AlexSabaka/wanshi/issues"
   },
   "scripts": {
     "start": "ts-node ./src/index.ts",

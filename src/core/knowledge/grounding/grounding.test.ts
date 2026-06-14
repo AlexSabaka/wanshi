@@ -15,8 +15,8 @@ describe("grounding/verbalize", () => {
   });
 
   it("verbalizes a relation triple, turning a snake_case predicate into words", () => {
-    expect(verbalizeRelation("EmbeddingService", ["part_of"], "kg-gen")).toBe(
-      "EmbeddingService part of kg-gen"
+    expect(verbalizeRelation("EmbeddingService", ["part_of"], "wanshi")).toBe(
+      "EmbeddingService part of wanshi"
     );
     expect(verbalizeRelation("a", [], "b")).toBe("a related to b");
   });

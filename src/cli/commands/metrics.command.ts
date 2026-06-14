@@ -32,7 +32,7 @@ interface MetricsReport {
 }
 
 /**
- * `kg-gen metrics <graph.json>` — the uniform A/B scorecard (brief §2/§9).
+ * `wanshi metrics <graph.json>` — the uniform A/B scorecard (brief §2/§9).
  *
  * The no-ground-truth metrics (type counts, self-loops, bidirectional
  * contradictions, referential integrity, parallel edges) are computed offline
@@ -148,7 +148,8 @@ async function resolveOptions(configPath?: string): Promise<ProcessingOptions> {
   const fileRaw = configPath
     ? ((await readConfigurationFile(configPath)) as Record<string, any>)
     : {};
-  const envApiKey = process.env.OPENAI_API_KEY || process.env.KG_API_KEY;
+  const envApiKey =
+    process.env.OPENAI_API_KEY || process.env.WANSHI_API_KEY || process.env.KG_API_KEY;
   if (envApiKey && !(fileRaw as any)?.embeddings?.apiKey) {
     (fileRaw as any).embeddings = { ...(fileRaw as any).embeddings, apiKey: envApiKey };
   }

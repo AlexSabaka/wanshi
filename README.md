@@ -1,428 +1,233 @@
-# Knowledge Graph Generator (kg-gen)
+# Wan Shi
 
-> Transform any file collection into an intelligent knowledge graph using local LLMs via Ollama — or any OpenAI-compatible API provider
+> A local-first CLI that reads ten thousand things — code, docs, PDFs, audio, transcripts — and builds one knowledge graph that remembers where every fact came from.
 
-An advanced CLI tool that analyzes files, extracts meaningful entities and relationships, and builds comprehensive knowledge graphs. Supports code, documents, PDFs, audio/video, transcripts, and more. Local-first via Ollama by default, with optional OpenAI-compatible providers (OpenAI, OpenRouter, vLLM, …) and resumable runs for large jobs.
+`wanshi` extracts entities and relations from a file tree and merges them into a single graph. It runs on local models via [Ollama](https://ollama.ai) by default, or any OpenAI-compatible endpoint. Facts carry provenance and a bi-temporal axis, an inline grounding gate filters ungrounded claims, and the graph is a drop-in producer for the MCP memory server, Graphiti, and KBLaM/LoRA training exports.
 
-Facts carry **provenance and a bi-temporal axis**, an inline **grounding gate** filters hallucinations, and the graph **interops with existing memory stores** (drop-in for the official MCP memory server) and exports **KBLaM/LoRA** training data — kg-gen is a research/learning platform as much as a CLI.
+It's a working CLI and a research platform in equal measure — the long game is domain-tuned extraction feeding knowledge injection into small local models.
 
-## Project Goals
+---
 
-**Primary Objective**: Create the most intelligent file-to-knowledge-graph converter that:
+> **Command shorthand:** examples below write `wanshi` for the run command. Until the npm package ships, that's `npx ts-node ./src/index.ts` (dev) or `node ./dist/index.js` (built). Once published, it's literally `wanshi`.
 
-- **Zero Hallucination**: Only extracts factually verifiable information
-- **Semantic Understanding**: Goes beyond syntax to capture meaning and relationships
-- **Scalable Processing**: Handles large codebases with smart chunking and caching
-- **Multiple Formats**: Supports code, documentation, research papers, and more
-- **Production Ready**: Reliable, fast, and integrates with existing workflows
+## What's distinctive
 
-**Secondary Objectives**:
+Most text→KG tools stop at "extract triples." `wanshi` is built around the parts that come after:
 
-- **MCP Integration**: Compatible with Claude Desktop and Anthropic MCP protocol
-- **Quality Metrics**: Comprehensive evaluation system for continuous improvement
-- **Research Ready**: KBLaM-format triples + quality-filtered LoRA/SFT datasets exported straight from extracted graphs
-- **Intelligent Search**: Vector and graph-based context retrieval
+- **Provenance, not just facts.** Every observation records its `source`/`speaker` and a Graphiti-style bi-temporal axis (`validAt`/`invalidAt` for world-time, `createdAt`/`expiredAt` for system-time). The same fact from two speakers stays as two attributed observations, never one flattened string.
+- **A grounding gate.** Each extracted fact is scored against its source chunk and can be flagged or dropped before it reaches the output — keyword overlap as a cheap pre-filter, with an optional local NLI checker (MiniCheck) for the uncertain cases. It won't record what it can't verify against the source.
+- **Closed-vocabulary extraction.** An optional corpus pre-pass builds a glossary of canonical entity/relation types, which then *constrains* extraction — so a large corpus doesn't fragment into hundreds of one-off types.
+- **Transcript-aware ingestion.** Speaker-labeled transcripts and chat exports are split into speaker-pure chunks, so a speaker becomes per-fact provenance rather than a polluting entity.
+- **Memory-store interop.** `mcp-jsonl` output is byte-compatible with the official [MCP memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) — point it at the file and query your graph from Claude Code/Desktop. No store to build.
+- **Training-data exports.** Emit KBLaM `(entity, property, value)` triples or quality-filtered LoRA/SFT chat examples straight from a graph.
+- **Resumable runs.** Per-chunk checkpoints survive interrupts and exhausted API credits; re-run the same command to continue.
 
-## Key Features
+## Supported inputs
 
-### Core Capabilities
+| Format | Extensions | Handling |
+| ------ | ---------- | -------- |
+| Text / source code | `.txt`, `.ts`, `.js`, `.py`, `.go`, `.rs`, … | Direct / code-aware extraction |
+| Markdown | `.md` | Markdown-aware parsing |
+| Transcripts | speaker-labeled `*.parakeet.txt`/`*.whisper.txt`, transcript/turn JSON, Claude/ChatGPT exports | Speaker-pure chunks with per-fact `speaker`/`occurredAt` |
+| JSON | `.json`, `.jsonl`, `.geojson` | Structure-aware chunking (splits on JSON structure, never mid-object) |
+| PDF | `.pdf` | Page text, or Docling for advanced parsing |
+| Office | `.docx`, `.xlsx`, `.pptx` | Via officeparser |
+| HTML / RTF | `.html`, `.htm`, `.rtf` | cheerio / RTF parsing |
+| Images | `.jpg`, `.png`, `.gif`, `.webp`, `.tiff`, `.heic`, `.avif` | Vision model required |
+| Audio / Video | `.mp3`, `.wav`, `.m4a`, `.flac`, `.mp4`, `.mkv`, `.webm`, … | Whisper transcription |
 
-- **Multi-format Processing**: Text, code, Markdown, PDFs, Office docs, HTML, RTF, images, audio/video
-- **Hierarchical Merging**: 3-level intelligent merging (within-chunk → within-file → cross-file)
-- **Smart Chunking**: Content-aware splitting using `RecursiveCharacterTextSplitter` with configurable overlap
-- **Context-Aware Processing**: Uses existing knowledge graph to maintain cross-file consistency
-- **Quality Evaluation**: Structural, semantic, factual, and consistency metrics framework
+## Install
 
-### Advanced Features
-
-- **Memory-store interop**: `mcp-jsonl` is byte-compatible with the official [MCP memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) — point it at the output and query your graph from Claude Code/Desktop. No store to build.
-- **Multiple export formats**: JSON, JSONL, MCP-compatible JSONL, GraphViz DOT, plus **KBLaM** / **LoRA** / **Graphiti** for fine-tuning and temporal-KG ingestion (see [Output Formats](#output-formats))
-- **Transcript-aware ingestion**: speaker-labeled transcripts (recua `*.parakeet.txt`, recua turns JSON, Claude/ChatGPT chat exports) are parsed into **speaker-pure chunks** so a speaker becomes per-fact provenance, not an entity
-- **Embedding-Based Search**: Context retrieval for cross-file consistency during extraction
-- **Embeddings Caching**: In-memory caching for repeated embedding calls
-- **Watch Mode**: Real-time knowledge graph updates as files change
-- **Document Classification**: Heuristic or LLM-based content type detection (experimental) — also scopes the `entityType` to an enforced per-domain enum
-
-### Intelligence Features
-
-- **Provenance & bi-temporal facts**: every observation carries `speaker`/`source` and a Graphiti-style bi-temporal axis (`validAt`/`invalidAt` + `createdAt`/`expiredAt`) — see [Data Model](#standard-json---export-format-json)
-- **Inline grounding gate**: each extracted fact is scored against its source chunk; ungrounded "hallucinations" can be flagged or dropped before they reach the output (`--grounding`)
-- **Corpus glossary pre-pass** *(experimental)*: an optional pass over the whole corpus counts term frequency, classifies once (cached), and asks the LLM for a corpus-specific glossary of canonical entity names/types/relation types. Under the v5 prompts this glossary is **authoritative** — its types and predicates become the closed vocabularies that constrain extraction, so the merged graph doesn't fragment into hundreds of one-off types (`--corpus-profiling`)
-- **Provenance-preserving merge**: the same fact from two speakers/sources stays as two attributed observations, never one flattened string
-- **Entity Deduplication**: Jaro-Winkler similarity for entity names + cosine similarity for observations
-- **Cross-file Consistency**: Retrieval-augmented prompting maintains entity naming across files
-
-## Installation
-
-### Prerequisites
-
-- **Node.js** 18+
-- **[Ollama](https://ollama.ai)** running locally — required for the default local path and for local embeddings. Optional only if you point **both** generation and embeddings at an OpenAI-compatible provider.
+Requires **Node.js 18+** and **[Ollama](https://ollama.ai)** running locally (needed for the default local generation + embeddings path; optional only if you point *both* at an OpenAI-compatible provider).
 
 ```bash
-# Clone the repository
-git clone https://github.com/alex_sabaka/kg-gen
-cd kg-gen
+git clone https://github.com/alex_sabaka/wanshi
+cd wanshi
 npm install
 
-# Pull required Ollama models
-ollama pull llama3.2                    # Default LLM
-ollama pull mxbai-embed-large:335m     # Default embeddings model
+# Default local models
+ollama pull llama3.2                 # generation
+ollama pull mxbai-embed-large:335m   # embeddings
 
-# Build (optional, can use ts-node directly)
-npm run build
+npm run build   # optional; ts-node works directly
 ```
 
-## Usage
-
-### Basic Usage
+## Quick start
 
 ```bash
-# Process current directory with defaults
-npx ts-node ./src/index.ts -i ./my-project -o knowledge-graph.json
+# Process a directory with defaults
+wanshi -i ./my-project -o knowledge-graph.json
 
-# Specify model and output format
-npx ts-node ./src/index.ts -i ./src -m qwen3:8b --export-format jsonl -o kg.jsonl
+# Pick a model and output format
+wanshi -i ./src -m qwen3:8b --export-format jsonl -o kg.jsonl
 
-# Using a configuration file (recommended)
-npx ts-node ./src/index.ts --config config.yaml
+# Config file (recommended for anything non-trivial)
+wanshi --config config.yaml
 ```
 
-### Configuration File (Recommended)
+### Configuration
 
-Create a `config.yaml`:
+The config file uses a **nested** shape (the source of truth is the Zod schema in `src/config/`); CLI flags stay flat. Run `wanshi schema` to print the full JSON Schema.
 
 ```yaml
-# Input/Output (top-level)
 input: ./my-project
-filter:
-  - "**/*.ts"
-  - "**/*.md"
-exclude:
-  - "**/node_modules/**"
-  - "**/dist/**"
+filter: ["**/*.ts", "**/*.md"]
+exclude: ["**/node_modules/**", "**/dist/**"]
 output: knowledge-graph.jsonl
 description: "TypeScript project source code"
 
-# LLM
 llm:
-  provider: ollama            # ollama | openai (OpenAI-compatible)
+  provider: ollama          # ollama | openai (OpenAI-compatible)
   model: gemma3:4b
   host: http://localhost:11434
   contextLength: 12000
   temperature: 0.1
-  # promptVersion: v5         # prompt template version (also --prompt-version; default v5, use v4.5 for legacy)
 
-# Embeddings (independent from generation)
-embeddings:
+embeddings:                 # independent from generation — keep local & free
   provider: ollama
   model: mxbai-embed-large:335m
   host: http://localhost:11434
 
-# Text Processing
-chunking:
-  mode: enabled
-  size: 4000
-  overlap: 100
+chunking: { mode: enabled, size: 4000, overlap: 100 }
+retrieval: { mode: enabled, limit: 3 }
 
-# Media (disable if not needed)
-readers:
-  images: disabled
-  asr:
-    mode: disabled
-
-# Context Retrieval
-retrieval:
-  mode: enabled
-  limit: 3
-
-# Merging
 merging:
   enableSimilarityMerging: true
   entitySimilarityThreshold: 0.9
   observationSimilarityThreshold: 0.7
 
-# Export
-export:
-  format: jsonl
-
-# Logging
-logging:
-  level: info
-  debug: false
+export: { format: jsonl }
 ```
 
-> The config file uses a **nested** shape (the single source of truth is the Zod
-> schema in `src/config/`). CLI flags stay flat (`--chunk-size`). Run `node
-> ./dist/index.js schema` to print the full JSON Schema. Migrating an old flat
-> config? See [docs/MIGRATION.md](./docs/MIGRATION.md).
+### Cloud generation + resume
 
-Then run:
-
-```bash
-npx ts-node ./src/index.ts --config config.yaml
-```
-
-### Using a Cloud Provider (OpenAI-compatible) + Resume
-
-Point generation at any OpenAI-compatible endpoint by setting `provider: openai` and using `host` as the base URL. Keep embeddings local (the default) so dedup/merge stays free. Enable `resume` for large jobs so an interrupted run (e.g. credits exhausted) can continue without reprocessing.
+Point generation at any OpenAI-compatible endpoint (`provider: openai`, `host` = base URL), keep embeddings local so dedup/merge stays free, and enable `resume` so an interrupted run continues without reprocessing.
 
 ```yaml
-input: ./claude-chats-export
-filter:
-  - "**/*.json"
-output: knowledge-graph.jsonl
-export:
-  format: jsonl
-
-# Generation on OpenRouter (host = base URL)
 llm:
   provider: openai
   host: https://openrouter.ai/api/v1
-  apiKey: sk-or-...            # or set $OPENAI_API_KEY / $KG_API_KEY instead
+  apiKey: sk-or-...          # or $OPENAI_API_KEY / $WANSHI_API_KEY
   model: google/gemma-3-27b-it
-
-# Embeddings stay local & free
 embeddings:
   provider: ollama
   model: mxbai-embed-large:335m
-
-# Resumable: writes <output>.checkpoint.jsonl; re-run the same command to continue
 resume:
-  enabled: true
+  enabled: true             # writes <output>.checkpoint.jsonl
 ```
+
+If the run dies mid-way, just run the same command again — finished chunks are skipped. **Ctrl+C once** finishes the in-flight chunk, checkpoints it, and writes the partial graph before exiting; press again to force-quit.
+
+A chunk is reused only when its **file content, chunk size/overlap, model, and prompt version** all match — these are folded into the checkpoint key. Files are keyed by path *relative to `--input`*, so relocating the whole tree keeps checkpoints valid; only editing a file re-runs it.
+
+### Other modes
 
 ```bash
-# Keep your key out of the file via env if you prefer:
-export OPENAI_API_KEY=sk-or-...
-npx ts-node ./src/index.ts --config config.yaml
-# If the run dies mid-way, just run it again — finished chunks are skipped.
+# Watch: update the graph as files change
+wanshi --config config.yaml --watch
+
+# Multimedia (images + audio transcription)
+wanshi -i ./media --images enabled --asr enabled --whisper-model medium -m llava:7b
+
+# GraphViz DOT for visualization
+wanshi -i ./src --export-format dot -o graph.dot && dot -Tsvg graph.dot -o graph.svg
+
+# Re-export an existing graph (no LLM calls)
+wanshi --export-only -i ./knowledge-graph.json --export-format kblam -o ./kb.jsonl
 ```
 
-### Document Outline (`readers.outline`, config-only)
+## CLI reference
 
-Each file's structural outline is generated and injected into the prompt as extra context. Tune or disable it via the nested `readers.outline:` group in `config.yaml` (no CLI flags, like `export.dot`):
-
-| Key | Default | Description |
-| --- | ------- | ----------- |
-| `enabled` | `true` | Set `false` to skip outline generation (saves prompt tokens and silences "cannot generate outline" warnings) |
-| `maxDepth` | — | Limit outline nesting depth |
-| `includeLineNumbers` | `false` | Include line numbers |
-| `includePrivate` | `false` | Include private/internal members |
-| `includeComments` | `false` | Include comments / docstrings |
-
-```yaml
-readers:
-  outline:
-    enabled: true
-    maxDepth: 3
-```
-
-### Watch Mode
-
-```bash
-# Continuously update knowledge graph as files change
-npx ts-node ./src/index.ts --config config.yaml --watch
-```
-
-### Advanced Usage
-
-```bash
-# Process multimedia project (images + audio transcription)
-npx ts-node ./src/index.ts -i ./media-project \
-  --images enabled \
-  --asr enabled \
-  --whisper-model medium \
-  -m llava:7b
-
-# Export as GraphViz DOT for visualization
-npx ts-node ./src/index.ts -i ./src \
-  --export-format dot \
-  -o graph.dot
-
-# Render with GraphViz
-dot -Tsvg graph.dot -o graph.svg
-```
-
-## CLI Options
-
-### Core Processing
+### Core
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
 | `-i, --input <path>` | `.` | Input directory |
-| `-f, --filter <filter>` | `**/*` | Include file pattern |
-| `-e, --exclude <filter...>` | — | Exclude patterns |
+| `-f, --filter <glob>` | `**/*` | Include pattern |
+| `-e, --exclude <glob...>` | — | Exclude patterns |
 | `-o, --output <path>` | `knowledge-graph.json` | Output file |
 | `-d, --description <text>` | — | Content description for LLM context |
-| `--config <file>` | — | YAML/JSON configuration file |
+| `--config <file>` | — | YAML/JSON config file |
 
-### LLM Configuration
+### LLM
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
-| `--provider <name>` | `ollama` | Generation backend: `ollama` or `openai` (any OpenAI-compatible endpoint) |
-| `-m, --model <name>` | `llama3.2` | Model name (Ollama tag, or provider model id like `google/gemma-3-27b-it`) |
-| `-h, --host <url>` | `http://localhost:11434` | Ollama host, or OpenAI-compatible **base URL** when `--provider openai` |
-| `--api-key <key>` | — | API key for the OpenAI-compatible provider (falls back to `$OPENAI_API_KEY` / `$KG_API_KEY`) |
+| `--provider <name>` | `ollama` | `ollama` or `openai` (any OpenAI-compatible endpoint) |
+| `-m, --model <name>` | `llama3.2` | Ollama tag or provider model id |
+| `-h, --host <url>` | `http://localhost:11434` | Ollama host, or OpenAI-compatible base URL |
+| `--api-key <key>` | — | Falls back to `$OPENAI_API_KEY` / `$WANSHI_API_KEY` |
 | `--temperature <n>` | `0.1` | Sampling temperature |
-| `--repeat-penalty <n>` | `1.1` | Repetition penalty, Ollama only (>1.0 discourages repetition, <1.0 promotes it, 1.0 = off) |
-| `--context-length <n>` | `8192` | Context window size (Ollama only) |
-| `--max-tokens <n>` | provider default | Max output tokens per generation. Raise it (or lower `--chunk-size`) if large knowledge-graph JSON gets truncated mid-output |
-| `--seed <n>` | — | Random seed for reproducibility (Ollama only) |
-| `-s, --system <prompt\|path>` | — | Custom system prompt or Handlebars template path |
+| `--repeat-penalty <n>` | `1.1` | Ollama only (>1.0 discourages repetition) |
+| `--context-length <n>` | `8192` | Context window (Ollama only) |
+| `--max-tokens <n>` | provider default | Raise (or lower `--chunk-size`) if graph JSON truncates mid-output |
+| `--seed <n>` | — | Reproducibility seed (Ollama only) |
+| `-s, --system <prompt\|path>` | — | Custom system prompt or template path |
 
-### Embeddings Configuration
-
-Embeddings (used for dedup and context retrieval) are configured independently from generation, so you can keep them local and free while generation runs on a cloud provider.
+### Embeddings (independent from generation)
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
-| `--embeddings-provider <name>` | `ollama` | Embeddings backend: `ollama` or `openai` |
+| `--embeddings-provider <name>` | `ollama` | `ollama` or `openai` |
 | `--embeddings-model <name>` | `mxbai-embed-large:335m` | Embeddings model |
-| `--embeddings-host <url>` | `http://localhost:11434` | Embeddings host / OpenAI-compatible base URL |
-| `--embeddings-api-key <key>` | — | API key for OpenAI-compatible embeddings (falls back to `$OPENAI_API_KEY` / `$KG_API_KEY`) |
-| `--embeddings-max-input-chars <n>` | `1024` | Truncate embedding inputs to at most N chars (auto-shrinks further if the model still rejects them). Safe default for 512-token models like mxbai; raise for large-context cloud models |
+| `--embeddings-host <url>` | `http://localhost:11434` | Host / base URL |
+| `--embeddings-max-input-chars <n>` | `1024` | Truncate embedding inputs (safe for 512-token models; raise for cloud) |
 
-### Text Processing
+### Processing & retrieval
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
 | `--chunking <mode>` | `enabled` | `enabled\|disabled\|auto` |
-| `-c, --chunk-size <n>` | `2000` | Max chunk size (characters) |
-| `--overlap-size <n>` | `100` | Overlap between chunks |
+| `-c, --chunk-size <n>` | `2000` | Max chunk size (chars) |
+| `--overlap-size <n>` | `100` | Chunk overlap |
+| `--retrieval <mode>` | `enabled` | `enabled\|disabled\|auto` |
+| `--retrieval-limit <n>` | `3` | Retrieved context entities per chunk |
+| `--retrieval-scope <mode>` | `chunk` | `chunk` (per-chunk) or `file` (once, reused) |
+| `--json-strategy <mode>` | `structural` | `structural` (split on JSON structure) or `raw` |
 
-### Audio/Video (Whisper ASR)
+### Media & classification
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
 | `--asr <mode>` | `enabled` | `enabled\|disabled\|auto` |
-| `--whisper-model <name>` | `medium` | Whisper model size (`tiny`\|`base`\|`small`\|`medium`\|`large`) |
+| `--whisper-model <name>` | `medium` | `tiny\|base\|small\|medium\|large` |
 | `--language <lang>` | `auto` | Language code or `auto` |
 | `--translate` | `false` | Translate audio to English |
+| `--images <mode>` | `auto` | `enabled\|disabled\|auto` (vision model required) |
+| `--docling` | `false` | Docling for advanced PDF/Office parsing |
+| `--classifier <mode>` | `disabled` | `disabled\|heuristic\|llm` — drives domain prompt hints and scopes `entityType` to a per-domain enum *(experimental)* |
 
-### Image & Document Processing
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--images <mode>` | `auto` | `enabled\|disabled\|auto` (requires vision-capable model) |
-| `--docling` | `false` | Use Docling for advanced PDF/Office parsing |
-
-### Content Classification (experimental)
+### Merging, grounding, corpus glossary
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
-| `--classifier <mode>` | `disabled` | Content type detection: `disabled\|heuristic\|llm`. Drives domain-specific prompt hints/examples **and** scopes the extracted `entityType` to an enforced per-domain Zod enum (the domain's types + generics + `other`) |
+| `--entity-similarity-threshold <n>` | `0.9` | Jaro-Winkler entity dedup (0–1) |
+| `--observation-similarity-threshold <n>` | `0.9` | Embedding similarity (0–1) |
+| `--enable-similarity-merging` | `true` | Enable entity deduplication |
+| `--grounding <mode>` | `disabled` | `disabled` · `flag` (annotate `grounded`/`groundingScore`) · `drop` (remove below threshold) |
+| `--grounding-min-score <n>` | `0.5` | Min grounding score; also gates which facts the `lora` export keeps |
+| `--corpus-profiling <mode>` | `disabled` | Pre-pass that builds an authoritative corpus glossary (closed vocab under v5) *(experimental)* |
+| `--prompt-version <version>` | `v5` | `v5` (closed-vocab + topology hygiene) or `v4.5` (legacy) |
 
-### JSON Processing
-
-`.json`/`.jsonl`/`.geojson` are handled by a token-efficient, structure-aware reader (compact re-serialization + splitting on JSON structure — array elements, the dominant array of an object like `{conversations:[…]}`, or JSONL lines — never mid-object). Malformed JSON falls back to raw text chunking.
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--json-strategy <mode>` | `structural` | `structural` (compact + split on JSON structure) or `raw` (compact + plain text split) |
-
-Chunk size for the JSON reader can be set per-reader in `config.yaml` (defaults to the global `chunking.size`):
-
-```yaml
-readers:
-  json:
-    strategy: structural
-    maxChunkSize: 8000
-```
-
-### Context Retrieval
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--retrieval <mode>` | `enabled` | `enabled\|disabled\|auto` |
-| `--retrieval-limit <n>` | `3` | Max retrieved context entities per chunk |
-| `--retrieval-scope <mode>` | `chunk` | `chunk` (retrieve per chunk using its own content) or `file` (retrieve once from the first chunk, reuse for all) |
-
-### Merging
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--entity-similarity-threshold <n>` | `0.9` | Jaro-Winkler entity dedup threshold (0–1) |
-| `--observation-similarity-threshold <n>` | `0.9` | Embedding similarity threshold (0–1) |
-| `--enable-similarity-merging` | `true` | Enable intelligent entity deduplication |
-
-### Export
+### Export, resume, logging
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
 | `--export-format <format>` | `json` | `json\|jsonl\|mcp-jsonl\|dot\|kblam\|lora\|graphiti` |
-| `--export-only` | `false` | Convert an existing knowledge-graph JSON file (`--input`) to `--export-format`, written to `--output` — no extraction. Handy for producing `kblam`/`lora`/`graphiti`/`mcp-jsonl` from a graph you already built |
-
-> DOT styling (`export.dot`) is configured in YAML only — see [GraphViz DOT](#graphviz-dot---export-format-dot).
-
-```bash
-# Re-export an existing graph to KBLaM training triples (no LLM calls)
-npx ts-node ./src/index.ts --export-only \
-  -i ./knowledge-graph.json --export-format kblam -o ./kb.jsonl
-```
-
-### Inline Grounding Gate
-
-Each extracted observation is scored against its source chunk (keyword overlap); ungrounded "hallucinations" can be flagged or dropped before they reach the output, the checkpoint, or the merge.
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--grounding <mode>` | `disabled` | `disabled` · `flag` (annotate each observation with `grounded`/`groundingScore`, keep all) · `drop` (remove observations below the threshold) |
-| `--grounding-min-score <n>` | `0.5` | Minimum keyword-overlap score (0–1) an observation must reach. Also gates which facts the `lora` export keeps |
-
-### Corpus Analysis (experimental)
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--corpus-profiling <mode>` | `disabled` | `disabled` · `enabled` — run a pre-pass that counts term frequency, classifies once (cached), and asks the LLM for a corpus-specific glossary (canonical entity names/types/relation types). Under v5 the glossary is **authoritative**: its types/predicates become the closed extraction vocabularies |
-| `--prompt-version <version>` | `v5` | Prompt template set under `templates/` (`v5` = closed-vocabulary + topology-hygiene default; `v4.5` = legacy). Also settable via config `promptVersion` |
-| `--corpus-top-terms <n>` | `100` | Number of most-frequent terms fed to the glossary call |
-| `--corpus-profile-path <path>` | `<output>.corpus-profile.json` | Cached profile sidecar path (reused on re-run when the corpus + model are unchanged) |
-
-### Resume / Continuation
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--resume` | `false` | Checkpoint each processed chunk and skip already-done chunks on re-run (survives interrupted / credit-exhausted runs) |
-| `--checkpoint <path>` | `<output>.checkpoint.jsonl` | Checkpoint sidecar file path |
-
-**Graceful interrupt:** pressing **Ctrl+C** (or Ctrl+D / `SIGTERM`) once finishes the in-flight chunk, checkpoints it, then merges and writes the **partial** graph before exiting — so you never lose a chunk you already paid for. Press again to force-quit. Combine with `--resume` to continue later.
-
-**What invalidates resume:** a chunk is reused only when its **file content, chunk size/overlap, model, and prompt version** all match the run that created it — these are folded into the checkpoint key. Changing any of them (e.g. switching models or `--chunk-size` while tuning) means those chunks are re-extracted. The file is identified by its path **relative to `--input`**, so **relocating the whole input tree (or changing the `--input` prefix) keeps your checkpoint valid** — handy when you reorganize data folders; only renaming a file *within* the tree re-runs that one file. On load, kg-gen reports how many checkpointed chunks match the current model/prompt and warns if none do; delete the `.checkpoint.jsonl` sidecar to start clean.
-
-### Logging & Runtime
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
+| `--export-only` | `false` | Convert an existing graph (`--input`) to `--export-format` — no extraction |
+| `--resume` | `false` | Checkpoint chunks; skip done ones on re-run |
+| `--checkpoint <path>` | `<output>.checkpoint.jsonl` | Checkpoint sidecar |
 | `-L, --log-level <level>` | `info` | `debug\|info\|warning\|error` |
 | `-l, --log-file <path>` | — | Write logs to file |
-| `-D, --debug` | `false` | Debug mode |
-| `-S, --silent` | `false` | Suppress output |
 | `-w, --watch` | `false` | Watch mode |
 
-## Supported File Formats
+> Document-outline injection (`readers.outline`) and DOT styling (`export.dot`) are config-only (no CLI flags) — see the config schema.
 
-| Format | Extensions | Processing |
-| ------ | ---------- | ---------- |
-| Plain text | `.txt`, source code files | Direct extraction |
-| Markdown | `.md` | Markdown-aware parsing |
-| Transcripts | `*.parakeet.txt`/`*.whisper.txt` (speaker-labeled), transcript/turn JSON, Claude/ChatGPT chat exports | Speaker-pure chunks with per-fact `speaker`/`occurredAt` provenance |
-| JSON | `.json`, `.jsonl`, `.geojson` | Token-efficient, structure-aware chunking (compact, split on JSON structure) |
-| Source code | `.ts`, `.js`, `.py`, `.go`, `.rs`, and more | Code-aware extraction |
-| PDF | `.pdf` | Page-by-page text (or Docling for advanced) |
-| Office | `.docx`, `.xlsx`, `.pptx` | Via officeparser |
-| HTML | `.html`, `.htm` | Via cheerio |
-| RTF | `.rtf` | RTF parsing |
-| Images | `.jpg`, `.png`, `.gif`, `.webp`, `.tiff`, `.heic`, `.avif` | Vision model required |
-| Audio | `.mp3`, `.wav`, `.ogg`, `.m4a`, `.flac`, `.aac` | Whisper transcription |
-| Video | `.mp4`, `.mkv`, `.avi`, `.webm` | Audio extraction + Whisper |
+## Output formats
 
-## Output Formats
+### JSON (`json`)
 
-### Standard JSON (`--export-format json`)
-
-Observations are **objects**, not bare strings: each carries provenance (`source`/`speaker`) and a Graphiti-style **bi-temporal** axis — `validAt`/`invalidAt` (when the fact was true in the world) and `createdAt`/`expiredAt` (when the system learned / superseded it). The LLM still emits plain text; kg-gen stamps these deterministically from what it already knows about the chunk. Optional fields are omitted when unknown; legacy graphs with string observations still load.
+Observations are **objects**, not bare strings — each carries provenance and the bi-temporal axis. The LLM emits plain text; `wanshi` stamps the metadata deterministically from what it knows about the chunk. Unknown fields are omitted; legacy string-observation graphs still load.
 
 ```json
 {
@@ -432,14 +237,12 @@ Observations are **objects**, not bare strings: each carries provenance (`source
       "entityType": "class",
       "observations": [
         {
-          "text": "Extracts entities and relations from file content using LLM",
+          "text": "Extracts entities and relations from file content using an LLM",
           "source": "src/core/knowledge/KnowledgeGraphBuilder.ts",
           "createdAt": "2026-06-05T15:57:59.856Z"
         }
       ],
-      "files": ["src/core/knowledge/KnowledgeGraphBuilder.ts"],
-      "chunk": 1,
-      "totalChunks": 3
+      "files": ["src/core/knowledge/KnowledgeGraphBuilder.ts"]
     },
     {
       "name": "SPEAKER_01",
@@ -457,241 +260,117 @@ Observations are **objects**, not bare strings: each carries provenance (`source
     }
   ],
   "relations": [
-    {
-      "from": "knowledge_graph_builder",
-      "to": "ollama_service",
-      "relationType": ["uses", "depends_on"]
-    }
+    { "from": "knowledge_graph_builder", "to": "ollama_service", "relationType": ["uses", "depends_on"] }
   ]
 }
 ```
 
-### MCP-Compatible JSONL (`--export-format mcp-jsonl`)
+### MCP-compatible JSONL (`mcp-jsonl`)
 
 ```jsonl
-{"type":"entity","name":"knowledge_graph_builder","entityType":"class","observations":["Extracts entities and relations from file content using LLM"]}
+{"type":"entity","name":"knowledge_graph_builder","entityType":"class","observations":["Extracts entities and relations from file content using an LLM"]}
 {"type":"relation","from":"knowledge_graph_builder","to":"ollama_service","relationType":"uses,depends_on"}
 ```
 
-### GraphViz DOT (`--export-format dot`)
+### GraphViz DOT (`dot`)
 
-Renders a styled, colored graph with one node per entity (label = name + truncated observations + type + source file), colored edges per relation type, a title, a legend, and a "Processing Configuration" summary cluster. Render it with GraphViz:
+Styled, colored graph (one node per entity, colored edges per relation type, legend, config summary). Render with `dot -Tsvg graph.dot -o graph.svg` (or `neato`/`fdp`/`sfdp`/`circo`/`twopi`). Styling is config-only under `export.dot:` — layout, `rankdir`, `colorScheme` (`default\|scientific\|code\|minimal`), clustering by type or file, etc.
 
-```bash
-npx ts-node ./src/index.ts -i ./src --export-format dot -o graph.dot
-dot -Tsvg graph.dot -o graph.svg          # or: neato/fdp/sfdp/circo/twopi
-```
+### KBLaM triples (`kblam`)
 
-#### DOT styling options (`export.dot`)
-
-These are **config-only** (nested under `export.dot:` in `config.yaml`; there are no CLI flags for them). All keys are optional — defaults are shown below.
-
-| Key | Default | Values / Description |
-| --- | ------- | -------------------- |
-| `layout` | `dot` | Layout engine: `dot`, `neato`, `fdp`, `sfdp`, `circo`, `twopi` |
-| `rankdir` | `TB` | Graph direction: `TB`, `BT`, `LR`, `RL` |
-| `nodeShape` | `box` | Any GraphViz node shape (`box`, `ellipse`, `circle`, …) |
-| `edgeStyle` | `solid` | Edge style (`solid`, `dashed`, `dotted`, `bold`) |
-| `colorScheme` | `default` | Palette: `default`, `scientific`, `code`, `minimal` |
-| `includeObservations` | `true` | Show entity observations inside node labels (truncated to ~40 chars) |
-| `maxObservationsPerNode` | `3` | Max observations per node; the remainder is summarized as `... +N more` |
-| `clusterByEntityType` | `false` | Group same-type entities into dashed subgraph clusters (needs ≥2 of a type; ignored when `clusterByFile` is on) |
-| `clusterByFile` | `false` | Group same-file entities into clusters (needs ≥2 per file; takes precedence over `clusterByEntityType`) |
-| `showLegend` | `true` | Render a legend of entity types and relation types |
-
-```yaml
-# config.yaml
-export:
-  format: dot
-  dot:
-    layout: dot
-    rankdir: LR
-    colorScheme: code
-    includeObservations: true
-    maxObservationsPerNode: 5
-    clusterByFile: true
-    showLegend: true
-```
-
-### KBLaM Triples (`--export-format kblam`)
-
-JSONL in the shape Microsoft [KBLaM](https://github.com/microsoft/KBLaM)'s `dataset_generation` ingests — one `(entity, property, value)` `DataPoint` per line, with the derived `Q`/`A`/`key_string` it encodes into knowledge tokens. Observations become `(entity, "fact", text)`; relations become `(from, relationType, to)`.
+JSONL in the shape Microsoft [KBLaM](https://github.com/microsoft/KBLaM)'s `dataset_generation` ingests — **one `(entity, property, value)` per line**, each with the derived `Q`/`A`/`key_string` it encodes into a knowledge token. Property names are distinct per entity (relations contribute their predicate as the property), and keys are unique per `(name, property)` so rectangular-attention lookup is unambiguous.
 
 ```jsonl
-{"name":"Recursion","description_type":"fact","description":"a function that calls itself","Q":"What is the fact of Recursion?","A":"The fact of Recursion is a function that calls itself.","key_string":"the fact of Recursion"}
-{"name":"Recursion","description_type":"terminates_at","description":"BaseCase","Q":"What is the terminates_at of Recursion?","A":"The terminates_at of Recursion is BaseCase.","key_string":"the terminates_at of Recursion"}
+{"name":"Recursion","property":"definition","value":"a function that calls itself","Q":"What is the definition of Recursion?","A":"The definition of Recursion is a function that calls itself.","key_string":"the definition of Recursion"}
+{"name":"Recursion","property":"terminates_at","value":"BaseCase","Q":"What is the terminates_at of Recursion?","A":"The terminates_at of Recursion is BaseCase.","key_string":"the terminates_at of Recursion"}
 ```
 
-### LoRA / SFT Dataset (`--export-format lora`)
+### LoRA / SFT (`lora`)
 
-Chat-format instruction examples (`{messages:[user Q, assistant A]}`) derived from the same triples, **quality-filtered**: observations whose grounding score (from `--grounding`) is below `--grounding-min-score` are dropped, so only grounded facts make it into training data.
+Chat-format instruction examples derived from the same triples, **quality-filtered**: observations whose grounding score is below `--grounding-min-score` are dropped, so only grounded facts become training data.
 
 ```jsonl
-{"messages":[{"role":"user","content":"What is the fact of Recursion?"},{"role":"assistant","content":"The fact of Recursion is a function that calls itself."}]}
+{"messages":[{"role":"user","content":"What is the definition of Recursion?"},{"role":"assistant","content":"The definition of Recursion is a function that calls itself."}]}
 ```
 
-### Graphiti (`--export-format graphiti`)
+### Graphiti (`graphiti`)
 
-`add_triplet`-shaped `{ nodes: EntityNode[], edges: EntityEdge[] }` for ingestion into a [Graphiti](https://github.com/getzep/graphiti) temporal knowledge graph — entities → nodes (summary built from observations, `created_at`), relations → edges (`UPPER_SNAKE` name, stable sha1 uuids). Per-fact valid-time is carried in the `json`/`kblam` exports.
+`add_triplet`-shaped `{ nodes, edges }` for ingestion into a [Graphiti](https://github.com/getzep/graphiti) temporal graph — entities → nodes (summary from observations), relations → `UPPER_SNAKE` edges with stable uuids. Per-fact valid-time rides along in the `json`/`kblam` exports.
 
-## Quality Metrics
+## Local model guidance
 
-Located in `src/quality/` — importable evaluators (also wired into the `npm run benchmark` harness in `src/evaluation/`) for assessing extraction quality. The `factual` evaluator additionally backs the inline [grounding gate](#inline-grounding-gate):
-
-### Structural Metrics
-
-- Entity and relation counts
-- Graph density and connectivity
-- Type distribution analysis
-
-### Semantic Metrics
-
-- Entity name quality (naming conventions, descriptiveness)
-- Observation specificity (detailed vs. trivial facts)
-- Domain coverage (how well it captures file content)
-
-### Factual Metrics
-
-- Hallucination detection (ungrounded claims)
-- Source grounding (facts verifiable in source)
-- Factual consistency (no contradictions)
-
-### Consistency Metrics
-
-- Cross-file consistency (entity naming)
-- Type consistency (similar entities get similar types)
-
-### Composite Score
-
-- Overall quality score (0–100)
-- Specific recommendations for improvement
-- Composite score gates which graphs are harvested for fine-tuning data (`--export-format kblam`/`lora`)
-
-## Local LLM Requirements & Leaderboard
-
-Qualitative guidance for local model selection (quality/speed trade-off). For
-measured P/R/F1 see the benchmark table below.
+Quality/speed trade-off for local selection. For measured numbers see the benchmark below.
 
 | Model | Params | Quality | Speed | Notes |
 | ----- | ------ | ------- | ----- | ----- |
-| `qwen3:8b` | 8B | ⭐⭐⭐⭐⭐ | Slower | Highest extraction quality |
-| `gemma3:4b` | 4B | ⭐⭐⭐⭐ | Medium | Best quality/speed balance |
-| `qwen2.5-coder:1.5b` | 1.5B | ⭐⭐⭐ | Fast | Excellent for source code |
-| `qwen3:1.7b` | 1.7B | ⭐⭐⭐ | Fast | Good general purpose |
-| `gemma3:1b` | 1B | ⭐⭐ | Very Fast | Minimal resources |
-| `qwen3:0.6b` | 0.6B | ⭐ | Fastest | Minimal resources only |
+| `qwen3:8b` | 8B | ★★★★★ | slower | highest extraction quality |
+| `gemma3:4b` | 4B | ★★★★ | medium | best quality/speed balance |
+| `qwen2.5-coder:1.5b` | 1.5B | ★★★ | fast | strong on source code |
+| `qwen3:1.7b` | 1.7B | ★★★ | fast | good general purpose |
+| `gemma3:1b` | 1B | ★★ | very fast | minimal resources |
 
-For embeddings: `mxbai-embed-large:335m` is the default and recommended model.
+Default embeddings: `mxbai-embed-large:335m`.
 
 ### Measured benchmark (CrossRE)
 
-Re-run after the sampling fix (temperature reaches the model; seed wired).
-Dataset **CrossRE `ai-test`**, n = 17–20 samples (samples that failed extraction
-were excluded, not scored as zero); prompt **v5**; generation via **OpenRouter
-(cloud)**; matching via local `mxbai-embed-large:335m` at semantic threshold
-0.80. *Indicative, not definitive — small n, single domain, cloud inference.*
-(2026-06-11; reproduce with `npm run benchmark -- --provider openai --host https://openrouter.ai/api/v1 --model <id> --dataset crossre --data-path ./data/crossre/crossre_data/ai-test.json --limit 20 --prompt-version v5 --request-delay 2500`)
+Dataset **CrossRE `ai-test`**, n = 17–20 (failed extractions excluded, not zeroed); prompt **v5**; generation via **OpenRouter**; matching via local `mxbai-embed-large:335m` at semantic threshold 0.80. *Indicative, not definitive — small n, single domain, cloud inference.* Reproduce with `npm run benchmark -- --provider openai --host https://openrouter.ai/api/v1 --model <id> --dataset crossre --limit 20 --prompt-version v5`.
 
-| Model | n | Entity F1 (sem) | Relation F1 (sem) | Triple F1 (sem) | Intrinsic |
-| ----- | - | --------------- | ----------------- | --------------- | --------- |
+| Model | n | Entity F1 (sem) | Relation F1 | Triple F1 | Intrinsic |
+| ----- | - | --------------- | ----------- | --------- | --------- |
 | `qwen3-14b` | 17 | **0.851** | 0.130 | 0.037 | 83.9 |
 | `qwen3-8b` | 19 | 0.808 | 0.187 | 0.019 | 82.0 |
 | `gemma-3-4b-it` | 20 | 0.807 | 0.198 | 0.036 | 83.4 |
 | `gemma-3-27b-it` | 20 | 0.767 | **0.211** | **0.070** | 82.8 |
 | `gemma-3-12b-it` | 20 | 0.716 | 0.093 | 0.019 | 74.7 |
 
-**The "small Gemma beats larger Gemmas" finding holds under corrected sampling:**
-`gemma-3-4b-it` (Entity F1 0.807, intrinsic 83.4) outperforms both
-`gemma-3-12b-it` and `gemma-3-27b-it` on entity extraction, and is near-tied for
-2nd of 5 overall (behind `qwen3-14b`, level with `qwen3-8b`). Relation/triple F1
-are uniformly low — CrossRE relation extraction is hard under strict matching.
-The original sub-4B local models (`gemma3:1b`, `qwen3:0.6b`, …) aren't hosted on
-OpenRouter, so they're absent from this cloud re-run; benchmark them locally with
-`--provider ollama`.
+The **"small Gemma beats larger Gemmas"** result holds under corrected sampling: `gemma-3-4b-it` outperforms both `gemma-3-12b-it` and `-27b-it` on entity extraction and lands ~2nd of 5 overall. Relation/triple F1 are uniformly low — CrossRE relation extraction is hard under strict matching.
 
-## Integration Examples
+## Quality metrics
 
-### kg-mail-assistant
-
-See `examples/kg-mail-assistant/` for a complete real-world integration:
-
-- Gmail OAuth2 integration with email filtering
-- Telegram bot interface
-- Continuous email-to-KG pipeline
-- Sample output graphs in `examples/kg-mail-assistant/data/graphs/`
-
-### Programmatic Usage
-
-```typescript
-import { ContainerFactory } from './src/core/di/ContainerFactory';
-import { TYPES } from './src/core/di';
-import { IDirectoryProcessor } from './src/types';
-
-const options = {
-  input: './my-project',
-  output: 'knowledge-graph.json',
-  model: 'gemma3:4b',
-  host: 'http://localhost:11434',
-  // ... see ProcessingOptions for all fields
-};
-
-const container = ContainerFactory.createContainer({ processingOptions: options });
-const processor = await container.resolve<IDirectoryProcessor>(TYPES.DirectoryProcessor);
-await processor.processDirectory(options);
-```
+Importable evaluators in `src/quality/` (also wired into `npm run benchmark`): **structural** (counts, density, type distribution), **semantic** (name quality, observation specificity, coverage), **factual** (grounding, hallucination, contradiction — this one also backs the inline grounding gate), and **consistency** (cross-file naming, type coherence), rolled into a 0–100 composite that can gate which graphs are harvested for `kblam`/`lora` training data.
 
 ## Architecture
 
 ```text
 src/
-├── cli/              # Commander.js CLI (process/watch/export commands; --export-only)
+├── cli/          # Commander.js CLI (process/watch/export; --export-only)
 ├── core/
-│   ├── di/           # Async DI container + service registrations
-│   ├── processor/    # File readers (transcript, JSON, PDF, Office, audio, …) + chunking + classifiers
-│   ├── checkpoint/   # Per-chunk resume sidecar (--resume)
-│   ├── llm/          # Ollama / OpenAI-compatible providers, embeddings, Handlebars prompt templates
-│   ├── knowledge/    # KG building (LLM+Zod, provenance + grounding gate), 3-level merge, vector search
-│   └── export/       # Strategy pattern: json, jsonl, mcp-jsonl, dot, kblam, lora, graphiti
-├── quality/          # Importable quality metrics (structural, semantic, factual, consistency, composite)
-├── evaluation/       # Benchmark harness (CrossRE / REBEL / RE-DocRED) — `npm run benchmark`
-├── types/            # TypeScript interfaces and data models (KnowledgeGraph, Observation, …)
-└── shared/           # Logger (tslog), graceful shutdown, utilities (Jaro-Winkler, cosine similarity, config)
-
-scripts/              # Standalone benchmark CLI + report tooling
-examples/             # Sample integrations and output files
+│   ├── di/        # Async DI container + service registrations
+│   ├── processor/ # File readers (transcript, JSON, PDF, Office, audio, …) + chunking + classifiers
+│   ├── checkpoint/# Per-chunk resume sidecar
+│   ├── llm/       # Ollama / OpenAI-compatible providers, embeddings, Handlebars prompts
+│   ├── knowledge/ # KG building (LLM+Zod, provenance + grounding gate), 3-level merge, vector search
+│   └── export/    # Strategy pattern: json, jsonl, mcp-jsonl, dot, kblam, lora, graphiti
+├── quality/      # Importable metrics (structural, semantic, factual, consistency, composite)
+├── evaluation/   # Benchmark harness (CrossRE / REBEL / RE-DocRED)
+├── types/        # Interfaces and data models
+└── shared/       # Logger, graceful shutdown, utilities (Jaro-Winkler, cosine, config)
 ```
 
-Tests use Jest (`npm test`); mock the LLM via the `ILLMProvider` interface for network-free unit tests.
+Tests use Jest (`npm test`); mock the LLM via `ILLMProvider` for network-free unit tests.
 
-## Development Setup
+## Development
 
 ```bash
-git clone https://github.com/alex_sabaka/kg-gen
-cd kg-gen
-npm install
-
-# Run directly (development)
-npx ts-node ./src/index.ts --config config.yaml
-
-# Build to dist/
-npm run build
-
-# Run compiled
-node ./dist/index.js --config config.yaml
+git clone https://github.com/alex_sabaka/wanshi && cd wanshi && npm install
+npx ts-node ./src/index.ts --config config.yaml   # run directly
+npm run build && node ./dist/index.js --config config.yaml   # or build first
 ```
 
-## License
-
-MIT License — see [LICENSE](LICENSE) file for details.
+See `examples/kg-mail-assistant/` for a full integration (Gmail OAuth + Telegram bot + continuous email→KG pipeline) and programmatic usage via `ContainerFactory`.
 
 ## Acknowledgments
 
-- **Anthropic** for MCP protocol and Claude integration inspiration
-- **Ollama** for local LLM deployment and API
-- **LangChain** for text splitting utilities (`@langchain/textsplitters`)
-- **OpenAI Whisper** (via `nodejs-whisper`) for audio transcription
-- **Open Source Community** for the amazing tools and libraries that make this possible
+- **[Ollama](https://ollama.ai)** — local LLM runtime and embeddings
+- **[LangChain](https://github.com/langchain-ai/langchainjs)** — text-splitting utilities
+- **[OpenAI Whisper](https://github.com/openai/whisper)** (via `nodejs-whisper`) — audio transcription
+- **Anthropic** — the MCP protocol, and Claude as a build partner (Cheetah 🐆 on the code, Dove 🕊️ on the audits)
+- **[KBLaM](https://github.com/microsoft/KBLaM)** and **[Graphiti](https://github.com/getzep/graphiti)** — prior work this project's training exports and temporal model lean on
+
+## License
+
+MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Built with ❤️ for developers, researchers, and knowledge workers who want to understand their data better.**
+*Knows ten thousand things; keeps only the ones it can source.*

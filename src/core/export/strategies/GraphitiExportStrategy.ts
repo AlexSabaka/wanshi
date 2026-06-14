@@ -47,7 +47,7 @@ export class GraphitiExportStrategy implements IExportStrategy {
           source_node_uuid: this.uuid(r.from),
           target_node_uuid: this.uuid(r.to),
           created_at: now,
-          // valid_at / invalid_at: kg-gen relations carry no edge-level valid time yet
+          // valid_at / invalid_at: wanshi relations carry no edge-level valid time yet
         });
       }
     }

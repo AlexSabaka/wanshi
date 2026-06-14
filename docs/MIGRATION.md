@@ -1,13 +1,13 @@
 # Config migration — flat → nested
 
-kg-gen's configuration moved from a flat ~50-key bag to a **nested, grouped, and
+wanshi's configuration moved from a flat ~50-key bag to a **nested, grouped, and
 validated** shape, with a single source of truth (the Zod `ConfigSchema` in
 `src/config/schema.ts`). This is a **clean break**: a flat config file now errors
 with a hint naming the new nested key. CLI flags are **unchanged** (they stay
 flat and ergonomic, e.g. `--chunk-size`); only **config files** (`--config
 *.yaml|*.json`) use the nested shape.
 
-The schema is also the thing the frontend reads (`kg-gen schema`), so the form no
+The schema is also the thing the frontend reads (`wanshi schema`), so the form no
 longer duplicates the field list.
 
 ## Why

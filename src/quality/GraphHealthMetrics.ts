@@ -9,7 +9,7 @@ import { KnowledgeGraph } from '../types';
  * Pure and synchronous — no embeddings, no LLM, no I/O — so the same function
  * scores the baseline arm and every canon arm uniformly and offline. The
  * ground-truth-dependent metrics (fabricated-edge rate, ER precision/recall)
- * live in the `kg-gen metrics --ground-truth` path, which needs embeddings.
+ * live in the `wanshi metrics --ground-truth` path, which needs embeddings.
  */
 export interface GraphHealthMetrics {
   entityCount: number;

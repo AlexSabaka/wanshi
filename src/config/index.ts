@@ -72,7 +72,7 @@ export function configJsonSchema(): Record<string, unknown> {
 }
 
 /**
- * The full schema payload the `kg-gen schema` command emits and the frontend
+ * The full schema payload the `wanshi schema` command emits and the frontend
  * consumes: the JSON Schema (types/enums/defaults/help) plus UI layout metadata
  * (groups + widget hints) so the run form is rendered without duplicating it.
  */

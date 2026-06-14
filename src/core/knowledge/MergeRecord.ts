@@ -1,7 +1,7 @@
 /**
  * One per-cluster record in a merge log (canon brief §7 — the deliverable).
  * Shared by the Canonicalizer (embedding clusters) and KnowledgeMerger
- * (string-merge fusions) so `kg-gen inspect-merges` reads both unchanged.
+ * (string-merge fusions) so `wanshi inspect-merges` reads both unchanged.
  */
 export interface MergeRecord {
   cluster_id: string;

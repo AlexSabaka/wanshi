@@ -46,7 +46,7 @@ program
   )
   .option(
     "--api-key <key>",
-    "API key for the OpenAI-compatible provider (falls back to OPENAI_API_KEY / KG_API_KEY env)"
+    "API key for the OpenAI-compatible provider (falls back to OPENAI_API_KEY / WANSHI_API_KEY env)"
   )
   .option("--temperature <number>", "model temperature")
   .option("--repeat-penalty <number>", "repeat penalty, Ollama only (>1.0 discourages repetition, <1.0 promotes it, 1.0 = off)")
@@ -72,7 +72,7 @@ program
   .option("--embeddings-host <url>", "embeddings host / OpenAI-compatible base URL")
   .option(
     "--embeddings-api-key <key>",
-    "API key for OpenAI-compatible embeddings (falls back to OPENAI_API_KEY / KG_API_KEY env)"
+    "API key for OpenAI-compatible embeddings (falls back to OPENAI_API_KEY / WANSHI_API_KEY env)"
   )
   .option(
     "--embeddings-max-input-chars <n>",
@@ -198,7 +198,9 @@ program
     const merged = deepMerge(fileRaw, cliRaw);
 
     // API keys may come from the environment instead of CLI/config.
-    const envApiKey = process.env.OPENAI_API_KEY || process.env.KG_API_KEY;
+    // WANSHI_API_KEY is the branded var; KG_API_KEY kept as a deprecated fallback.
+    const envApiKey =
+      process.env.OPENAI_API_KEY || process.env.WANSHI_API_KEY || process.env.KG_API_KEY;
     if (envApiKey) {
       if (!merged.llm?.apiKey) setPath(merged, "llm.apiKey", envApiKey);
       if (!merged.embeddings?.apiKey) setPath(merged, "embeddings.apiKey", envApiKey);
@@ -245,7 +247,7 @@ program
     }
   });
 
-// `kg-gen schema` — emit the config JSON Schema + UI metadata so a frontend can
+// `wanshi schema` — emit the config JSON Schema + UI metadata so a frontend can
 // render the run form without duplicating the option list. The single source of
 // truth is the Zod ConfigSchema in src/config.
 program
@@ -257,7 +259,7 @@ program
     process.stdout.write(JSON.stringify(payload, null, opts.json ? 0 : 2) + "\n");
   });
 
-// `kg-gen metrics <graph.json>` — the no-ground-truth A/B scorecard (entity/
+// `wanshi metrics <graph.json>` — the no-ground-truth A/B scorecard (entity/
 // relation-type counts, self-loops, bidirectional contradictions, referential
 // integrity, parallel edges). With --ground-truth it adds semantic triple
 // precision/recall + fabricated-edge rate. Used to capture the baseline numbers
@@ -279,7 +281,7 @@ program
     }
   });
 
-// `kg-gen inspect-merges <merges.jsonl>` — table view over the canonicalization
+// `wanshi inspect-merges <merges.jsonl>` — table view over the canonicalization
 // merge log: what got fused, how tight each cluster was, suspicious over-merges
 // first. The merge log is the experiment's deliverable, not the graph.
 program

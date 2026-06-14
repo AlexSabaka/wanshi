@@ -24,7 +24,7 @@ export class DocumentOutlineGenerator {
     // The Safe variant returns [] for unknown extensions / parse failures instead
     // of throwing — exactly what a heterogeneous corpus wants (no per-chunk
     // "No generator found" warning, KG-17). Rendering goes through upstream's
-    // canonical ascii-tree formatter so kg-gen no longer carries its own copy;
+    // canonical ascii-tree formatter so wanshi no longer carries its own copy;
     // `compact` drops line numbers + metadata for token-lean prompts.
     const outline = await generator.generateFromContentSafe(content, extension, genOptions);
     return formatOutline(outline, "ascii-tree", { compact: compact === true });

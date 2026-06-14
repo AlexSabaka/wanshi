@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * The single source of truth for kg-gen's configuration.
+ * The single source of truth for wanshi's configuration.
  *
  * Everything else is derived from this schema: the `ProcessingOptions` TS type
  * (`z.infer`), runtime validation + defaults (`parseConfig`), and the JSON
@@ -76,7 +76,7 @@ const LlmSchema = z
     apiKey: z
       .string()
       .optional()
-      .describe("API key for OpenAI-compatible provider (falls back to $OPENAI_API_KEY / $KG_API_KEY)"),
+      .describe("API key for OpenAI-compatible provider (falls back to $OPENAI_API_KEY / $WANSHI_API_KEY)"),
     temperature: num(0.1).describe("Model temperature"),
     repeatPenalty: num(1.1).describe(
       "Repeat penalty (Ollama: >1.0 discourages repetition, <1.0 promotes it; 1.0 = off)"

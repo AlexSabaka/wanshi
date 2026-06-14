@@ -515,7 +515,7 @@ export class ContainerFactory {
           );
 
           // String-merge fusions land next to the canon merge log (same JSONL shape,
-          // readable by `kg-gen inspect-merges`).
+          // readable by `wanshi inspect-merges`).
           if (options.inspection.emitMergeLog && records.length > 0) {
             const path = await import("path");
             const fs = await import("fs");

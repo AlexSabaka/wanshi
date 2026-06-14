@@ -18,7 +18,7 @@ interface KblamDataPoint {
 }
 
 /**
- * Emits a kg-gen graph as KBLaM-format `(entity, property, value)` triples with
+ * Emits a wanshi graph as KBLaM-format `(entity, property, value)` triples with
  * **unique (name, property) keys** (KG-09): observations aggregate into one
  * `description` property per entity, relations key on their predicate. Faithful to
  * KBLaM's DataPoint schema — Q/A/key_string follow the paper's templates (key

@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 /**
- * kg-gen benchmark evaluation script
+ * wanshi benchmark evaluation script
  *
  * Evaluates extraction quality against external RE/KG benchmark datasets.
  * Supported datasets:
@@ -109,7 +109,7 @@ function buildProcessingOptions(opts: {
 const program = new Command('benchmark');
 
 program
-  .description('Evaluate kg-gen extraction quality against benchmark datasets')
+  .description('Evaluate wanshi extraction quality against benchmark datasets')
   .option('--dataset <name>',          'Dataset: rebel | crossre | redocred',                                'rebel')
   .option('--data-path <path>',        'Path to dataset file or directory (CrossRE: dir loads all splits)')
   .option('--limit <n>',               'Max number of samples to evaluate (0 = all)',                        '50')
@@ -118,7 +118,7 @@ program
   .option('--provider <name>',         'Generation provider: ollama | openai (OpenAI-compatible)',           'ollama')
   .option('--model <name>',            'Model name (Ollama tag, or provider id like google/gemma-3-4b-it)',  'llama3.2:3b')
   .option('--host <url>',              'Ollama host URL, or OpenAI-compatible base URL when provider=openai','http://localhost:11434')
-  .option('--api-key <key>',           'API key for OpenAI-compatible provider (else $OPENAI_API_KEY / $KG_API_KEY / .env)')
+  .option('--api-key <key>',           'API key for OpenAI-compatible provider (else $OPENAI_API_KEY / $WANSHI_API_KEY / .env)')
   .option('--embeddings-provider <n>', 'Embeddings provider: ollama | openai',                               'ollama')
   .option('--embeddings-model <name>', 'Embedding model',                                                    'mxbai-embed-large:335m')
   .option('--embeddings-host <url>',   'Embeddings host / OpenAI-compatible base URL',                       'http://localhost:11434')
@@ -145,7 +145,7 @@ program
       provider: opts.provider,
       model: opts.model,
       host: opts.host,
-      apiKey: opts.apiKey || process.env.OPENAI_API_KEY || process.env.KG_API_KEY,
+      apiKey: opts.apiKey || process.env.OPENAI_API_KEY || process.env.WANSHI_API_KEY || process.env.KG_API_KEY,
       classifier: opts.classifier,
       embeddingsProvider: opts.embeddingsProvider,
       embeddingsModel: opts.embeddingsModel,

@@ -1,6 +1,6 @@
-# kg-gen — Project State
+# wanshi — Project State
 
-> **What this is:** a single, ground-truth briefing on kg-gen as it actually exists in the code today — architecture, features, known issues, tech debt, and functional/non-functional requirements. It exists to seed a roadmap brainstorm, so it favors *what is real in `src/`* over what the README/ROADMAP aspire to.
+> **What this is:** a single, ground-truth briefing on wanshi as it actually exists in the code today — architecture, features, known issues, tech debt, and functional/non-functional requirements. It exists to seed a roadmap brainstorm, so it favors *what is real in `src/`* over what the README/ROADMAP aspire to.
 >
 > **Snapshot date:** 2026-06-05 · branch `master` (mid-refactor, working tree dirty).
 >
@@ -8,9 +8,9 @@
 
 ---
 
-## §1 — What kg-gen is & project goals
+## §1 — What wanshi is & project goals
 
-**Elevator pitch.** kg-gen is a TypeScript CLI that turns a directory of files (code, docs, PDFs, Office, HTML, JSON, audio/video, images) into a structured **knowledge graph** of entities, observations (facts), and relations. Extraction runs on a local LLM via **Ollama** *or* any **OpenAI-compatible** endpoint (OpenAI, OpenRouter, vLLM, Ollama Cloud). It chunks input, extracts per-chunk under a Zod schema, merges with 3-level hierarchical deduplication, and exports to JSON, JSONL, MCP-compatible JSONL, or GraphViz DOT.
+**Elevator pitch.** wanshi is a TypeScript CLI that turns a directory of files (code, docs, PDFs, Office, HTML, JSON, audio/video, images) into a structured **knowledge graph** of entities, observations (facts), and relations. Extraction runs on a local LLM via **Ollama** *or* any **OpenAI-compatible** endpoint (OpenAI, OpenRouter, vLLM, Ollama Cloud). It chunks input, extracts per-chunk under a Zod schema, merges with 3-level hierarchical deduplication, and exports to JSON, JSONL, MCP-compatible JSONL, or GraphViz DOT.
 
 **Core data model** (`src/types/KnowledgeGraph.ts`):
 
@@ -315,7 +315,7 @@ Crisp, testable statements of what the system *does*. Useful as a baseline the b
 
 ### Decision points to seed the Dove session
 
-1. **Identity:** is kg-gen a *local-first CLI tool for me* (l-lang philosophy) or aiming at *publishable/production* (npm binary, tests, stability)? This single answer reorders Tiers 0–2.
+1. **Identity:** is wanshi a *local-first CLI tool for me* (l-lang philosophy) or aiming at *publishable/production* (npm binary, tests, stability)? This single answer reorders Tiers 0–2.
 2. **Output as artifact vs. store:** is the deliverable a static graph file, or a live queryable store (vector/graph DB)? Determines whether Tier 2 DB work is core or optional.
 3. **Where does the graph live across runs?** Answering this unblocks both the double-count fix and incremental updates.
 4. **Quality loop:** do we invest in the eval/quality subsystems as a *research instrument* (leaderboards, LoRA data) or keep them as occasional diagnostics?

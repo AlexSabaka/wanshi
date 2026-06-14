@@ -22,7 +22,7 @@ export function splitSentences(text: string): string[] {
 /**
  * Render a relation triple as one claim. The predicate (`relationType`) is an
  * array of snake_case tokens; join them and turn underscores into spaces, so
- * `("EmbeddingService", ["part_of"], "kg-gen")` → "EmbeddingService part of kg-gen".
+ * `("EmbeddingService", ["part_of"], "wanshi")` → "EmbeddingService part of wanshi".
  */
 export function verbalizeRelation(
   from: string,
