@@ -38,6 +38,8 @@ export const TYPES = {
   ProgressEmitter: Symbol.for("ProgressEmitter"),
   CorpusAnalyzer: Symbol.for("CorpusAnalyzer"),
   AstSeedService: Symbol.for("AstSeedService"),
+  FetchCacheService: Symbol.for("FetchCacheService"),
+  GatedFetcher: Symbol.for("GatedFetcher"),
 };
 
 /**
@@ -247,9 +249,12 @@ export class ContainerFactory {
           new DoclingReader(undefined, undefined, undefined, "./temp", chunker, logger)
         );
       } else {
-        // Reference-following needs links extracted, so it auto-implies internalLinks.
+        // Reference-following and web-fetch both need links extracted, so they
+        // auto-imply internalLinks extraction.
         const refLinks =
-          options.references.internalLinks.enabled || options.references.follow.enabled;
+          options.references.internalLinks.enabled ||
+          options.references.follow.enabled ||
+          options.references.web.enabled;
         const refCites = options.references.citations.enabled;
         factory.registerReader(new RtfReader(chunker, logger));
         factory.registerReader(
@@ -378,6 +383,39 @@ export class ContainerFactory {
       const cachePath = options.ast.cachePath || `${options.output}.ast-cache.json`;
       const store = new AstSymbolStore(cachePath, logger);
       return new AstSeedService(store, logger, options.input);
+    });
+
+    // Register the web reference fetch cache + gated fetcher (Phase 1; used only
+    // when references.web.enabled). Network layer is never constructed otherwise.
+    container.register(TYPES.FetchCacheService, async (c) => {
+      const { FetchCacheService } = await import("../knowledge/references/web/FetchCacheService");
+      const options = await c.resolve<ProcessingOptions>(TYPES.ProcessingOptions);
+      const logger = await c.resolve<Logger>(TYPES.Logger);
+      const cachePath = options.references.web.cachePath || `${options.output}.fetch-cache.jsonl`;
+      const cache = new FetchCacheService(cachePath, logger);
+      await cache.load();
+      return cache;
+    });
+
+    container.register(TYPES.GatedFetcher, async (c) => {
+      const { GatedFetcher } = await import("../knowledge/references/web/GatedFetcher");
+      const options = await c.resolve<ProcessingOptions>(TYPES.ProcessingOptions);
+      const logger = await c.resolve<Logger>(TYPES.Logger);
+      const llm = await c.resolve<ILLMProvider>(TYPES.LLMService);
+      const w = options.references.web;
+      return new GatedFetcher(
+        {
+          allowlist: w.allowlist,
+          rejectlist: w.rejectlist,
+          maxFetches: w.maxFetches,
+          timeoutMs: w.timeoutMs,
+          maxBytes: w.maxBytes,
+          relevanceCheck: w.relevanceCheck,
+          robots: w.robots,
+        },
+        llm,
+        logger
+      );
     });
 
     // Register Checkpoint service (used only when --resume is set)

@@ -23,6 +23,9 @@ import { toRelPathId } from "./corpus";
 import { buildReferenceGraph, resolveInternalTarget } from "./knowledge/references/ReferenceResolver";
 import { isExternalTarget, RawLink, RawReferences } from "./processor/readers/referenceExtraction";
 import { ProcessedRegistry } from "./processor/ProcessedRegistry";
+import { GatedFetcher } from "./knowledge/references/web/GatedFetcher";
+import { FetchCacheService } from "./knowledge/references/web/FetchCacheService";
+import { WebExtractFn, WebReferenceProcessor } from "./knowledge/references/web/WebReferenceProcessor";
 import {
   PipelineRunner,
   GroundingTransform,
@@ -196,6 +199,12 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         : new Set<string>();
     }
 
+    // Phase 1 — class-3 external web fetcher (opt-in; constructed only when
+    // references.web.enabled, so a default run never builds the network layer).
+    const webProc = options.references.web.enabled
+      ? await this.buildWebProcessor(options, fileProcessor, kgBuilder, corpusProfile, logger)
+      : null;
+
     // Worklist with a processed-file registry: the same file is read/extracted at
     // most once however it's reached (overlapping globs, reference-following). The
     // queue is seeded from follow.seeds (a crawl) or the discovered glob set, and
@@ -271,6 +280,14 @@ export class DirectoryProcessor implements IDirectoryProcessor {
               enqueue(path.resolve(options.input, rel), depth + 1);
             }
           }
+        }
+
+        // Phase 1 — class-3 external web: fetch this file's allowlisted external
+        // links (gated), extract, emit `references` edges. Depth-1 (fetched pages
+        // are not re-crawled). Offline unless references.web is enabled.
+        if (webProc) {
+          const webGraph = await webProc.process(id, fileLinks, options.description);
+          if (webGraph) knowledgeGraphs.push(webGraph);
         }
 
         const entities = fileGraphs.reduce((n, g) => n + g.entities.length, 0);
@@ -445,6 +462,37 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     const links =
       (processedFile.metadata?.references as RawReferences | undefined)?.links ?? [];
     return { graphs, links };
+  }
+
+  /**
+   * Build the Phase-1 web reference processor: the DI-managed gated fetcher +
+   * fetch cache, plus an extract closure that runs a fetched page through the
+   * normal reader + builder (content only — no reference-resolver/follow on
+   * fetched pages = depth-1).
+   */
+  private async buildWebProcessor(
+    options: ProcessingOptions,
+    fileProcessor: IFileProcessor,
+    kgBuilder: IKnowledgeGraphBuilder,
+    corpusProfile: CorpusProfile | undefined,
+    logger: Logger
+  ): Promise<WebReferenceProcessor> {
+    const fetcher = await this.container.resolve<GatedFetcher>(TYPES.GatedFetcher);
+    const cache = await this.container.resolve<FetchCacheService>(TYPES.FetchCacheService);
+    const promptManager = (await this.container.resolve(TYPES.PromptManager)) as PromptManager;
+    const extract: WebExtractFn = async (tempPath) => {
+      const pf = await fileProcessor.processFile(tempPath);
+      if (pf.metadata?.skip || !pf.chunks.length) return [];
+      const systemPrompt = await promptManager.getSystemPrompt(
+        options.input,
+        options.filter.join(", "),
+        options.description,
+        pf.metadata?.classes,
+        corpusProfile?.glossary
+      );
+      return kgBuilder.build(pf, systemPrompt, undefined, corpusProfile?.glossary);
+    };
+    return new WebReferenceProcessor(fetcher, cache, extract, logger);
   }
 
   /**

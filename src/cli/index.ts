@@ -100,6 +100,7 @@ program
   .option("--reference-links", "resolve internal links ([x](./other.md), [[wikilinks]], HTML href) to corpus files as links_to edges (default: false)")
   .option("--reference-citations", "parse bibliography + inline arXiv/DOI/PMID into cites edges (network-free; default: false)")
   .option("--reference-follow", "follow internal links to discover & process referenced files (each once); network-free, confined to input (default: false)")
+  .option("--reference-web", "fetch allowlisted external web links, extract, emit references edges (opt-in network; needs references.web.allowlist) (default: false)")
 
   // JSON reading strategy
   .option(

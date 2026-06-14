@@ -265,6 +265,33 @@ const ReferencesSchema = z
       })
       .strict()
       .default({}),
+    web: z
+      .object({
+        enabled: z
+          .boolean()
+          .default(false)
+          .describe(
+            "Phase 1 — fetch allowlisted EXTERNAL web links, extract, emit `references` edges. Opt-in NETWORK; auto-enables internalLinks extraction"
+          ),
+        allowlist: stringList([]).describe(
+          "Domains / URL-prefixes eligible to fetch (e.g. ['letta.com','https://x.io/docs']). Empty = no fetch (master switch)"
+        ),
+        rejectlist: stringList([]).describe("Domains / URL-prefixes to always skip"),
+        maxFetches: num(50).describe("Per-run fetch budget (hard cap)"),
+        timeoutMs: num(10000).describe("Per-fetch timeout (ms)"),
+        maxBytes: num(5_000_000).describe("Reject response bodies larger than this"),
+        relevanceCheck: z
+          .boolean()
+          .default(true)
+          .describe("LLM relevance pre-check on title/meta before the extraction pass"),
+        robots: z.boolean().default(true).describe("Respect robots.txt Disallow rules"),
+        cachePath: z
+          .string()
+          .optional()
+          .describe("Fetch-cache sidecar path (default: <output>.fetch-cache.jsonl)"),
+      })
+      .strict()
+      .default({}),
   })
   .strict();
 
