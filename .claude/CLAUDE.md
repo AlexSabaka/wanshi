@@ -281,6 +281,19 @@ Two stages, mirroring the AST-seed pattern:
   through merge. *Known debt:* path-keyed `document` nodes overlap with
   `documentIdentityGraph`'s title-named node — consolidation is a follow-up.
 
+**Reference-driven ingestion (`references.follow`, `--reference-follow`, default OFF).**
+`DirectoryProcessor.processFiles` is a **worklist** (queue of `{file, depth}`) guarded by a
+shared `ProcessedRegistry` (`src/core/processor/ProcessedRegistry.ts`; in-run, keyed by
+`toRelPathId` + optional content-hash) so a file is read/extracted **at most once** however
+it's reached. With follow on it seeds from `follow.seeds` (e.g. `INDEX.md`) — else the glob
+set — and after each file enqueues its resolved internal-link targets (reusing
+`resolveInternalTarget` over the **whole input tree**, not just the glob), bounded by
+`follow.maxDepth` (0 = unlimited) and `follow.maxFiles`. Cycles are impossible (registry);
+external targets are skipped (network = Phase 1); follow auto-implies `internalLinks`. The
+registry is the gate the Phase-1 fetcher will also consult. Distinct from the resume
+checkpoint (per-*chunk* extraction dedup across runs; the registry is per-*file* read dedup
+within a run — they compose).
+
 Phases 1 (gated network fetcher, external web) and 2 (citation span-fetch + MiniCheck
 faithfulness) are deferred; Phase 2 is gated by the OA-resolvability probe
 (`examples/sandbox/oa-resolvability-probe.ts`). Briefs in `docs/inbox/2026-06-14-*reference-resolution*`.
