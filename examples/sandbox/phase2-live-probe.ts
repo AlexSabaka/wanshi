@@ -38,7 +38,7 @@ const llmStub = { generateStructured: async () => ({}), getModelCapabilities: as
     {
       allowlist: ["arxiv.org", "ncbi.nlm.nih.gov", "aclanthology.org", "openreview.net", "proceedings.mlr.press"],
       rejectlist: [],
-      maxFetches: 3,
+      maxFetches: 12,
       timeoutMs: 30000,
       maxBytes: 30_000_000,
       relevanceCheck: false,
@@ -84,16 +84,17 @@ const llmStub = { generateStructured: async () => ({}), getModelCapabilities: as
   const cites = g.relations.filter((r) => r.relationType.includes("cites"));
   const resolved = cites.filter((r) => r.resolved);
   const labeled = cites.filter((r) => r.faithfulness);
-  console.log(`cites edges: ${cites.length} | resolved(fetched OA): ${resolved.length} | faithfulness-labeled: ${labeled.length}`);
+  const abstained = resolved.filter((r) => !r.faithfulness);
+  console.log(`cites edges: ${cites.length} | resolved(fetched OA): ${resolved.length} | labeled: ${labeled.length} | abstained: ${abstained.length}`);
   const byLabel = (l: string) => labeled.filter((r) => r.faithfulness === l).length;
   console.log(`labels → supported:${byLabel("supported")} uncertain:${byLabel("uncertain")} unsupported:${byLabel("unsupported")}\n`);
 
   for (const r of resolved) {
-    console.log(`▶ ${r.from}  --cites-->  ${r.to}`);
-    console.log(`   resolved=${r.resolved}  faithfulness=${r.faithfulness ?? "(none)"}  score=${r.faithfulnessScore?.toFixed(2) ?? "-"}`);
-    if (r.supportingSpan) console.log(`   span: ${r.supportingSpan.replace(/\s+/g, " ").slice(0, 200)}…`);
     const node = g.entities.find((e) => e.name === r.to);
-    const claim = node?.observations.find((o) => /faithfulness/i.test(o.text));
+    const faith = node?.observations.find((o) => /Citation faithfulness/i.test(o.text));
+    console.log(`▶ ${r.from}  --cites-->  ${r.to}`);
+    console.log(`   ${faith?.text ?? "(no faithfulness obs)"}`);
+    if (r.supportingSpan) console.log(`   span: ${r.supportingSpan.replace(/\s+/g, " ").slice(0, 180)}…`);
     console.log("");
   }
 })().catch((e) => {

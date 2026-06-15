@@ -7,7 +7,10 @@ import { stubLogger } from "../../../../__tests__/helpers";
 const TEI = `<?xml version="1.0"?>
 <TEI xmlns="http://www.tei-c.org/ns/1.0">
   <text><body>
-    <p>Transformers scale well <ref type="bibr" target="#b0">[1]</ref> and sparse MoE helps <ref type="bibr" target="#b1">[2]</ref>.</p>
+    <p>
+      <s>Transformers scale well <ref type="bibr" target="#b0">[1]</ref>.</s>
+      <s>Sparse MoE and attention help <ref type="bibr" target="#b1">[2]</ref> <ref type="bibr" target="#b0">[1]</ref>.</s>
+    </p>
   </body>
   <back><div type="references"><listBibl>
     <biblStruct xml:id="b0"><analytic>
@@ -32,11 +35,13 @@ describe("GrobidClient.parseTei", () => {
     const b0 = ctx.find((c) => c.ids.arxivId === "1706.03762")!;
     expect(b0.ids.title).toBe("Attention Is All You Need");
     expect(b0.citingClaim).toContain("Transformers scale well");
+    expect(b0.soleReferent).toBe(true); // first cited in a single-ref sentence
 
     const b1 = ctx.find((c) => c.ids.doi === "10.1234/moe.2017")!;
     expect(b1.ids.title).toBe("Outrageously Large Neural Networks");
     expect(b1.ids.arxivId).toBeUndefined();
-    expect(b1.citingClaim).toContain("sparse MoE helps");
+    expect(b1.citingClaim).toContain("Sparse MoE");
+    expect(b1.soleReferent).toBe(false); // its sentence co-cites [2] and [1]
   });
 
   it("POSTs the PDF and parses the response", async () => {

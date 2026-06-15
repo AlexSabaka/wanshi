@@ -15,6 +15,10 @@ import { CitationResolver, ResolvableCitation } from "./CitationResolver";
 export interface CitationContext {
   ids: ResolvableCitation;
   citingClaim?: string;
+  /** True when the citing sentence cites ONLY this work (Phase 2c). A multi-cite
+   * sentence makes a collective claim not attributable to one work, so we don't
+   * assert a faithfulness label for it. Undefined ⇒ unknown (regex path). */
+  soleReferent?: boolean;
   raw: string;
 }
 
@@ -87,6 +91,34 @@ export function dropReferenceChunks(chunks: string[]): string[] {
   };
   const body = chunks.filter((c) => !isRefDense(c));
   return body.length ? body : chunks;
+}
+
+/**
+ * Split a coarse chunk (PdfReader emits one chunk per PAGE) into focused ~`target`-char
+ * passages so span-select — and the MiniCheck evidence — is a paragraph, not a whole
+ * page (the live-probe lesson: a page-level span buried the relevant sentence under a
+ * results table → `unsupported`). Greedy sentence packing, with a hard split for
+ * pdf2json runs that lack spaces/sentence breaks. Pure — exported for tests.
+ */
+export function splitPassages(text: string, target = 700): string[] {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= target) return clean ? [clean] : [];
+  const out: string[] = [];
+  let cur = "";
+  for (const s of clean.split(/(?<=[.!?])\s+/)) {
+    if (cur && cur.length + s.length + 1 > target) {
+      out.push(cur);
+      cur = s;
+    } else {
+      cur = cur ? `${cur} ${s}` : s;
+    }
+    while (cur.length > target * 1.8) {
+      out.push(cur.slice(0, target)); // runaway (no sentence breaks) — hard window
+      cur = cur.slice(target);
+    }
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
 }
 
 /**
@@ -193,11 +225,15 @@ export class CitationEvidenceProcessor {
         fs.promises.unlink(r.tempPath).catch(() => undefined);
       }
       const span = await this.selectSpan(ctx.citingClaim, chunks);
-      const verdict = await this.judge(ctx.citingClaim, span);
-      graph = this.contribution(citingRel, nodeName, target.url, statedObs, graphs, span, verdict, createdAt);
+      const verdict = await this.judge(ctx, span);
+      const faithNote =
+        !verdict && ctx.citingClaim && ctx.soleReferent === false
+          ? "co-cited with other works — faithfulness not assessed"
+          : undefined;
+      graph = this.contribution(citingRel, nodeName, target.url, statedObs, graphs, span, verdict, faithNote, createdAt);
     } else {
       this.logger.info(`Citation not resolved (${r.reason}): ${target.url}`);
-      graph = this.contribution(citingRel, nodeName, target.url, statedObs, [], null, null, createdAt, false);
+      graph = this.contribution(citingRel, nodeName, target.url, statedObs, [], null, null, undefined, createdAt, false);
     }
 
     await this.cache.append({
@@ -222,6 +258,7 @@ export class CitationEvidenceProcessor {
     contentGraphs: KnowledgeGraph[],
     span: { span: string; score: number } | null,
     verdict: { label: "supported" | "unsupported" | "uncertain"; score: number } | null,
+    faithNote: string | undefined,
     createdAt: string,
     resolved = true
   ): KnowledgeGraph {
@@ -230,6 +267,8 @@ export class CitationEvidenceProcessor {
     if (resolved) obs.push({ text: `Fetched OA full text from ${url}`, source: url, createdAt });
     if (verdict) {
       obs.push({ text: `${FAITH}: ${verdict.label} (${verdict.score.toFixed(2)})`, source: url, createdAt });
+    } else if (faithNote) {
+      obs.push({ text: `${FAITH}: ${faithNote}`, source: url, createdAt });
     }
     entities.push({ name: nodeName, entityType: "document", files: [], observations: obs });
 
@@ -316,9 +355,10 @@ export class CitationEvidenceProcessor {
     allChunks: string[]
   ): Promise<{ span: string; score: number } | null> {
     if (!claim || allChunks.length === 0) return null;
-    // Body-only candidates — a citing claim is grounded in prose, not in the
-    // cited work's own bibliography/front-matter.
-    const chunks = dropReferenceChunks(allChunks);
+    // Body-only candidates (drop the cited work's bibliography), sub-split into
+    // focused passages — a citing claim is grounded in a paragraph, not a page.
+    const chunks = dropReferenceChunks(allChunks).flatMap((c) => splitPassages(c));
+    if (chunks.length === 0) return null;
     const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
     const nc = norm(claim);
     if (nc.length >= 40) {
@@ -353,14 +393,19 @@ export class CitationEvidenceProcessor {
     }
   }
 
-  /** Run MiniCheck on (claim, span) and map the score to a 3-way label. */
+  /** Run MiniCheck on (claim, span) and map the score to a 3-way label — but only
+   * for a SINGLE-referent citing sentence. A multi-cite sentence makes a collective
+   * claim not attributable to this one work, so we abstain (no label) rather than
+   * emit a meaningless verdict (the live-probe lesson: every multi-cite claim
+   * mis-scored `unsupported`). */
   private async judge(
-    claim: string | undefined,
+    ctx: CitationContext,
     span: { span: string; score: number } | null
   ): Promise<{ label: "supported" | "unsupported" | "uncertain"; score: number } | null> {
-    if (!this.faithfulness || !claim || !span) return null;
+    if (!this.faithfulness || !ctx.citingClaim || !span) return null;
+    if (ctx.soleReferent === false) return null; // co-cited — not attributable
     try {
-      const v = await this.faithfulness.check(claim, span.span);
+      const v = await this.faithfulness.check(ctx.citingClaim, span.span);
       return { label: this.label(v.score), score: v.score };
     } catch (err) {
       this.logger.warn(`Faithfulness check failed: ${err}`);

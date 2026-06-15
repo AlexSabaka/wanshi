@@ -89,6 +89,9 @@ export class GrobidClient implements IGrobidClient {
     });
 
     // 2) in-text callouts: target #bN → the enclosing sentence/paragraph text.
+    // Also record whether the citing sentence cites ONLY this work (soleReferent):
+    // a sentence with several markers makes a collective claim not attributable to
+    // one work, so Phase-2c won't assert a faithfulness label for it.
     $('ref[type="bibr"]').each((_, el) => {
       const target = ($(el).attr("target") || "").replace(/^#/, "");
       const ctx = refs.get(target);
@@ -96,7 +99,14 @@ export class GrobidClient implements IGrobidClient {
       const $el = $(el);
       const host = $el.closest("s").length ? $el.closest("s") : $el.closest("p");
       const claim = host.text().replace(/\s+/g, " ").trim();
-      if (claim) ctx.citingClaim = claim;
+      if (!claim) return;
+      const coCited = new Set<string>();
+      host.find('ref[type="bibr"]').each((__, r) => {
+        const t = ($(r).attr("target") || "").replace(/^#/, "");
+        if (t) coCited.add(t);
+      });
+      ctx.citingClaim = claim;
+      ctx.soleReferent = coCited.size <= 1;
     });
 
     const out = Array.from(refs.values()).filter(

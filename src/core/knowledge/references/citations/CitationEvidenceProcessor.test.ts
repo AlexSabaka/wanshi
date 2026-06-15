@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { CitationEvidenceProcessor, dropReferenceChunks } from "./CitationEvidenceProcessor";
+import { CitationEvidenceProcessor, dropReferenceChunks, splitPassages } from "./CitationEvidenceProcessor";
 import { FetchCacheService } from "../web/FetchCacheService";
 import { stubLogger } from "../../../../__tests__/helpers";
 
@@ -93,6 +93,27 @@ describe("CitationEvidenceProcessor", () => {
     expect(faithfulness.check).toHaveBeenCalledWith("model uses sparse mixture of experts", expect.stringContaining("mixture of experts"));
   });
 
+  it("abstains from a faithfulness label when the citing sentence co-cites other works", async () => {
+    const grobid = {
+      process: jest.fn(async () => [
+        { ids: { arxivId: "1701.06538", title: "MoE" }, citingClaim: "many works use mixture of experts", soleReferent: false, raw: "[1,2,3]" },
+      ]),
+    };
+    const faithfulness = { check: jest.fn(async () => ({ score: 0.9, supported: true, checker: "minicheck" })) } as any;
+    const proc = new CitationEvidenceProcessor(okFetcher(), cache(), resolverArxivOnly, extractMoE, embeddings, stubLogger(), {
+      grobid,
+      faithfulness,
+      uncertainBand: [0.34, 0.67],
+    });
+    const g = (await proc.process("paper.pdf", "paper.pdf", []))!;
+    const edge = g.relations.find((r) => r.to === "arXiv:1701.06538")!;
+    expect(edge.resolved).toBe(true); // still fetched + folded
+    expect(edge.faithfulness).toBeUndefined(); // but NOT labeled — collective claim
+    expect(faithfulness.check).not.toHaveBeenCalled();
+    const node = g.entities.find((e) => e.name === "arXiv:1701.06538")!;
+    expect(node.observations.some((o) => /not assessed/i.test(o.text))).toBe(true);
+  });
+
   it("emits a bare resolved:false cites edge for an unresolvable citation (no fetch)", async () => {
     const fetcher = okFetcher();
     const proc = new CitationEvidenceProcessor(fetcher, cache(), resolverArxivOnly, extractMoE, embeddings, stubLogger());
@@ -122,6 +143,20 @@ describe("CitationEvidenceProcessor", () => {
     expect(dropReferenceChunks([body, refs])).toEqual([body]);
     // all-references ⇒ fall back to the full set rather than returning nothing
     expect(dropReferenceChunks([refs])).toEqual([refs]);
+  });
+
+  it("splitPassages breaks a page into focused passages and hard-splits space-less runs", () => {
+    const short = "One short paragraph.";
+    expect(splitPassages(short)).toEqual([short]);
+    // sentence packing to ~target
+    const sentences = Array.from({ length: 12 }, (_, i) => `Sentence number ${i} explains a point.`).join(" ");
+    const packed = splitPassages(sentences, 120);
+    expect(packed.length).toBeGreaterThan(1);
+    expect(Math.max(...packed.map((p) => p.length))).toBeLessThan(120 * 1.8);
+    // pdf2json run with no spaces/sentence breaks → hard-windowed, not one giant span
+    const run = "x".repeat(5000);
+    const windows = splitPassages(run, 700);
+    expect(windows.length).toBeGreaterThan(3);
   });
 
   it("dropReferenceChunks cuts the trailing section at a References heading (any entry format)", () => {
