@@ -7,6 +7,8 @@ export * from './HtmlReader';
 export * from './ImageReader';
 export * from './JsonFileReader';
 export * from './MarkdownReader';
+export * from './MarkerPdfReader';
+export * from './MistralOcrReader';
 export * from './OfficeReader';
 export * from './PdfReader';
 export * from './RtfReader';
