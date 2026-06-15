@@ -42,6 +42,53 @@ export interface CitationEvidenceDeps {
 
 const FAITH = "Citation faithfulness";
 
+/** A references/bibliography section heading on its own line. Mirrors the
+ * `REF_HEADING` used by `stripReferences.splitPagesAtReferences`. */
+const REF_HEADING_LINE = /^\s*(?:#{0,6}\s*)?(?:[\divxlc]+\.?\s+)?(references|bibliography|works cited)\s*:?\s*$/i;
+
+/**
+ * Drop the cited work's bibliography so span-select ranks its BODY, not its
+ * reference entries. A citing claim is supported by prose, never by a reference
+ * line — yet ref chunks are dense with years/venues/names and out-compete body
+ * chunks on the embedding match (the live-probe failure: every span landed on the
+ * cited work's reference list → uniformly `unsupported`).
+ *
+ * Two passes, mirroring `splitPagesAtReferences`: (1) cut the TRAILING reference
+ * section at a `References`/`Bibliography` heading in the latter 60% — robust to
+ * any entry format (numbered, author-year, GitHub-URL, …) since everything after
+ * the heading goes; (2) a density fallback for ref chunks with no clean heading.
+ * Falls back to all chunks if a pass would leave nothing. Pure — exported for tests.
+ */
+export function dropReferenceChunks(chunks: string[]): string[] {
+  // (1) trailing-section cut at a references heading past 60% of the document.
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  let acc = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    const start = acc;
+    acc += chunks[i].length;
+    if (start < total * 0.6) continue; // a body mention of "references" isn't the section
+    const lines = chunks[i].split("\n");
+    const h = lines.findIndex((l) => REF_HEADING_LINE.test(l.trim()));
+    if (h >= 0) {
+      const head = lines.slice(0, h).join("\n").trim();
+      const kept = chunks.slice(0, i);
+      if (head) kept.push(head);
+      return kept.length ? kept : chunks;
+    }
+  }
+  // (2) density fallback — ref-dense chunks with no detectable heading line.
+  const isRefDense = (t: string): boolean => {
+    const per1k = (re: RegExp, w = 1) => ((t.match(re) || []).length * w) / Math.max(t.length / 1000, 1);
+    const density =
+      per1k(/\b(?:19|20)\d{2}\b/g) +
+      per1k(/\bet al\.?/gi, 2) +
+      per1k(/In Proceedings|Conference on|Journal of|Transactions on|Advances in Neural|arXiv:\s*\d|doi\.org|URL\s+https?:|github\.com|pp\.\s*\d+/gi, 2);
+    return density >= 8;
+  };
+  const body = chunks.filter((c) => !isRefDense(c));
+  return body.length ? body : chunks;
+}
+
 /**
  * Phase 2 — the citation span-fetch apex. For a citing document's citations:
  * resolve the cited work's id → OA full text (`CitationResolver`), fetch it
@@ -266,9 +313,12 @@ export class CitationEvidenceProcessor {
    * cosine → fuzzy fallback. Returns the best chunk (+ score), not the whole doc. */
   private async selectSpan(
     claim: string | undefined,
-    chunks: string[]
+    allChunks: string[]
   ): Promise<{ span: string; score: number } | null> {
-    if (!claim || chunks.length === 0) return null;
+    if (!claim || allChunks.length === 0) return null;
+    // Body-only candidates — a citing claim is grounded in prose, not in the
+    // cited work's own bibliography/front-matter.
+    const chunks = dropReferenceChunks(allChunks);
     const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
     const nc = norm(claim);
     if (nc.length >= 40) {

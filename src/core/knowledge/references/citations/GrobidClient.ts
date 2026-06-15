@@ -49,6 +49,7 @@ export class GrobidClient implements IGrobidClient {
     form.append("input", new Blob([buf]), path.basename(filePath) || "doc.pdf");
     form.append("consolidateCitations", "1");
     form.append("includeRawCitations", "1");
+    form.append("segmentSentences", "1"); // emit <s> so the citing CLAIM is a sentence, not the whole paragraph
 
     const res = await this.fetchFn(`${this.url}/api/processFulltextDocument`, {
       method: "POST",

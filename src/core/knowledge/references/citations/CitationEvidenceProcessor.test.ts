@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { CitationEvidenceProcessor } from "./CitationEvidenceProcessor";
+import { CitationEvidenceProcessor, dropReferenceChunks } from "./CitationEvidenceProcessor";
 import { FetchCacheService } from "../web/FetchCacheService";
 import { stubLogger } from "../../../../__tests__/helpers";
 
@@ -109,6 +109,53 @@ describe("CitationEvidenceProcessor", () => {
     expect(extractMoE).not.toHaveBeenCalled();
     const edge = g.relations.find((r) => r.to === "arXiv:1701.06538")!;
     expect(edge.resolved).toBe(false);
+  });
+
+  it("dropReferenceChunks excludes bibliography chunks, keeps body prose", () => {
+    const body =
+      "We propose a linear-attention recurrence that scales the model to long contexts " +
+      "while keeping inference cheap, and show it matches transformer quality on language modeling.";
+    const refs =
+      "References Vaswani et al. 2017. Attention is all you need. In Advances in Neural " +
+      "Information Processing Systems. Devlin et al. 2019. BERT. In Proceedings of NAACL, pp. 4171. " +
+      "Brown et al. 2020. Language models are few-shot learners. arXiv:2005.14165. doi.org/10.5555/x.";
+    expect(dropReferenceChunks([body, refs])).toEqual([body]);
+    // all-references ⇒ fall back to the full set rather than returning nothing
+    expect(dropReferenceChunks([refs])).toEqual([refs]);
+  });
+
+  it("dropReferenceChunks cuts the trailing section at a References heading (any entry format)", () => {
+    // GitHub/URL-style refs have low academic-venue density — only the heading cut catches them.
+    const b1 = "Section 1. ".padEnd(400, "x");
+    const b2 = "Section 2 discusses the routing mechanism in detail. ".padEnd(400, "y");
+    const refs = "References\nEric J. Wang. 2023. alpaca-lora. https://github.com/tloen/alpaca-lora\nYizhong Wang et al. 2023.";
+    expect(dropReferenceChunks([b1, b2, refs])).toEqual([b1, b2]); // heading chunk (past 60%) dropped
+  });
+
+  it("with GROBID, span-select ignores the cited work's bibliography chunk", async () => {
+    const grobid = {
+      process: jest.fn(async () => [
+        { ids: { arxivId: "1701.06538", title: "MoE" }, citingClaim: "model uses sparse mixture of experts", raw: "[1]" },
+      ]),
+    };
+    const faithfulness = { check: jest.fn(async () => ({ score: 0.9, supported: true, checker: "minicheck" })) } as any;
+    // The fetched work's chunks: a relevant BODY chunk + a dense reference-list chunk.
+    const extract = jest.fn(async () => ({
+      chunks: [
+        "We route tokens through a sparse mixture of experts to scale capacity efficiently.",
+        "References Shazeer et al. 2017. arXiv:1701.06538. Lepikhin et al. 2020. In Proceedings, pp. 12. doi.org/10.5/x. et al.",
+      ],
+      graphs: [],
+    }));
+    const proc = new CitationEvidenceProcessor(okFetcher(), cache(), resolverArxivOnly, extract, embeddings, stubLogger(), {
+      grobid,
+      faithfulness,
+      uncertainBand: [0.34, 0.67],
+    });
+    const g = (await proc.process("paper.pdf", "paper.pdf", []))!;
+    const edge = g.relations.find((r) => r.to === "arXiv:1701.06538")!;
+    expect(edge.supportingSpan).toContain("sparse mixture of experts"); // body chunk, not the References one
+    expect(edge.supportingSpan).not.toContain("References Shazeer");
   });
 
   it("reuses the fetch cache and never refetches the same cited work", async () => {
