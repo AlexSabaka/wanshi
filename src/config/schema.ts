@@ -246,6 +246,78 @@ const ReferencesSchema = z
           .describe(
             "Parse the bibliography + inline arXiv/DOI/PMID into cites edges (network-free; fetch/resolution is a later phase)"
           ),
+        // Phase 2 — citation span-fetch + faithfulness. Opt-in NETWORK; auto-enables
+        // citation extraction. Resolves a cited work's id → OA full text, folds it
+        // onto the cited-work node, and (with GROBID + MiniCheck) labels the edge.
+        fetch: z
+          .object({
+            enabled: z
+              .boolean()
+              .default(false)
+              .describe(
+                "Phase 2 — resolve id-bearing cites to OPEN-ACCESS full text and fetch it. Opt-in NETWORK; auto-enables citation extraction"
+              ),
+            allowlist: stringList(["arxiv.org", "ncbi.nlm.nih.gov"]).describe(
+              "OA hosts eligible to fetch (empty = no fetch). Broaden to raise DOI/Unpaywall reach"
+            ),
+            rejectlist: stringList([]).describe("Hosts / URL-prefixes to always skip"),
+            maxFetches: num(50).describe("Per-run citation fetch budget (hard cap)"),
+            timeoutMs: num(15000).describe("Per-fetch timeout (ms)"),
+            maxBytes: num(20_000_000).describe("Reject fetched PDFs larger than this"),
+            unpaywallEmail: z
+              .string()
+              .optional()
+              .describe("Unpaywall polite-pool email (or $UNPAYWALL_EMAIL) — required to resolve DOI citations"),
+            minicheck: z
+              .boolean()
+              .default(true)
+              .describe("Phase 2c — label cites supported/unsupported/uncertain via MiniCheck (needs a citing claim from GROBID)"),
+            minicheckModel: z
+              .string()
+              .default("bespoke-minicheck:7b")
+              .describe("Ollama model for the citation faithfulness checker"),
+            minicheckHost: z
+              .string()
+              .optional()
+              .describe("Ollama host for the faithfulness checker; defaults to the local daemon"),
+            uncertainBand: z
+              .tuple([z.coerce.number(), z.coerce.number()])
+              .default([0.34, 0.67])
+              .describe("[lo, hi]: support score ≤lo ⇒ unsupported, ≥hi ⇒ supported, between ⇒ uncertain"),
+            cachePath: z
+              .string()
+              .optional()
+              .describe("Citation fetch-cache sidecar path (default: <output>.citation-cache.jsonl)"),
+          })
+          .strict()
+          .default({}),
+        grobid: z
+          .object({
+            enabled: z
+              .boolean()
+              .default(false)
+              .describe(
+                "Phase 2b — use a local GROBID service to link in-text citation markers to references (enables span-select + faithfulness). Run via Docker: lfoppiano/grobid"
+              ),
+            url: z.string().default("http://localhost:8070").describe("GROBID service base URL"),
+          })
+          .strict()
+          .default({}),
+        titleResolver: z
+          .object({
+            enabled: z
+              .boolean()
+              .default(false)
+              .describe(
+                "Phase 2d — resolve id-LESS references to a DOI/arXiv id via Crossref → Semantic Scholar → OpenAlex (widens fetch reach beyond id-bearing cites)"
+              ),
+            mailto: z.string().optional().describe("Polite-pool email for Crossref/OpenAlex"),
+            openAlexKey: z.string().optional().describe("OpenAlex API key (required from Feb 2026)"),
+            semanticScholarKey: z.string().optional().describe("Semantic Scholar API key (raises rate limit)"),
+            minTitleSimilarity: num(0.85).describe("Min jaroWinkler title similarity to accept a title→id match"),
+          })
+          .strict()
+          .default({}),
       })
       .strict()
       .default({}),

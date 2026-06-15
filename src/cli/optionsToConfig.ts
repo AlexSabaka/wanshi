@@ -52,6 +52,12 @@ export const FLAG_TO_PATH: Record<string, string> = {
   referenceCitations: "references.citations.enabled",
   referenceFollow: "references.follow.enabled",
   referenceWeb: "references.web.enabled",
+  // references — Phase 2 citation span-fetch (opt-in network)
+  referenceCitationFetch: "references.citations.fetch.enabled",
+  unpaywallEmail: "references.citations.fetch.unpaywallEmail",
+  grobid: "references.citations.grobid.enabled",
+  grobidUrl: "references.citations.grobid.url",
+  referenceTitleResolver: "references.citations.titleResolver.enabled",
   // classifier
   classifier: "classifier.mode",
   // retrieval

@@ -40,6 +40,18 @@ export interface Relation {
    * the target's content. Absent on ordinary LLM-extracted relations.
    */
   resolved?: boolean;
+  /**
+   * Citation span-fetch faithfulness (Phase 2c): for a resolved `cites` edge, how
+   * the citing claim fared against the span selected from the cited work's fetched
+   * OA full text. `uncertain` when the support score lands inside the configured
+   * band — a genuine abstain, not a forced verdict. Absent unless the edge was
+   * fetched + claim-checked.
+   */
+  faithfulness?: "supported" | "unsupported" | "uncertain";
+  /** 0..1 support score from the faithfulness checker (MiniCheck). */
+  faithfulnessScore?: number;
+  /** The span (cited-work passage) the citing claim was checked against. */
+  supportingSpan?: string;
 }
 
 export interface KnowledgeGraph {

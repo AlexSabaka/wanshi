@@ -478,6 +478,9 @@ async function mergeWithinFile(
           ...(relation.validAt ? { validAt: relation.validAt } : {}),
           ...(relation.source ? { source: relation.source } : {}),
           ...(relation.resolved !== undefined ? { resolved: relation.resolved } : {}),
+          ...(relation.faithfulness ? { faithfulness: relation.faithfulness } : {}),
+          ...(relation.faithfulnessScore !== undefined ? { faithfulnessScore: relation.faithfulnessScore } : {}),
+          ...(relation.supportingSpan ? { supportingSpan: relation.supportingSpan } : {}),
         });
       }
     }
@@ -717,6 +720,9 @@ async function mergeGlobally(
             ...(relation.validAt ? { validAt: relation.validAt } : {}),
             ...(relation.source ? { source: relation.source } : {}),
             ...(relation.resolved !== undefined ? { resolved: relation.resolved } : {}),
+            ...(relation.faithfulness ? { faithfulness: relation.faithfulness } : {}),
+            ...(relation.faithfulnessScore !== undefined ? { faithfulnessScore: relation.faithfulnessScore } : {}),
+            ...(relation.supportingSpan ? { supportingSpan: relation.supportingSpan } : {}),
           });
         }
       } else {

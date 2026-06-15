@@ -297,7 +297,8 @@ runs; the registry is per-*file* read dedup within a run — they compose).
 NETWORK).** Class-3 external links → `references` edges. `src/core/knowledge/references/web/`:
 `GatedFetcher` applies layered, always-on guards (allowlist [empty ⇒ no fetch, the master
 switch] → rejectlist → robots.txt → per-run `maxFetches` budget → timed `fetch` →
-content-type [html only; pdf is Phase 2] → `maxBytes` → **LLM relevance pre-check** on
+content-type [html only here; the `allowPdf` flag adds `application/pdf` for Phase-2 citation
+fetch] → `maxBytes` → **LLM relevance pre-check** on
 title/meta), staging passing bodies to `./temp`. `WebReferenceProcessor` (run per file in the
 worklist when enabled) fetches each external link, extracts the page through the normal
 reader+builder (depth-1, content only), and emits a `references` edge `citingDoc → url`
@@ -307,9 +308,38 @@ fetched at most once across runs. Note: `extractBareUrls` is what captures web-c
 `> source:` URLs (markdown-link extraction alone misses them). Default run = offline,
 byte-identical.
 
-Phase 2 (citation span-fetch + MiniCheck faithfulness) is still deferred — gated by the
-OA-resolvability probe (`examples/sandbox/oa-resolvability-probe.ts`). Briefs in
-`docs/inbox/2026-06-14-*reference-resolution*`.
+**Phase 2 — citation span-fetch + faithfulness (`references.citations.fetch`,
+`--reference-citation-fetch`, default OFF, opt-in NETWORK).** The reference apex: a `cites`
+edge stops dangling and becomes *evidence-bearing*. `src/core/knowledge/references/citations/`:
+`CitationResolver` maps a cited work's id → OA full-text URL (arXiv→pdf · DOI→Unpaywall
+`best_oa_location` [needs `unpaywallEmail`/`$UNPAYWALL_EMAIL`] · PMID→PMC), the PDF-capable
+`GatedFetcher` (`allowPdf` → `application/pdf` accepted + staged as a binary `.pdf`, routed
+through `PdfReader`) fetches it, and `CitationEvidenceProcessor` (run per file in the worklist,
+the Phase-2 analog of `WebReferenceProcessor`) folds the fetched content onto the **same**
+`document` node the `cites` edge names (`citationNodeName` reused from `ReferenceResolver`),
+selects the span the citing claim relies on (exact → embedding cosine → fuzzy), and stamps the
+edge. Its own `<output>.citation-cache.jsonl` (`FetchCacheService`) fetches each cited work at
+most once. **When fetch is on, this processor OWNS `cites` edges — the Phase-0 resolver stands
+down on citations** (`citationsForResolver = citations.enabled && !fetch.enabled`) so there's
+exactly one `cites` edge per (doc, work); unresolved/gated ⇒ bare `resolved:false`, never
+fabricated. Sub-layers, all gated, **graceful-degrade** independently:
+- **2b GROBID** (`references.citations.grobid`, `--grobid`): a local GROBID service (Docker:
+  `docker run -p 8070:8070 lfoppiano/grobid`) parses the citing PDF's TEI to link each in-text
+  marker to its reference + the **citing sentence** (the claim). Regex over pdf2json can't
+  recover that mapping (Dove's research). `GrobidClient` (cheerio xmlMode, no new dep)
+  unreachable ⇒ falls back to regex id-bearing citations (no claim ⇒ no span/faithfulness).
+- **2c MiniCheck** (`references.citations.fetch.minicheck`): `(citingClaim, span)` → 3-way
+  `Relation.faithfulness` `supported`/`unsupported`/`uncertain` via the existing
+  `MiniCheckGroundingChecker`, with an `uncertainBand:[lo,hi]` abstain zone (≤lo unsupported,
+  ≥hi supported). Preserved through merge alongside `source`/`resolved` (+`faithfulnessScore`,
+  `supportingSpan`).
+- **2d title→id resolver** (`references.citations.titleResolver`, `--reference-title-resolver`):
+  `TitleIdResolver` cascade Crossref → Semantic Scholar → OpenAlex (jaroWinkler title gate
+  `minTitleSimilarity`) reaches the id-LESS majority; feeds `CitationResolver`.
+
+Default run = offline, byte-identical. Gated GO by the OA-resolvability probe
+(`examples/sandbox/oa-resolvability-probe.ts`); design in
+`docs/inbox/2026-06-1{4-cheetah,5-dove}-*reference-resolution-phase2*`.
 
 ## LLM Providers & Resume
 

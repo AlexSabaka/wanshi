@@ -57,6 +57,17 @@ describe("GatedFetcher", () => {
     expect(r.reason).toMatch(/content-type/);
   });
 
+  it("accepts application/pdf and stages a binary .pdf when allowPdf is set", async () => {
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]); // %PDF-
+    const fetchFn = jest.fn(
+      async () => new Response(bytes, { status: 200, headers: { "content-type": "application/pdf" } })
+    );
+    const r = await make(baseOpts({ allowPdf: true }), fetchFn).fetch("https://example.com/f.pdf", "s");
+    expect(r.resolved).toBe(true);
+    expect(r.tempPath).toMatch(/\.pdf$/);
+    expect(fs.readFileSync(r.tempPath!)).toEqual(Buffer.from(bytes)); // bytes verbatim, no utf-8 mangling
+  });
+
   it("rejects oversize bodies", async () => {
     const fetchFn = jest.fn(async () => resp(html("x".repeat(5000))));
     const r = await make(baseOpts({ maxBytes: 100 }), fetchFn).fetch("https://example.com/p", "scope");
