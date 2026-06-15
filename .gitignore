@@ -145,10 +145,17 @@ test_configs/
 # dist, temp/, *.log) plus these:
 token.json
 
-# Python (doc-classifier)
+# Python subprojects (doc-classifier/, audio-pipeline/)
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+
+# audio-pipeline: per-audio intermediate stage artifacts (diarize/asr JSON, chunk
+# WAVs) cached next to the input audio. The <audio>.transcript.json sidecar is a
+# useful output and stays tracked; the workdir is regenerable scratch.
+*.workdir/
 
 # canonicalization experiment run artifacts
 runs/
