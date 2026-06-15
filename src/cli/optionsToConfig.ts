@@ -40,9 +40,12 @@ export const FLAG_TO_PATH: Record<string, string> = {
   overlapSize: "chunking.overlap",
   // readers
   asr: "readers.asr.mode",
+  asrEngine: "readers.asr.engine",
   whisperModel: "readers.asr.whisperModel",
   language: "readers.asr.language",
   translate: "readers.asr.translate",
+  asrModels: "readers.asr.dual.asr",
+  numSpeakers: "readers.asr.dual.numSpeakers",
   docling: "readers.docling",
   stripReferences: "readers.stripReferences",
   jsonStrategy: "readers.json.strategy",

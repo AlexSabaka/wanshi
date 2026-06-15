@@ -313,12 +313,27 @@ export class ContainerFactory {
       // BinaryReader catch-all below and is skipped gracefully).
       if (options.readers.asr.mode !== "disabled") {
         logger.info(`Using automatic speech recognition pipeline`);
+        const asr = options.readers.asr;
+        if (asr.engine === "dual") {
+          logger.info(`ASR engine: dual (vendored Python audio-pipeline at ${asr.dual.projectDir})`);
+        }
         factory.registerReader(
           new AudioReader(
             {
-              modelName: options.readers.asr.whisperModel,
-              language: options.readers.asr.language,
-              translate: options.readers.asr.translate,
+              modelName: asr.whisperModel,
+              language: asr.language,
+              translate: asr.translate,
+              engine: asr.engine,
+              maxChunkSize: options.chunking.size,
+              dual: {
+                projectDir: asr.dual.projectDir,
+                pythonPath: asr.dual.pythonPath,
+                asr: asr.dual.asr,
+                diarize: asr.dual.diarize,
+                numSpeakers: asr.dual.numSpeakers,
+                device: asr.dual.device,
+                timeoutMs: asr.dual.timeoutMs,
+              },
             },
             "./temp",
             chunker,

@@ -86,9 +86,12 @@ program
 
   // Whisper Audio/Video Processing
   .option("--asr <mode>", "set automatic speech recognition mode (disabled|auto|enabled)")
+  .option("--asr-engine <engine>", "transcription engine: whisper (built-in) | dual (vendored Python VAD+dual-STT+diarization, Apple-Silicon only)")
   .option("--whisper-model <name>", "set whisper model (default: medium)")
   .option("--language <lang>", "set speech recognition language (default: auto)")
   .option("--translate", "translate to english (default: false)")
+  .option("--asr-models <which>", "dual engine: which ASR backends to run (both|parakeet|whisper)")
+  .option("--num-speakers <n>", "dual engine: hint the diarizer's speaker count", (v) => parseInt(v, 10))
 
   // Enable Docling PDF/DOC/DOCX/PPT/PPTX Processing
   .option("--docling", "use docling for PDF/DOC/DOCX/PPT/PPTX documents processing (default: false)")

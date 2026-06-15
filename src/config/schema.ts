@@ -59,6 +59,11 @@ export const ExportFormatEnum = z.enum([
   "graphiti",
 ]);
 export const JsonStrategyEnum = z.enum(["structural", "raw"]);
+// AudioReader transcription engine: `whisper` = built-in single-model nodejs-whisper
+// (default, portable, network-free); `dual` = vendored Python audio-pipeline
+// (Silero VAD + Parakeet/Whisper dual-STT + diarization, Apple-Silicon only, opt-in).
+export const AsrEngineEnum = z.enum(["whisper", "dual"]);
+export const AsrModelsEnum = z.enum(["both", "parakeet", "whisper"]);
 export const LogLevelEnum = z.enum(["debug", "info", "warning", "error"]);
 
 // ── grouped sub-schemas ────────────────────────────────────────────────────
@@ -218,12 +223,35 @@ const JsonReaderSchema = z
   })
   .strict();
 
+// Dual-STT engine knobs (only consulted when `engine: dual`). The Python
+// audio-pipeline subproject is invoked per audio file; any failure (missing
+// interpreter, model, or service) degrades gracefully back to the whisper engine.
+const AsrDualSchema = z
+  .object({
+    projectDir: z
+      .string()
+      .default("./audio-pipeline")
+      .describe("Path to the vendored Python audio-pipeline subproject"),
+    pythonPath: z
+      .string()
+      .optional()
+      .describe("Python/launcher executable (default: `uv` runner inside projectDir)"),
+    asr: AsrModelsEnum.default("both").describe("Which ASR backends to run (both keeps parakeet+whisper as provenance)"),
+    diarize: z.boolean().default(true).describe("Run pyannote speaker diarization (needs an HF token)"),
+    numSpeakers: z.coerce.number().int().positive().optional().describe("Hint the diarizer's speaker count when known"),
+    device: z.string().optional().describe("Torch/MLX device override (e.g. mps, cpu, cuda)"),
+    timeoutMs: z.coerce.number().int().positive().default(1_800_000).describe("Per-file transcription subprocess timeout (ms)"),
+  })
+  .strict();
+
 const AsrSchema = z
   .object({
     mode: SpeechRecognitionModeEnum.default("enabled").describe("Automatic speech recognition mode"),
-    whisperModel: z.string().default("medium").describe("Whisper model"),
+    engine: AsrEngineEnum.default("whisper").describe("Transcription engine: whisper (built-in) or dual (vendored Python VAD+dual-STT+diarization)"),
+    whisperModel: z.string().default("medium").describe("Whisper model (whisper engine)"),
     language: z.string().default("auto").describe("Speech recognition language"),
-    translate: z.boolean().default(false).describe("Translate transcript to English"),
+    translate: z.boolean().default(false).describe("Translate transcript to English (whisper engine)"),
+    dual: AsrDualSchema.default({}),
   })
   .strict();
 
