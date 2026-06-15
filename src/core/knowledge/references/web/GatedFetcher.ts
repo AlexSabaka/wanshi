@@ -25,6 +25,10 @@ export interface GatedFetcherOptions {
   maxBytes: number;
   relevanceCheck: boolean;
   robots: boolean;
+  /** Phase 2: also accept `application/pdf` bodies (staged as a binary `.pdf`,
+   * routed through PdfReader downstream). Web fetch (Phase 1) leaves this false →
+   * html-only. PDFs skip the html title/relevance gate (the allowlist is the gate). */
+  allowPdf?: boolean;
 }
 
 export interface FetchResult {
@@ -126,8 +130,21 @@ export class GatedFetcher {
     if (!res.ok) return { resolved: false, reason: `http-${res.status}`, status: res.status };
 
     const contentType = res.headers.get("content-type") ?? "";
-    if (!/text\/html|application\/xhtml/i.test(contentType)) {
+    const isHtml = /text\/html|application\/xhtml/i.test(contentType);
+    const isPdf = !!this.opts.allowPdf && /application\/pdf/i.test(contentType);
+    if (!isHtml && !isPdf) {
       return { resolved: false, reason: `content-type:${contentType.split(";")[0] || "unknown"}`, status: res.status, contentType };
+    }
+
+    // PDF path (Phase 2 citation full text): stage the bytes verbatim as `.pdf`,
+    // skipping the html title/relevance gate (the allowlist of OA hosts is the gate).
+    if (isPdf) {
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.byteLength > this.opts.maxBytes) {
+        return { resolved: false, reason: "too-large", status: res.status, contentType };
+      }
+      const tempPath = await this.stage(url, buf, "pdf");
+      return { resolved: true, status: res.status, contentType, tempPath };
     }
 
     const body = await res.text();
@@ -140,7 +157,7 @@ export class GatedFetcher {
       return { resolved: false, reason: "irrelevant", status: res.status, contentType, title };
     }
 
-    const tempPath = await this.stage(url, body);
+    const tempPath = await this.stage(url, body, "html");
     return { resolved: true, status: res.status, contentType, tempPath, title };
   }
 
@@ -175,11 +192,12 @@ export class GatedFetcher {
     }
   }
 
-  private async stage(url: string, body: string): Promise<string> {
+  private async stage(url: string, body: string | Buffer, ext: "html" | "pdf"): Promise<string> {
     await fs.promises.mkdir(this.tempDir, { recursive: true });
     const name = crypto.createHash("sha1").update(url).digest("hex").slice(0, 16);
-    const p = path.join(this.tempDir, `${name}.html`);
-    await fs.promises.writeFile(p, body, "utf-8");
+    const p = path.join(this.tempDir, `${name}.${ext}`);
+    if (typeof body === "string") await fs.promises.writeFile(p, body, "utf-8");
+    else await fs.promises.writeFile(p, body);
     return p;
   }
 }

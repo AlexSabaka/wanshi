@@ -101,6 +101,12 @@ program
   .option("--reference-citations", "parse bibliography + inline arXiv/DOI/PMID into cites edges (network-free; default: false)")
   .option("--reference-follow", "follow internal links to discover & process referenced files (each once); network-free, confined to input (default: false)")
   .option("--reference-web", "fetch allowlisted external web links, extract, emit references edges (opt-in network; needs references.web.allowlist) (default: false)")
+  // Reference & link resolution (Phase 2, citation span-fetch; opt-in network, off by default)
+  .option("--reference-citation-fetch", "resolve id-bearing cites to OA full text and fetch it (opt-in network; auto-enables citation extraction) (default: false)")
+  .option("--unpaywall-email <email>", "Unpaywall polite-pool email (or $UNPAYWALL_EMAIL) — required to resolve DOI citations")
+  .option("--grobid", "use a local GROBID service to link citation markers to references (enables span-select + faithfulness) (default: false)")
+  .option("--grobid-url <url>", "GROBID service base URL (default: http://localhost:8070)")
+  .option("--reference-title-resolver", "resolve id-less references to a DOI/arXiv id via Crossref/Semantic Scholar/OpenAlex (default: false)")
 
   // JSON reading strategy
   .option(

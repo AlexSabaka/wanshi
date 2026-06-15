@@ -136,8 +136,11 @@ function resolveWikilink(target: string, corpus: Set<string>): string | null {
   return null;
 }
 
-/** Stable node name for a cited work: prefer a hard id, then title, then text. */
-function citationNodeName(c: RawCitation): string {
+/** Stable node name for a cited work: prefer a hard id, then title, then text.
+ * Exported so the Phase-2 citation-fetch processor names its resolved cited-work
+ * nodes IDENTICALLY — the fetched content then merges onto the same `document`
+ * node the `cites` edge already points at. */
+export function citationNodeName(c: RawCitation): string {
   if (c.arxivId) return `arXiv:${c.arxivId}`;
   if (c.doi) return `doi:${c.doi}`;
   if (c.pmid) return `PMID:${c.pmid}`;
@@ -145,8 +148,9 @@ function citationNodeName(c: RawCitation): string {
   return c.raw.slice(0, 120);
 }
 
-/** The reference's own stated metadata as observations (not fabricated content). */
-function citationObservations(c: RawCitation, source: string, createdAt: string): Observation[] {
+/** The reference's own stated metadata as observations (not fabricated content).
+ * Exported for the Phase-2 citation-fetch processor (same node, same stated obs). */
+export function citationObservations(c: RawCitation, source: string, createdAt: string): Observation[] {
   const obs: Observation[] = [];
   const push = (text: string) => obs.push({ text, source, createdAt });
   if (c.title) push(`Title: ${c.title}`);

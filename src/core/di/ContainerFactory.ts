@@ -40,6 +40,11 @@ export const TYPES = {
   AstSeedService: Symbol.for("AstSeedService"),
   FetchCacheService: Symbol.for("FetchCacheService"),
   GatedFetcher: Symbol.for("GatedFetcher"),
+  // Phase 2 — citation span-fetch
+  CitationResolver: Symbol.for("CitationResolver"),
+  GrobidClient: Symbol.for("GrobidClient"),
+  CitationFetcher: Symbol.for("CitationFetcher"),
+  CitationFetchCache: Symbol.for("CitationFetchCache"),
 };
 
 /**
@@ -255,7 +260,10 @@ export class ContainerFactory {
           options.references.internalLinks.enabled ||
           options.references.follow.enabled ||
           options.references.web.enabled;
-        const refCites = options.references.citations.enabled;
+        // Citation span-fetch (Phase 2) needs the bibliography extracted to know
+        // what to resolve/fetch, so it auto-implies citation extraction.
+        const refCites =
+          options.references.citations.enabled || options.references.citations.fetch.enabled;
         factory.registerReader(new RtfReader(chunker, logger));
         factory.registerReader(
           new MarkdownReader(chunker, logger, options.readers.stripReferences, refLinks, refCites)
@@ -416,6 +424,71 @@ export class ContainerFactory {
         llm,
         logger
       );
+    });
+
+    // Phase 2 — citation span-fetch services. Constructed only when
+    // references.citations.fetch.enabled; a default run never builds them.
+    container.register(TYPES.CitationFetchCache, async (c) => {
+      const { FetchCacheService } = await import("../knowledge/references/web/FetchCacheService");
+      const options = await c.resolve<ProcessingOptions>(TYPES.ProcessingOptions);
+      const logger = await c.resolve<Logger>(TYPES.Logger);
+      const cachePath =
+        options.references.citations.fetch.cachePath || `${options.output}.citation-cache.jsonl`;
+      const cache = new FetchCacheService(cachePath, logger);
+      await cache.load();
+      return cache;
+    });
+
+    container.register(TYPES.CitationFetcher, async (c) => {
+      const { GatedFetcher } = await import("../knowledge/references/web/GatedFetcher");
+      const options = await c.resolve<ProcessingOptions>(TYPES.ProcessingOptions);
+      const logger = await c.resolve<Logger>(TYPES.Logger);
+      const llm = await c.resolve<ILLMProvider>(TYPES.LLMService);
+      const f = options.references.citations.fetch;
+      return new GatedFetcher(
+        {
+          allowlist: f.allowlist,
+          rejectlist: f.rejectlist,
+          maxFetches: f.maxFetches,
+          timeoutMs: f.timeoutMs,
+          maxBytes: f.maxBytes,
+          relevanceCheck: false, // OA full text — the allowlist is the gate
+          robots: true,
+          allowPdf: true,
+        },
+        llm,
+        logger
+      );
+    });
+
+    container.register(TYPES.CitationResolver, async (c) => {
+      const { CitationResolver } = await import("../knowledge/references/citations/CitationResolver");
+      const options = await c.resolve<ProcessingOptions>(TYPES.ProcessingOptions);
+      const logger = await c.resolve<Logger>(TYPES.Logger);
+      const cfg = options.references.citations;
+      let titleResolver = null;
+      if (cfg.titleResolver.enabled) {
+        const { TitleIdResolver } = await import("../knowledge/references/citations/TitleIdResolver");
+        const t = cfg.titleResolver;
+        titleResolver = new TitleIdResolver(
+          {
+            mailto: t.mailto,
+            openAlexKey: t.openAlexKey,
+            semanticScholarKey: t.semanticScholarKey,
+            minTitleSimilarity: t.minTitleSimilarity,
+          },
+          logger
+        );
+      }
+      const unpaywallEmail = cfg.fetch.unpaywallEmail || process.env.UNPAYWALL_EMAIL;
+      return new CitationResolver({ unpaywallEmail }, logger, titleResolver);
+    });
+
+    container.register(TYPES.GrobidClient, async (c) => {
+      const { GrobidClient } = await import("../knowledge/references/citations/GrobidClient");
+      const options = await c.resolve<ProcessingOptions>(TYPES.ProcessingOptions);
+      const logger = await c.resolve<Logger>(TYPES.Logger);
+      return new GrobidClient(options.references.citations.grobid.url, logger);
     });
 
     // Register Checkpoint service (used only when --resume is set)

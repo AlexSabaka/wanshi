@@ -21,11 +21,15 @@ import { PromptManager } from "./llm";
 import { AstSeedService } from "./processor/ast";
 import { toRelPathId } from "./corpus";
 import { buildReferenceGraph, resolveInternalTarget } from "./knowledge/references/ReferenceResolver";
-import { isExternalTarget, RawLink, RawReferences } from "./processor/readers/referenceExtraction";
+import { isExternalTarget, RawCitation, RawLink, RawReferences } from "./processor/readers/referenceExtraction";
 import { ProcessedRegistry } from "./processor/ProcessedRegistry";
 import { GatedFetcher } from "./knowledge/references/web/GatedFetcher";
 import { FetchCacheService } from "./knowledge/references/web/FetchCacheService";
 import { WebExtractFn, WebReferenceProcessor } from "./knowledge/references/web/WebReferenceProcessor";
+import {
+  CitationEvidenceProcessor,
+  CitationExtractFn,
+} from "./knowledge/references/citations/CitationEvidenceProcessor";
 import {
   PipelineRunner,
   GroundingTransform,
@@ -77,6 +81,8 @@ interface ProcessFileResult {
   /** All links the file contains (internal + external); the worklist follows the
    * internal ones and the web fetcher takes the external ones. */
   links: RawLink[];
+  /** Citations the file contains (Phase 2 citation span-fetch consumes these). */
+  citations: RawCitation[];
 }
 
 /**
@@ -205,6 +211,13 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       ? await this.buildWebProcessor(options, fileProcessor, kgBuilder, corpusProfile, logger)
       : null;
 
+    // Phase 2 — citation span-fetch (opt-in; constructed only when
+    // references.citations.fetch.enabled). Resolves id-bearing cites to OA full
+    // text, span-selects the citing claim's evidence, and labels the edge.
+    const citeProc = options.references.citations.fetch.enabled
+      ? await this.buildCitationProcessor(options, fileProcessor, kgBuilder, corpusProfile, logger)
+      : null;
+
     // Worklist with a processed-file registry: the same file is read/extracted at
     // most once however it's reached (overlapping globs, reference-following). The
     // queue is seeded from follow.seeds (a crawl) or the discovered glob set, and
@@ -255,7 +268,7 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         // Retrieval sees prior output + graphs built so far this run; merge sees
         // only what's built this run (knowledgeGraphs).
         const retrievalContext = [...priorGraphs, ...knowledgeGraphs];
-        const { graphs: fileGraphs, links: fileLinks } = await this.processFile(
+        const { graphs: fileGraphs, links: fileLinks, citations: fileCitations } = await this.processFile(
           file,
           options,
           fileProcessor,
@@ -288,6 +301,13 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         if (webProc) {
           const webGraph = await webProc.process(id, fileLinks, options.description);
           if (webGraph) knowledgeGraphs.push(webGraph);
+        }
+
+        // Phase 2 — citation span-fetch: resolve this file's id-bearing cites to OA
+        // full text, fold content + label faithfulness. Offline unless enabled.
+        if (citeProc) {
+          const citeGraph = await citeProc.process(id, file, fileCitations);
+          if (citeGraph) knowledgeGraphs.push(citeGraph);
         }
 
         const entities = fileGraphs.reduce((n, g) => n + g.entities.length, 0);
@@ -411,7 +431,7 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     // read into a per-file error.
     if (processedFile.metadata?.skip) {
       logger.info(`Skipped ${file} (binary / no extractable text)`);
-      return { graphs: [], links: [] };
+      return { graphs: [], links: [], citations: [] };
     }
     this.validateProcessedFile(processedFile, file, logger);
 
@@ -451,17 +471,21 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     // internal-link resolution (you can't follow links you didn't extract).
     const internalLinksOn =
       options.references.internalLinks.enabled || options.references.follow.enabled;
-    if (internalLinksOn || options.references.citations.enabled) {
+    // When citation-fetch is on (Phase 2), the CitationEvidenceProcessor OWNS the
+    // `cites` edges (resolved + faithfulness) — so the network-free resolver stands
+    // down on citations to avoid emitting a competing resolved:false edge.
+    const fetchOwnsCites = options.references.citations.fetch.enabled;
+    const citationsForResolver = options.references.citations.enabled && !fetchOwnsCites;
+    if (internalLinksOn || citationsForResolver) {
       const refGraph = buildReferenceGraph(processedFile, corpusRelPaths, options.input, {
         internalLinks: internalLinksOn,
-        citations: options.references.citations.enabled,
+        citations: citationsForResolver,
       });
       if (refGraph) graphs.push(refGraph);
     }
 
-    const links =
-      (processedFile.metadata?.references as RawReferences | undefined)?.links ?? [];
-    return { graphs, links };
+    const refs = processedFile.metadata?.references as RawReferences | undefined;
+    return { graphs, links: refs?.links ?? [], citations: refs?.citations ?? [] };
   }
 
   /**
@@ -493,6 +517,69 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       return kgBuilder.build(pf, systemPrompt, undefined, corpusProfile?.glossary);
     };
     return new WebReferenceProcessor(fetcher, cache, extract, logger);
+  }
+
+  /**
+   * Build the Phase-2 citation evidence processor: a PDF-capable gated fetcher +
+   * its own fetch cache + the id→OA resolver, an extract closure that runs a
+   * fetched cited PDF through the normal reader (chunks for span-select) + builder
+   * (content folded onto the cited-work node), the embedding provider for
+   * span-select, and (optionally) GROBID for marker→claim linking + MiniCheck for
+   * the faithfulness label.
+   */
+  private async buildCitationProcessor(
+    options: ProcessingOptions,
+    fileProcessor: IFileProcessor,
+    kgBuilder: IKnowledgeGraphBuilder,
+    corpusProfile: CorpusProfile | undefined,
+    logger: Logger
+  ): Promise<CitationEvidenceProcessor> {
+    const { CitationResolver } = await import("./knowledge/references/citations/CitationResolver");
+    const fetcher = await this.container.resolve<GatedFetcher>(TYPES.CitationFetcher);
+    const cache = await this.container.resolve<FetchCacheService>(TYPES.CitationFetchCache);
+    const resolver = await this.container.resolve<InstanceType<typeof CitationResolver>>(TYPES.CitationResolver);
+    const embeddings = await this.container.resolve<IEmbeddingProvider>(TYPES.EmbeddingService);
+    const promptManager = (await this.container.resolve(TYPES.PromptManager)) as PromptManager;
+    const cfg = options.references.citations;
+
+    const grobid = cfg.grobid.enabled
+      ? await this.container.resolve<any>(TYPES.GrobidClient)
+      : null;
+    if (grobid && !(await grobid.isAlive())) {
+      logger.warn(
+        `GROBID not reachable at ${cfg.grobid.url} — citation span-select/faithfulness disabled (id-bearing fetch still runs). Start it with: docker run -p 8070:8070 lfoppiano/grobid`
+      );
+    }
+
+    let faithfulness: any = null;
+    if (cfg.fetch.minicheck) {
+      const { MiniCheckGroundingChecker } = await import("./knowledge/grounding");
+      faithfulness = new MiniCheckGroundingChecker(
+        { model: cfg.fetch.minicheckModel, host: cfg.fetch.minicheckHost, min: 0.5, escalateAbove: 1.1 },
+        logger
+      );
+    }
+
+    const extract: CitationExtractFn = async (tempPath) => {
+      const pf = await fileProcessor.processFile(tempPath);
+      if (pf.metadata?.skip || !pf.chunks.length) return { chunks: [], graphs: [] };
+      const chunks = pf.chunks.map((ch) => ch.content);
+      const systemPrompt = await promptManager.getSystemPrompt(
+        options.input,
+        options.filter.join(", "),
+        options.description,
+        pf.metadata?.classes,
+        corpusProfile?.glossary
+      );
+      const graphs = await kgBuilder.build(pf, systemPrompt, undefined, corpusProfile?.glossary);
+      return { chunks, graphs };
+    };
+
+    return new CitationEvidenceProcessor(fetcher, cache, resolver, extract, embeddings, logger, {
+      grobid,
+      faithfulness,
+      uncertainBand: cfg.fetch.uncertainBand,
+    });
   }
 
   /**
