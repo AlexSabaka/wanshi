@@ -4,6 +4,7 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { Logger } from "../../shared";
 import { parseJsonLenient } from "../../shared/utils";
 import { ILLMProvider, LLMOptions, LLMMessage, LLMUsage } from "../../types/ILLMProvider";
+import { meter } from "../cost";
 
 // Re-export for back-compat: these types used to live here.
 export { LLMOptions, LLMMessage };
@@ -166,6 +167,7 @@ export class OllamaService implements ILLMProvider {
       totalTokens:
         (response.prompt_eval_count ?? 0) + (response.eval_count ?? 0) || undefined,
     };
+    if (meter.enabled) meter.record(this.options.model, this.lastUsage);
     const stats = {
       eval_count: response.eval_count,
       prompt_eval_count: response.prompt_eval_count,

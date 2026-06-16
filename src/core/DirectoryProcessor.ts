@@ -42,6 +42,7 @@ import { IEmbeddingProvider } from "../types/IEmbeddingProvider";
 import { ILLMProvider } from "../types/ILLMProvider";
 import { Logger, shutdown } from "../shared";
 import { trace } from "./trace";
+import { meter } from "./cost";
 import { StructuredAdapterRegistry } from "./adapters";
 
 export interface IFileDiscoveryService {
@@ -116,10 +117,16 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       config: { model: options.llm.model, promptVersion: options.llm.promptVersion, grounding: options.grounding?.mode },
     });
 
+    // Cost meter: attach the resolved logger (configured in ContainerFactory without one).
+    if (meter.enabled) meter.attachLogger(logger);
+
     try {
       // Orchestrate the workflow
       const files = await fileDiscoveryService.discover();
       progress.emit({ type: "discovery", totalFiles: files.length });
+
+      // Rough pre-run cost estimate (bill-shock heads-up; the end tally is exact).
+      if (meter.enabled) await this.logCostEstimate(files, options, logger);
 
       const knowledgeGraphs = await this.processFiles(files, options);
 
@@ -148,6 +155,11 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         relations: finalKG.relations.length,
       });
       this.logSuccess(finalKG, outputPath, logger);
+      // Cost meter: exact end-of-run tally + persist the resume-safe cumulative ledger.
+      if (meter.enabled) {
+        logger.info(meter.summary());
+        meter.persistLedger();
+      }
       progress.emit({
         type: "done",
         entities: finalKG.entities.length,
@@ -163,6 +175,32 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       });
       throw error;
     }
+  }
+
+  /** Rough pre-run cost projection from discovered file sizes (bytes≈chars; no double read pass). */
+  private async logCostEstimate(
+    files: string[],
+    options: ProcessingOptions,
+    logger: Logger
+  ): Promise<void> {
+    let totalChars = 0;
+    for (const f of files) {
+      try {
+        totalChars += (await fs.promises.stat(f)).size;
+      } catch {
+        /* unreadable/removed — skip */
+      }
+    }
+    const est = meter.estimate(totalChars, options.chunking.size, options.llm.model);
+    const tokens = est.estPromptTokens + est.estCompletionTokens;
+    const money = est.priced
+      ? `~${options.cost.currency} ${est.estCost.toFixed(est.estCost < 1 ? 4 : 2)}`
+      : `no price set (shown as ${options.cost.currency} 0)`;
+    logger.info(
+      `Cost estimate (rough): ~${est.estChunks} chunk(s), ~${tokens.toLocaleString()} tokens for ` +
+        `model '${options.llm.model}' — ${money}. Resume-cached chunks reduce actual spend; the ` +
+        `end-of-run tally is exact.`
+    );
   }
 
   /**

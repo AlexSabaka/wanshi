@@ -200,6 +200,11 @@ program
   .option("--trace", "emit a structured decision run-trace to a JSONL sidecar (debug/observability; off by default)")
   .option("--trace-path <path>", "trace sidecar file path (default: <output>.trace.jsonl)")
 
+  // Cost / token metering
+  .option("--cost", "meter LLM token usage + cost: print a pre-run estimate and an end-of-run tally (off by default)")
+  .option("--max-cost <amount>", "hard spend cap for this run; stops gracefully (checkpoints + exports) when exceeded (implies --cost)")
+  .option("--cost-ledger <path>", "cumulative cost ledger sidecar (default: <output>.cost.json)")
+
   // Runtime Modes
   .option("-w, --watch", "watch for changes and update knowledge graph")
   .option(

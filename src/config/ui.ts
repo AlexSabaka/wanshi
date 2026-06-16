@@ -237,6 +237,9 @@ export const CONFIG_GROUPS: ConfigGroupMeta[] = [
       { path: "resume.checkpointPath", label: "Checkpoint path", widget: "path", pathLike: true, placeholder: "<output>.checkpoint.jsonl" },
       { path: "trace.enabled", label: "Debug run-trace", widget: "boolean" },
       { path: "trace.path", label: "Trace path", widget: "path", pathLike: true, placeholder: "<output>.trace.jsonl" },
+      { path: "cost.enabled", label: "Cost metering", widget: "boolean" },
+      { path: "cost.maxCost", label: "Max cost (this run)", widget: "number", placeholder: "no cap" },
+      { path: "cost.ledgerPath", label: "Cost ledger path", widget: "path", pathLike: true, placeholder: "<output>.cost.json" },
     ],
   },
 ];
