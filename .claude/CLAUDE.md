@@ -373,7 +373,30 @@ mention-instance lineage IDs live in a run-scoped `LineageRegistry` **outside** 
 objects, so the serialized graph is byte-identical trace-on vs trace-off *by construction*.
 Every emit is guarded by `if (trace.enabled)` (zero overhead off). The token-usage seam is the
 optional `ILLMProvider.getLastUsage()` (both providers stash what they already log). Composes
-with the future cost meter + debug inspector. Design: `docs/inbox/2026-06-15-dove-to-cheetah-debug-trace-layer-brief.md`.
+with the cost meter (below) + debug inspector. Design: `docs/inbox/2026-06-15-dove-to-cheetah-debug-trace-layer-brief.md`.
+
+### 10. Cost / token metering (`cost.enabled`, default OFF)
+
+`src/core/cost/`: a module-singleton `meter` (à la `trace`/`shutdown`) that consumes the trace's
+`getLastUsage()` seam — **both providers call `meter.record(model, lastUsage)` right after stashing
+usage** (`OllamaService`/`OpenAICompatibleService`, guarded by `meter.enabled`), so **every**
+`generateStructured` call is metered centrally (extraction, glossary, canon adjudicator, web/citation
+checks). `ContainerFactory` `configure`s it once (mirrors `trace.configure`); `DirectoryProcessor`
+attaches the resolved logger, logs the **rough pre-run estimate** (after `discover()`, size-based) and
+the **exact end-of-run tally**, and persists the ledger. Four deliverables:
+- **Pre-run estimate** — `meter.estimate(totalChars, chunkSize, model)`: a bill-shock heads-up
+  (print-and-proceed, no interactive prompt — automation-friendly). Deliberately rough; the tally is exact.
+- **`--max-cost` cap** — when this-run cost exceeds the cap, `meter.record` calls **`shutdown.request()`**
+  (reuses the graceful-interrupt path: finish in-flight chunk → checkpoint → merge/export partial →
+  resumable). No new abort code.
+- **Resume-safe cumulative ledger** — `<output>.cost.json` (`cost.ledgerPath`). Checkpointed chunks skip
+  generation ⇒ never `record`ed ⇒ never double-billed; cumulative = prior + this-run's live spend.
+- **Price map** — `prices.ts` `DEFAULT_PRICES` (USD/1M tokens, matched exact→longest-substring), merged
+  under `cost.prices` overrides; unknown/local ⇒ 0 (one-time note). Best-effort + dated; `cost.prices` is
+  the source of truth for an accurate bill. Config: `cost {enabled, maxCost?, currency, prices, ledgerPath?}`
+  (`--cost` / `--max-cost <n>` [auto-enables] / `--cost-ledger`). Off by default ⇒ byte-identical run.
+  *Known gaps (out of scope):* embeddings + the classifier's direct-Ollama path aren't metered (local/free
+  by default).
 
 ## LLM Providers & Resume
 

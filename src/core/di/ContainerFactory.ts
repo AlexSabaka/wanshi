@@ -17,6 +17,7 @@ import { LlmContentClassifier } from "../processor/classifier/LlmContentClassifi
 import { configureDomainGate } from "../knowledge/vocabulary";
 import { createHash } from "crypto";
 import { trace } from "../trace";
+import { meter } from "../cost";
 
 /**
  * Service identifiers for dependency injection
@@ -106,6 +107,17 @@ export class ContainerFactory {
       enabled: !!traceCfg.enabled,
       path: traceCfg.path || (processingOptions.output ? `${processingOptions.output}.trace.jsonl` : undefined),
       runId,
+    });
+
+    // Configure the run-global cost meter singleton (off by default; logger attached
+    // later in DirectoryProcessor where it's resolved). Setting maxCost auto-enables.
+    const costCfg = processingOptions.cost ?? { enabled: false, currency: "USD", prices: {} };
+    meter.configure({
+      enabled: !!costCfg.enabled || costCfg.maxCost != null,
+      maxCost: costCfg.maxCost,
+      currency: costCfg.currency || "USD",
+      prices: costCfg.prices ?? {},
+      ledgerPath: costCfg.ledgerPath || (processingOptions.output ? `${processingOptions.output}.cost.json` : undefined),
     });
 
     // Register configuration

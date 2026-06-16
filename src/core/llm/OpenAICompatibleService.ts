@@ -4,6 +4,7 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { Logger } from "../../shared";
 import { parseJsonLenient } from "../../shared/utils";
 import { ILLMProvider, LLMOptions, LLMMessage, LLMUsage } from "../../types/ILLMProvider";
+import { meter } from "../cost";
 
 /**
  * LLM provider for any OpenAI-compatible chat-completions endpoint
@@ -218,6 +219,7 @@ export class OpenAICompatibleService implements ILLMProvider {
         completionTokens: completion.usage.completion_tokens,
         totalTokens: completion.usage.total_tokens,
       };
+      if (meter.enabled) meter.record(this.options.model, this.lastUsage);
       this.logger.info(
         `LLM stats: ${JSON.stringify({
           prompt_tokens: completion.usage.prompt_tokens,

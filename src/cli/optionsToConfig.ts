@@ -98,6 +98,10 @@ export const FLAG_TO_PATH: Record<string, string> = {
   // trace (debug/observability run-trace)
   trace: "trace.enabled",
   tracePath: "trace.path",
+  // cost (token/cost metering; --max-cost auto-enables in ContainerFactory)
+  cost: "cost.enabled",
+  maxCost: "cost.maxCost",
+  costLedger: "cost.ledgerPath",
   // runtime
   watch: "runtime.watch",
   exportOnly: "runtime.exportOnly",
