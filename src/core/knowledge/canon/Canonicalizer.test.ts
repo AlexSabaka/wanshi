@@ -160,3 +160,61 @@ describe("Canonicalizer (embeddings)", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe("Canonicalizer (llm adjudication guidance)", () => {
+  // foo↔foobar sit in the escalate band: cos(35°) ≈ 0.819 ∈ [0.72, 0.88] → adjudicated, not
+  // auto-merged or rejected. A capturing stub LLM lets us assert the system guidance verbatim.
+  const adjAngles = { foo: 0, foobar: 35 };
+  const adjGraph: KnowledgeGraph = {
+    entities: [entity("foo", ["x", "y"]), entity("foobar", ["z"])], // foo has more obs → canonical
+    relations: [],
+  };
+
+  function llmCtx(captured: any[], verdict: boolean, guidanceOverride?: string): TransformContext {
+    return {
+      options: parseConfig({
+        pipeline: {
+          canonicalization: {
+            enabled: true,
+            method: "llm",
+            target: ["entities"],
+            ...(guidanceOverride ? { llm: { guidance: guidanceOverride } } : {}),
+          },
+        },
+        eval: { pinVersions: false },
+      }),
+      embeddings: angleEmbeddings(adjAngles),
+      llm: {
+        generateStructured: async (messages: any[]) => {
+          captured.push(messages);
+          return { merge: verdict };
+        },
+      } as any,
+      logger: { info() {}, debug() {}, warn() {}, error() {} } as any,
+    };
+  }
+
+  it("sends the schema-default guidance to the adjudicator and merges on merge:true", async () => {
+    const captured: any[] = [];
+    const c = llmCtx(captured, true);
+    const out = await new Canonicalizer().apply(adjGraph, c);
+
+    expect(captured.length).toBeGreaterThan(0); // the pair was escalated, not auto-decided
+    const system = captured[0].find((m: any) => m.role === "system").content;
+    expect(system).toBe(c.options.pipeline.canonicalization.llm.guidance);
+    // the softened guidance that cleared the recall bake-off (not the old "Be conservative" line)
+    expect(system).toMatch(/abbreviations and acronyms/);
+    expect(system).not.toMatch(/Be conservative/);
+
+    // merge:true → folds into the higher-frequency canonical "foo"
+    expect(out.entities.map((e) => e.name).sort()).toEqual(["foo"]);
+  });
+
+  it("is config-driven: a guidance override is what reaches the adjudicator, and merge:false keeps both", async () => {
+    const captured: any[] = [];
+    const out = await new Canonicalizer().apply(adjGraph, llmCtx(captured, false, "CUSTOM GUIDANCE"));
+
+    expect(captured[0].find((m: any) => m.role === "system").content).toBe("CUSTOM GUIDANCE");
+    expect(out.entities.map((e) => e.name).sort()).toEqual(["foo", "foobar"]); // merge:false → distinct
+  });
+});

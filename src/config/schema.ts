@@ -619,6 +619,30 @@ const CanonicalizationSchema = z
         model: z.string().optional().describe("Adjudication model (defaults to llm.model)"),
         adjudicate: z.enum(["borderline_only"]).default("borderline_only"),
         band: simBand().default([0.72, 0.88]),
+        // System guidance for the borderline-pair adjudicator. The default is the
+        // "softened+few-shot" guidance that cleared the adjudicator-recall bake-off
+        // (examples/sandbox/canon-escalation-spike.ts): it licenses abbreviation/
+        // containment/casing/camel↔snake/plural aliases while still rejecting
+        // version/size/model variants and instance-vs-category hypernyms. Lifted
+        // code/self escalate-band recall 2/8→4/8 (overall 2/9→5/9) on gemma4:31b with
+        // hypernym-accept held at 0. Few-shot examples are domain-neutral on purpose.
+        guidance: z
+          .string()
+          .default(
+            "You decide whether two surface forms refer to the SAME real-world thing (co-reference). " +
+              "Answer only by setting `merge` true (same) or false (distinct).\n" +
+              "Treat as the SAME thing: abbreviations and acronyms; one name contained in the other; " +
+              "casing or camelCase↔snake_case differences; singular vs plural; and extra qualifier words " +
+              "that don't change which thing is meant.\n" +
+              "Treat as DISTINCT: different versions, sizes, or model variants; and a specific thing vs its " +
+              "broader category (an instance vs its type).\n" +
+              "Examples (unrelated to the inputs below):\n" +
+              '- A: "USB"  B: "Universal Serial Bus" → merge:true (acronym of the same thing)\n' +
+              '- A: "config"  B: "configuration" → merge:true (abbreviation)\n' +
+              '- A: "Python 2"  B: "Python 3" → merge:false (different versions)\n' +
+              '- A: "spaniel"  B: "dog" → merge:false (a specific kind vs its broader category)'
+          )
+          .describe("System guidance for the borderline-pair canonicalization adjudicator"),
       })
       .strict()
       .default({}),

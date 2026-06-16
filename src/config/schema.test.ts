@@ -101,6 +101,9 @@ describe("config schema", () => {
     expect(c.pipeline.canonicalization.embeddings.entity.threshold).toBe(0.82);
     expect(c.pipeline.canonicalization.embeddings.relation.threshold).toBe(0.85);
     expect(c.pipeline.canonicalization.canonicalSelection).toBe("frequency");
+    // adjudicator guidance defaults to the softened+few-shot prompt (recall bake-off winner)
+    expect(c.pipeline.canonicalization.llm.guidance).toMatch(/abbreviations and acronyms/);
+    expect(c.pipeline.canonicalization.llm.guidance).not.toMatch(/Be conservative/);
     expect(c.inspection.emitMergeLog).toBe(false);
     expect(c.eval.pinVersions).toBe(true);
   });

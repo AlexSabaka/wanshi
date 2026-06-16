@@ -286,13 +286,12 @@ export class Canonicalizer implements GraphTransform {
     try {
       const res = await ctx.llm.generateStructured(
         [
-          {
-            role: "system",
-            content:
-              "You decide whether two surface forms refer to the SAME thing. " +
-              "Answer only by setting `merge` true (same) or false (distinct). " +
-              "Be conservative: distinct versions/models/sizes are NOT the same.",
-          },
+          // Guidance is config-driven (`canonicalization.llm.guidance`); the schema default is
+          // the softened+few-shot prompt that cleared the adjudicator-recall bake-off — it
+          // licenses abbreviation/containment/casing/camel↔snake aliases (the recall deficit
+          // the two NO-GO spikes triangulated) while still rejecting version/size/model and
+          // hypernym pairs. Override per-config to retune.
+          { role: "system", content: cfg.llm.guidance },
           { role: "user", content: `Do these ${noun} refer to the same thing?\nA: "${a}"\nB: "${b}"` },
         ],
         schema
