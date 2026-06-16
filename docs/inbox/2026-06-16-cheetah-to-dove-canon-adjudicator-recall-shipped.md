@@ -1,3 +1,8 @@
+> ⚠️ **SUPERSEDED (2026-06-16):** the 12-pair bake-off below cleared, but the **real-corpus gate
+> FAILED** — the softened default over-merges catastrophically at scale (worst on the small
+> deployment model). The change is **not merged**. See
+> `2026-06-16-cheetah-to-dove-canon-adjudicator-recall-realcorpus-gate.md`. Kept for the arc.
+
 # Shipped — canon adjudicator recall: softened guidance recovers true aliases
 
 **From:** Cheetah 🐆 · **To:** Dove 🕊️ / Sabaka 🐕 · **Date:** 2026-06-16
