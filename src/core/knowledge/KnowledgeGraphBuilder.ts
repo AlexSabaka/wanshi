@@ -1,14 +1,15 @@
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { z } from 'zod';
-import { ILLMProvider, LLMMessage } from '../../types/ILLMProvider';
+import { ILLMProvider, LLMMessage, LLMUsage } from '../../types/ILLMProvider';
 import { PromptManager, PromptContext } from '../llm/prompts/PromptManager';
-import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder, ClassificationResult, IProgressEmitter, ChunkProvenance, Observation, normalizeObservations, GroundingMode, CorpusGlossary, FailedChunk, GroundingRejection, IGroundingChecker } from '../../types';
+import { ProcessedFile, KnowledgeGraph, ProcessedImage, IKnowledgeGraphBuilder, ClassificationResult, IProgressEmitter, ChunkProvenance, Observation, obsText, normalizeObservations, GroundingMode, CorpusGlossary, FailedChunk, GroundingRejection, IGroundingChecker } from '../../types';
 import { CheckpointService } from '../checkpoint';
 import { NoopProgressEmitter } from '../progress';
 import { allowedEntityTypes, allowedRelationTypes } from './vocabulary';
 import { KeywordGroundingChecker, verbalizeRelation } from './grounding';
 import { Logger, shutdown } from '../../shared';
+import { trace, LineageRegistry } from '../trace';
 
 /**
  * Build the extraction schema. Under v5 both vocabularies are *closed*: when an
@@ -359,6 +360,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     });
 
     const relPath = this.stablePathId(filePath);
+    const chunkId = `${relPath}#${chunkIndex}`;
+    const extractionId = `${chunkId}@0`;
     const key =
       this.resume && this.checkpoint
         ? this.checkpoint.computeKey(
@@ -385,6 +388,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
         relations: cached.relations.length,
         cached: true,
       });
+      // Mint/register the cached chunk's mentions too so lineage works on resume.
+      this.traceExtraction(cached, { extractionId, chunkId, filePath, chunkIndex, checkpointHit: true });
       return cached;
     }
 
@@ -408,14 +413,22 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
         totalChunks,
         error: message,
       });
+      this.traceExtraction({ entities: [], relations: [] }, { extractionId, chunkId, filePath, chunkIndex, checkpointHit: false, failed: true, error: message });
       return { entities: [], relations: [] };
     }
 
+    const usage = this.llmService.getLastUsage?.();
+    const graph0 = this.toGraph(raw, provenance, content);
+    // Register mention IDs (pre-grounding) + emit the extraction event. Mention IDs
+    // are derived deterministically from content, so grounding can reference them
+    // without anything being stored on the graph objects (observe-only).
+    this.traceExtraction(graph0, { extractionId, chunkId, filePath, chunkIndex, checkpointHit: false, usage });
     const kg = await this.applyGroundingGate(
-      this.toGraph(raw, provenance, content),
+      graph0,
       content,
       filePath,
-      chunkIndex
+      chunkIndex,
+      extractionId
     );
     kg.entities.forEach(attachMetadata);
 
@@ -538,7 +551,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     kg: KnowledgeGraph,
     source: string,
     filePath: string,
-    chunkIndex: number
+    chunkIndex: number,
+    extractionId?: string
   ): Promise<KnowledgeGraph> {
     if (this.grounding === 'disabled' || !source) return kg;
     const drop = this.grounding === 'drop';
@@ -550,6 +564,11 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       const kept: Observation[] = [];
       for (const o of e.observations) {
         const v = await this.groundingChecker.check(o.text, source);
+        const decision = v.supported ? 'accept' : drop ? 'drop' : 'flag';
+        if (trace.enabled && extractionId) {
+          this.traceGrounding(extractionId, 'observation', e.name, o.text, v.score, decision,
+            LineageRegistry.observationId(extractionId, e.name, o.text));
+        }
         if (v.supported) {
           if (!drop) {
             o.groundingScore = v.score;
@@ -575,6 +594,11 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     for (const r of kg.relations) {
       const claim = verbalizeRelation(r.from, r.relationType, r.to);
       const v = await this.groundingChecker.check(claim, source);
+      const decision = v.supported ? 'accept' : drop ? 'drop' : 'flag';
+      if (trace.enabled && extractionId) {
+        this.traceGrounding(extractionId, 'relation', `${r.from}→${r.to}`, claim, v.score, decision,
+          LineageRegistry.relationMentionId(extractionId, r.from, r.to));
+      }
       if (v.supported) {
         if (!drop) {
           r.groundingScore = v.score;
@@ -614,6 +638,61 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     dropped: boolean
   ): void {
     this.groundingRejections.push({ filePath, chunkIndex, kind, subject, claim, score, dropped });
+  }
+
+  /**
+   * Debug trace: register each parsed entity/observation/relation's deterministic
+   * mention ID in the run lineage and emit the extraction event. Mention IDs are
+   * derived from content (never stored on the graph) so this is pure observation.
+   */
+  private traceExtraction(
+    kg: KnowledgeGraph,
+    ctx: { extractionId: string; chunkId: string; filePath: string; chunkIndex: number; checkpointHit: boolean; usage?: LLMUsage; failed?: boolean; error?: string }
+  ): void {
+    if (!trace.enabled) return;
+    const entityMentions = kg.entities.map((e) => {
+      const observationIds = e.observations.map((o) =>
+        LineageRegistry.observationId(ctx.extractionId, e.name, obsText(o))
+      );
+      const mentionId = LineageRegistry.entityMentionId(ctx.extractionId, e.name);
+      trace.lineage.registerEntity({
+        mentionId, name: e.name, entityType: e.entityType,
+        chunkId: ctx.chunkId, extractionId: ctx.extractionId, observationIds,
+      });
+      return { mentionId, name: e.name, entityType: e.entityType, observationIds };
+    });
+    const relationMentions = kg.relations.map((r) => ({
+      mentionId: LineageRegistry.relationMentionId(ctx.extractionId, r.from, r.to),
+      from: r.from, to: r.to, relationType: r.relationType,
+    }));
+    trace.emit({
+      stage: 'extract', type: 'extraction',
+      extractionId: ctx.extractionId, chunkId: ctx.chunkId, file: ctx.filePath, chunkIndex: ctx.chunkIndex,
+      model: this.model, promptVersion: this.promptVersion, attempt: 0,
+      checkpointHit: ctx.checkpointHit, entityMentions, relationMentions,
+      ...(ctx.usage ? { usage: ctx.usage } : {}),
+      ...(ctx.failed ? { failed: true } : {}),
+      ...(ctx.error ? { error: ctx.error } : {}),
+    });
+  }
+
+  /** Debug trace: emit one grounding decision (accept/flag/drop) for a claim. */
+  private traceGrounding(
+    extractionId: string,
+    kind: 'observation' | 'relation',
+    subject: string,
+    claim: string,
+    score: number,
+    decision: 'accept' | 'flag' | 'drop',
+    mentionId: string
+  ): void {
+    trace.emit({
+      stage: 'ground', type: 'grounding',
+      extractionId, chunkId: extractionId.split('@')[0], mentionId,
+      kind, subject, claim, score,
+      checker: (this.groundingChecker as any)?.constructor?.name ?? 'grounding',
+      decision,
+    });
   }
 
   /** Normalize a (possibly legacy string-observation) graph from the checkpoint. */

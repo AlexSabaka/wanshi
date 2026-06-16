@@ -14,6 +14,7 @@ import { GraphTransform, TransformContext } from "../../pipeline/PipelineRunner"
 import { canonicalizeRelationType, digitSignature } from "../merging/KnowledgeMerger";
 import { MergeRecord } from "../MergeRecord";
 import { CanonicalizationOptions } from "../../../config";
+import { trace } from "../../trace";
 
 export { MergeRecord } from "../MergeRecord";
 
@@ -281,6 +282,7 @@ export class Canonicalizer implements GraphTransform {
     if (this.adjudications >= cfg.maxAdjudications) return false;
     this.adjudications++;
     const schema = z.object({ merge: z.boolean() });
+    let verdict = false;
     try {
       const res = await ctx.llm.generateStructured(
         [
@@ -295,11 +297,28 @@ export class Canonicalizer implements GraphTransform {
         ],
         schema
       );
-      return res.merge === true;
+      verdict = res.merge === true;
     } catch (err) {
       ctx.logger.warn(`Adjudication failed for "${a}" vs "${b}" (treating as distinct): ${err}`);
-      return false;
+      verdict = false;
     }
+    // Debug trace: emit the adjudicator verdict (previously computed-then-discarded).
+    // This is what the parked adjudicator-recall canon analysis runs off. Observe-only.
+    if (trace.enabled) {
+      trace.emit({
+        stage: "merge",
+        type: "merge_decision",
+        mergeDecisionId: `adj:${which}:${a}␟${b}`,
+        target: which,
+        canonical: verdict ? a : a,
+        surfaceForms: [a, b],
+        method: "llm",
+        verdict: verdict ? "accept" : "reject",
+        adjudicated: true,
+        adjudicatorVerdict: verdict,
+      });
+    }
+    return verdict;
   }
 
   private buildRecord(

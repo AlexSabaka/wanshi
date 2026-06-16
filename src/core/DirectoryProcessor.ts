@@ -41,6 +41,7 @@ import { Canonicalizer } from "./knowledge/canon";
 import { IEmbeddingProvider } from "../types/IEmbeddingProvider";
 import { ILLMProvider } from "../types/ILLMProvider";
 import { Logger, shutdown } from "../shared";
+import { trace } from "./trace";
 
 export interface IFileDiscoveryService {
   discover(): Promise<string[]>;
@@ -105,6 +106,15 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       `Input: ${options.input}, Filter: ${options.filter}, Output: ${options.output}, Model: ${options.llm.model}`
     );
 
+    // Debug trace: open the run. A resumed run skips checkpointed chunks, so its
+    // trace is partial — flagged here.
+    trace.emit({
+      stage: "run", type: "run_start",
+      output: options.output,
+      resumed: !!options.resume?.enabled,
+      config: { model: options.llm.model, promptVersion: options.llm.promptVersion, grounding: options.grounding?.mode },
+    });
+
     try {
       // Orchestrate the workflow
       const files = await fileDiscoveryService.discover();
@@ -129,6 +139,12 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         entities: finalKG.entities.length,
         relations: finalKG.relations.length,
         output: outputPath,
+      });
+      trace.emit({
+        stage: "export", type: "export",
+        format: options.export.format,
+        entities: finalKG.entities.length,
+        relations: finalKG.relations.length,
       });
       this.logSuccess(finalKG, outputPath, logger);
       progress.emit({

@@ -2,6 +2,7 @@ import { IContentClassifier } from "./IContentTypeClassifier";
 import { ClassificationResult, ContentClass } from "../../../types";
 import { activeDomainClasses } from "../../knowledge/vocabulary";
 import { Logger } from "../../../shared";
+import { trace } from "../../trace";
 
 /**
  * Per-run cap on LLM tie-break escalations — a cost guard so an ambiguous corpus
@@ -59,8 +60,11 @@ export class CascadeContentClassifier implements IContentClassifier {
       this.logger.warn(
         `Cascade LLM tie-break failed; keeping heuristic multi: ${err}`
       );
+      this.traceEscalation(path, results, active, null);
       return results;
     }
+
+    this.traceEscalation(path, results, active, pick ?? null);
 
     // Honor the LLM only when it picks one of the two tied candidates — a single
     // call must not promote a class the heuristic ranked far down.
@@ -72,6 +76,22 @@ export class CascadeContentClassifier implements IContentClassifier {
     }
 
     return this.collapseTie(results, active[0], active[1], pick);
+  }
+
+  /** Debug trace: record a cascade tie-break escalation (observe-only). */
+  private traceEscalation(
+    path: string,
+    results: ClassificationResult[],
+    active: ContentClass[],
+    pick: ContentClass | null
+  ): void {
+    if (!trace.enabled) return;
+    trace.emit({
+      stage: "classify", type: "classification", file: path,
+      distribution: results.map((r) => ({ class: r.class, confidence: r.confidence })),
+      gate: "multi", activeClasses: active, escalated: true,
+      tieBreak: { tied: [active[0], active[1]], pick },
+    });
   }
 
   /**

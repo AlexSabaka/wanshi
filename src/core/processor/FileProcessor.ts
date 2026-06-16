@@ -10,6 +10,8 @@ import { FileReaderFactory, FileReadResult } from "./readers";
 import { Logger } from "../../shared";
 import { IContentClassifier } from "./classifier/IContentTypeClassifier";
 import { mergeChunkClassifications } from "./classifier/mergeClassifications";
+import { activeDomainClasses } from "../knowledge/vocabulary";
+import { trace } from "../trace";
 
 /**
  * Main file processor that coordinates reading and chunking
@@ -58,6 +60,19 @@ export class FileProcessor implements IFileProcessor {
     try {
       // Read the file
       const readResult = await reader.read(filePath);
+
+      // Ingest trace: which reader matched + chunk boundaries/provenance (the spine).
+      if (trace.enabled) {
+        for (const chunk of readResult.chunks) {
+          trace.emit({
+            stage: "ingest", type: "chunk",
+            chunkId: `${filePath}#${chunk.index}`, file: filePath,
+            chunkIndex: chunk.index, totalChunks: chunk.totalChunks,
+            reader: reader.getName(), contentLength: chunk.content.length,
+            ...(chunk.provenance ? { provenance: chunk.provenance as Record<string, unknown> } : {}),
+          });
+        }
+      }
 
       // Return results
       return {
@@ -137,7 +152,18 @@ export class FileProcessor implements IFileProcessor {
           classifier.classify(chunk.content, filePath)
         )
       );
-      return mergeChunkClassifications(perChunk);
+      const merged = mergeChunkClassifications(perChunk);
+      if (trace.enabled) {
+        const active = activeDomainClasses(merged);
+        trace.emit({
+          stage: "classify", type: "classification", file: filePath,
+          distribution: merged.map((r) => ({ class: r.class, confidence: r.confidence })),
+          gate: active.length === 0 ? "abstain" : active.length === 1 ? "single" : "multi",
+          activeClasses: active,
+          escalated: false,
+        });
+      }
+      return merged;
     } catch (error) {
       this.logger.error("Unable to classify file content.", error);
       return undefined;

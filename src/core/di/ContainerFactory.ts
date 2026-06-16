@@ -15,6 +15,8 @@ import type { CheckpointService } from "../checkpoint";
 import { IContentClassifier } from "../processor/classifier";
 import { LlmContentClassifier } from "../processor/classifier/LlmContentClassifier";
 import { configureDomainGate } from "../knowledge/vocabulary";
+import { createHash } from "crypto";
+import { trace } from "../trace";
 
 /**
  * Service identifiers for dependency injection
@@ -87,6 +89,22 @@ export class ContainerFactory {
     configureDomainGate({
       lowConfidence: processingOptions.classifier?.lowConfidenceThreshold,
       mixedDomain: processingOptions.classifier?.mixedDomainThreshold,
+    });
+
+    // Configure the run-global debug trace singleton (observe-only; off by default).
+    // Mint a runId from time + a config digest so each run's trace is identifiable.
+    const traceCfg = processingOptions.trace ?? { enabled: false };
+    const runId =
+      new Date().toISOString() +
+      "-" +
+      createHash("sha1")
+        .update(`${processingOptions.output}␟${processingOptions.llm?.model}␟${processingOptions.llm?.promptVersion}`)
+        .digest("hex")
+        .slice(0, 8);
+    trace.configure({
+      enabled: !!traceCfg.enabled,
+      path: traceCfg.path || (processingOptions.output ? `${processingOptions.output}.trace.jsonl` : undefined),
+      runId,
     });
 
     // Register configuration
@@ -694,6 +712,37 @@ export class ContainerFactory {
       return {
         merge: async (graphs) => {
           const records: import("../knowledge/MergeRecord").MergeRecord[] = [];
+          const wantMergeLog = options.inspection.emitMergeLog;
+          // The merge-log seam doubles as the trace merge-decision source: fold each
+          // non-canonical surface form's mentions onto the winner (lineage thread)
+          // and emit one merge_decision event per fusion.
+          const onMergeRecord =
+            wantMergeLog || trace.enabled
+              ? (r: import("../knowledge/MergeRecord").MergeRecord) => {
+                  if (wantMergeLog) records.push(r);
+                  if (trace.enabled) {
+                    const foldedMentionIds: string[] = [];
+                    for (const sf of r.surface_forms) {
+                      if (sf === r.canonical_chosen) continue;
+                      foldedMentionIds.push(
+                        ...trace.lineage.fold(sf, r.canonical_chosen).map((m) => m.mentionId)
+                      );
+                    }
+                    trace.emit({
+                      stage: "merge",
+                      type: "merge_decision",
+                      mergeDecisionId: r.cluster_id,
+                      target: r.target,
+                      canonical: r.canonical_chosen,
+                      surfaceForms: r.surface_forms,
+                      foldedMentionIds,
+                      cosine: r.intra_cluster_sim?.max,
+                      method: r.method,
+                      verdict: "accept",
+                    });
+                  }
+                }
+              : undefined;
           const result = await mergeKnowledgeGraphs(
             graphs,
             {
@@ -702,9 +751,7 @@ export class ContainerFactory {
                 options.merging.observationSimilarityThreshold,
               enableSimilarityMerging: options.merging.enableSimilarityMerging,
               contradictionChecker,
-              onMergeRecord: options.inspection.emitMergeLog
-                ? (r) => records.push(r)
-                : undefined,
+              onMergeRecord,
             },
             embeddingService,
             logger
