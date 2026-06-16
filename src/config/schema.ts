@@ -259,6 +259,23 @@ const AsrSchema = z
   })
   .strict();
 
+// Email reader knobs (`.eml`/`.mbox`). The body still flows through LLM
+// extraction; these only govern how an email/thread is turned into turns.
+const EmailReaderSchema = z
+  .object({
+    maxMessages: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(1000)
+      .describe("Max messages parsed from one .mbox (warns + truncates beyond this)"),
+    stripQuotes: z
+      .boolean()
+      .default(true)
+      .describe("Strip quoted reply chains (`> …` / `On … wrote:`) so each message contributes only its new content"),
+  })
+  .strict();
+
 const OutlineSchema = z
   .object({
     enabled: z.boolean().default(true).describe("Generate a per-file structural outline and inject it into the prompt"),
@@ -300,6 +317,7 @@ const ReadersSchema = z
     stripReferences: z.boolean().default(false).describe("Quarantine trailing references/bibliography sections before extraction (PDF + markdown)"),
     images: ImageProcessingModeEnum.default("auto").describe("Image processing mode"),
     json: JsonReaderSchema.default({}),
+    email: EmailReaderSchema.default({}),
     asr: AsrSchema.default({}),
     outline: OutlineSchema.default({}),
   })
