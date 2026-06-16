@@ -42,6 +42,7 @@ import { IEmbeddingProvider } from "../types/IEmbeddingProvider";
 import { ILLMProvider } from "../types/ILLMProvider";
 import { Logger, shutdown } from "../shared";
 import { trace } from "./trace";
+import { StructuredAdapterRegistry } from "./adapters";
 
 export interface IFileDiscoveryService {
   discover(): Promise<string[]>;
@@ -201,6 +202,13 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         : undefined;
     await astSeed?.loadCache();
 
+    // Structured-emit adapters (data-sink track): a graph-native source (e.g. a
+    // .db) maps directly to graph fragments, bypassing the LLM. Empty registry =
+    // every file takes the normal read→build path (default).
+    const structuredAdapters = await this.container
+      .resolve<StructuredAdapterRegistry>(TYPES.StructuredAdapterRegistry)
+      .catch(() => new StructuredAdapterRegistry()); // empty = off-path default
+
     // Reference & link resolution: the corpus-relative path set drives link
     // resolution (resolved-flag + follow targets). In follow mode it spans the
     // WHOLE input tree (links can point outside the glob); otherwise the glob set.
@@ -293,7 +301,8 @@ export class DirectoryProcessor implements IDirectoryProcessor {
           logger,
           corpusProfile,
           astSeed,
-          corpusRelPaths
+          corpusRelPaths,
+          structuredAdapters
         );
         registry.mark(id);
         knowledgeGraphs.push(...fileGraphs);
@@ -434,9 +443,26 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     logger: Logger,
     corpusProfile?: CorpusProfile,
     astSeed?: AstSeedService,
-    corpusRelPaths: Set<string> = new Set()
+    corpusRelPaths: Set<string> = new Set(),
+    structuredAdapters?: StructuredAdapterRegistry
   ): Promise<ProcessFileResult> {
     logger.info(`Processing: ${file}`);
+
+    // Structured-emit path (data-sink track): if an adapter claims this file, it
+    // maps the source DIRECTLY to graph fragments (bypassing read→chunk→LLM). The
+    // fragment still enters the per-file graphs[] union → merge/canon.
+    const adapter = structuredAdapters?.match(file);
+    if (adapter) {
+      logger.info(`Structured adapter '${adapter.id}' handling ${file} (graph-native, no LLM)`);
+      const graph = await adapter.extract(file);
+      if (trace.enabled) {
+        trace.emit({
+          stage: "ingest", type: "chunk", chunkId: `${file}#0`, file,
+          chunkIndex: 0, totalChunks: 1, reader: `adapter:${adapter.id}`, contentLength: 0,
+        });
+      }
+      return { graphs: graph ? [graph] : [], links: [], citations: [] };
+    }
 
     // Reuse the pre-pass's cached classification for this file when available.
     const cachedClasses =

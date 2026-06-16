@@ -48,6 +48,7 @@ export const TYPES = {
   GrobidClient: Symbol.for("GrobidClient"),
   CitationFetcher: Symbol.for("CitationFetcher"),
   CitationFetchCache: Symbol.for("CitationFetchCache"),
+  StructuredAdapterRegistry: Symbol.for("StructuredAdapterRegistry"),
 };
 
 /**
@@ -249,6 +250,13 @@ export class ContainerFactory {
         },
         logger
       );
+    });
+
+    // Structured-emit adapter registry (data-sink track). Empty by default;
+    // concrete adapters (SQLite, OpenAPI, iCal, …) register here in their own briefs.
+    container.register(TYPES.StructuredAdapterRegistry, async () => {
+      const { StructuredAdapterRegistry } = await import("../adapters");
+      return new StructuredAdapterRegistry();
     });
 
     // Register File REader Factory
