@@ -295,6 +295,7 @@ export class ContainerFactory {
         FileReaderFactory,
         AudioReader,
         BinaryReader,
+        ChatExportReader,
         MarkdownReader,
         DoclingReader,
         EmailReader,
@@ -396,6 +397,14 @@ export class ContainerFactory {
       // reusing the shared transcript turn-packing. Registered before TextReader.
       factory.registerReader(
         new EmailReader(chunker, logger, options.chunking.size, options.readers.email)
+      );
+
+      // Chat-export reader sniffs chat-shaped .txt (WhatsApp) / .json (Telegram,
+      // Discord, Slack) and defers everything else. Registered after Transcript
+      // (Claude/ChatGPT exports stay there) and before Json/Text. Each message
+      // becomes a turn (sender→speaker, timestamp→occurredAt) via packTurns.
+      factory.registerReader(
+        new ChatExportReader(chunker, logger, options.chunking.size, options.readers.chat)
       );
 
       // JSON reader claims .json/.jsonl/.geojson — must be registered before
