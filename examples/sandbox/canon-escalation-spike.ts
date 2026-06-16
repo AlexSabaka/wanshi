@@ -14,9 +14,11 @@
  *
  * Phase 2 (always): metric bake-off (AUC/d′) + (τ,floor) sweep over the escalation set. Embeddings
  *                   only, local, free, no LLM. Auto-recommends an operating point.
- * Phase 3 (--adjudicate): runs the newly-escalated set at the recommended point through a FAITHFUL
- *                   reproduction of Canonicalizer.adjudicate (exact prompt + {merge:boolean} schema)
- *                   against gemma4:12b (local) AND gemma4:31b-cloud, side by side.
+ * Phase 3 (--adjudicate): REPURPOSED 2026-06-16 — the adjudicator-RECALL experiment. v1/v2 both
+ *                   NO-GO'd by proving the deficit is the adjudicator, not the metric/band; this now
+ *                   runs a GUIDANCE BAKE-OFF: the verbatim production prompt (baseline) vs softened
+ *                   variants, over every curated alias + hypernym, both models, side by side.
+ *                   GATE: lift self/code escalate-band recall off 0–2/8 with hypernym-accept 0/N.
  *
  * Run:  npx ts-node examples/sandbox/canon-escalation-spike.ts
  *       npx ts-node examples/sandbox/canon-escalation-spike.ts --adjudicate
@@ -227,6 +229,41 @@ async function embedAll(texts: string[]): Promise<Map<string, number[]>> {
   return out;
 }
 
+// ── adjudicator guidance variants (THE experiment) ───────────────────────────
+// The v1/v2 spikes triangulated canon's deficit to adjudicator RECALL — the prompt rejects true
+// aliases it already sees (self/code escalate-band recall 0–2/8). This bake-off compares the
+// verbatim production guidance (baseline / control) against softened variants that explicitly
+// license abbreviation/containment/casing/camel↔snake aliases while still rejecting
+// version/size/model and hypernym (instance-vs-category) pairs. Few-shot examples are deliberately
+// DISJOINT from the probe sets above so the measured recall is not contaminated by leakage.
+const BASELINE_GUIDANCE =
+  "You decide whether two surface forms refer to the SAME thing. " +
+  "Answer only by setting `merge` true (same) or false (distinct). " +
+  "Be conservative: distinct versions/models/sizes are NOT the same.";
+
+const SOFTENED_GUIDANCE =
+  "You decide whether two surface forms refer to the SAME real-world thing (co-reference). " +
+  "Answer only by setting `merge` true (same) or false (distinct).\n" +
+  "Treat as the SAME thing: abbreviations and acronyms; one name contained in the other; " +
+  "casing or camelCase↔snake_case differences; singular vs plural; and extra qualifier words " +
+  "that don't change which thing is meant.\n" +
+  "Treat as DISTINCT: different versions, sizes, or model variants; and a specific thing vs its " +
+  "broader category (an instance vs its type).";
+
+const FEWSHOT_GUIDANCE =
+  SOFTENED_GUIDANCE +
+  "\nExamples (unrelated to the inputs below):\n" +
+  '- A: "USB"  B: "Universal Serial Bus" → merge:true (acronym of the same thing)\n' +
+  '- A: "config"  B: "configuration" → merge:true (abbreviation)\n' +
+  '- A: "Python 2"  B: "Python 3" → merge:false (different versions)\n' +
+  '- A: "spaniel"  B: "dog" → merge:false (a specific kind vs its broader category)';
+
+const GUIDANCE_VARIANTS: { name: string; system: string }[] = [
+  { name: "baseline", system: BASELINE_GUIDANCE },
+  { name: "softened", system: SOFTENED_GUIDANCE },
+  { name: "softened+fewshot", system: FEWSHOT_GUIDANCE },
+];
+
 // ── faithful adjudicator (Canonicalizer.adjudicate :289-297 verbatim) ─────────
 const ADJ_SCHEMA = z.object({ merge: z.boolean() });
 const ADJ_FORMAT = zodToJsonSchema(ADJ_SCHEMA);
@@ -245,18 +282,17 @@ function parseMerge(raw: string): boolean | null {
     return null;
   }
 }
-async function adjudicate(model: string, a: string, b: string): Promise<boolean | null> {
+async function adjudicate(
+  model: string,
+  a: string,
+  b: string,
+  system: string = BASELINE_GUIDANCE
+): Promise<boolean | null> {
   try {
     const res = await ollama.chat({
       model,
       messages: [
-        {
-          role: "system",
-          content:
-            "You decide whether two surface forms refer to the SAME thing. " +
-            "Answer only by setting `merge` true (same) or false (distinct). " +
-            "Be conservative: distinct versions/models/sizes are NOT the same.",
-        },
+        { role: "system", content: system },
         { role: "user", content: `Do these entity names refer to the same thing?\nA: "${a}"\nB: "${b}"` },
       ],
       format: ADJ_FORMAT,
@@ -310,7 +346,10 @@ async function main() {
 
   for (const corpus of CORPORA) {
     console.log(`\n\n################ ${corpus.name} ################`);
-    const graphNames = loadNames(corpus.graph);
+    // The guidance bake-off (--adjudicate) only needs the probe pairs' own cosines (→ band zone),
+    // so skip embedding the full corpus universe (thousands of names, sequential — slow on the M4).
+    // The Phase-2 sweep (no --adjudicate) still embeds everything.
+    const graphNames = adjudicateOn ? [] : loadNames(corpus.graph);
     const probePairs = [...corpus.positives, ...corpus.siblings, ...corpus.hypernyms];
     const probeNames = [...new Set(probePairs.flat())];
     const VETO_PAIR: Pair = ["Table 1", "Table 2"]; // digit-veto guard
@@ -446,24 +485,24 @@ async function main() {
     retained.push({ corpus, names, idx, feats, cos, bandPairs, labelOf });
   }
 
-  // ── recommend an operating point: max total escalatedAliases s.t. max setSize ≤ SET_CAP, ──
-  //    prefer 0 escalated siblings, tie-break smaller set. ──
-  const recommended = recommendOperatingPoint(results.corpora);
-  results.recommended = recommended;
-  console.log(`\n\n================ RECOMMENDED OPERATING POINT ================`);
-  console.log(
-    `  metric=${recommended.metric}  τ=${recommended.tau}  floor=${recommended.floor}\n` +
-      `  → escalated aliases (per corpus): ${recommended.perCorpus.map((c: any) => `${c.escalatedAliases}/${c.recoverableAliases}`).join(", ")}\n` +
-      `  → newly-escalated set size (per corpus): ${recommended.perCorpus.map((c: any) => c.escalatedSetSize).join(", ")}\n` +
-      `  → escalated hypernyms / siblings: ${recommended.perCorpus.map((c: any) => `${c.escalatedHypernyms}/${c.escalatedSiblings}`).join(", ")}\n` +
-      `  rationale: ${recommended.rationale}`
-  );
-
-  // ── Phase 3: adjudicate the newly-escalated set at the recommended point ──
-  if (adjudicateOn) {
-    results.adjudication = await runAdjudication(retained, recommended);
-  } else {
+  // ── recommend an operating point (Phase-2 sweep only; irrelevant to the guidance bake-off) ──
+  if (!adjudicateOn) {
+    const recommended = recommendOperatingPoint(results.corpora);
+    results.recommended = recommended;
+    console.log(`\n\n================ RECOMMENDED OPERATING POINT ================`);
+    console.log(
+      `  metric=${recommended.metric}  τ=${recommended.tau}  floor=${recommended.floor}\n` +
+        `  → escalated aliases (per corpus): ${recommended.perCorpus.map((c: any) => `${c.escalatedAliases}/${c.recoverableAliases}`).join(", ")}\n` +
+        `  → newly-escalated set size (per corpus): ${recommended.perCorpus.map((c: any) => c.escalatedSetSize).join(", ")}\n` +
+        `  → escalated hypernyms / siblings: ${recommended.perCorpus.map((c: any) => `${c.escalatedHypernyms}/${c.escalatedSiblings}`).join(", ")}\n` +
+        `  rationale: ${recommended.rationale}`
+    );
     console.log(`\n(Phase 3 skipped — re-run with --adjudicate to hit ${ADJ_MODELS.join(" + ")}.)`);
+  }
+
+  // ── Phase 3: the adjudicator-recall guidance bake-off ──
+  if (adjudicateOn) {
+    results.adjudication = await runAdjudication(retained, null);
   }
 
   fs.mkdirSync(path.dirname(RESULTS_PATH), { recursive: true });
@@ -536,20 +575,22 @@ function zoneOf(c: number): Zone {
 type ProbePair = { a: string; b: string; cos: number; zone: Zone };
 
 /**
- * Phase 3 reframed by the Phase-2 finding (0 sub-0.72 aliases to recover): the question is no
- * longer "does the adjudicator hold precision on a newly-surfaced band" — it's "where does canon
- * actually lose the curated aliases?" So we (1) adjudicate ALL curated aliases bucketed by band
- * zone (recall, esp. the escalate band production actually consults), (2) adjudicate curated
- * hypernyms (precision), (3) adjudicate a sample of the unlabeled band v2's gate WOULD add (the
- * cost-for-nothing it buys). Both models, side by side.
+ * Phase 3 — adjudicator guidance bake-off (the adjudicator-recall experiment). For each guidance
+ * variant (baseline = verbatim prod, softened, softened+fewshot) × both models × both corpora,
+ * adjudicate (1) every curated alias — overall recall AND recall on the escalate band production
+ * actually consults — and (2) every curated hypernym (precision, want 0 accepts). The GATE: a
+ * variant lifts self/code escalate-band recall well above the 0–2/8 baseline while keeping
+ * hypernym-accept at 0/N. (The v2 unlabeled-band sampling is dropped — that question is settled.)
  */
-async function runAdjudication(retained: any[], rec: any): Promise<any> {
-  console.log(`\n\n================ PHASE 3 — adjudication (${ADJ_MODELS.join(", ")}) ================`);
-  const { metric, tau, floor } = rec as { metric: MetricName; tau: number; floor: number };
-  const out: any = { metric, tau, floor, perCorpus: [] };
+async function runAdjudication(retained: any[], _rec: any): Promise<any> {
+  console.log(
+    `\n\n================ PHASE 3 — adjudicator guidance bake-off (${ADJ_MODELS.join(", ")}) ================`
+  );
+  console.log(`  variants: ${GUIDANCE_VARIANTS.map((v) => v.name).join("  |  ")}`);
+  const out: any = { variants: GUIDANCE_VARIANTS.map((v) => v.name), models: ADJ_MODELS, perCorpus: [] };
 
   for (const r of retained) {
-    const { corpus, names, feats, idx, cos, bandPairs } = r;
+    const { corpus, idx, cos } = r;
     const probe = (pairs: Pair[]): ProbePair[] =>
       pairs
         .filter(([a, b]) => idx.has(a) && idx.has(b))
@@ -559,60 +600,55 @@ async function runAdjudication(retained: any[], rec: any): Promise<any> {
         });
     const aliases = probe(corpus.positives);
     const hypernyms = probe(corpus.hypernyms);
-    // The band v2's gate would newly escalate (unlabeled corpus pairs only).
-    const newlyEscalated: BandPair[] = bandPairs.filter(
-      (p: BandPair) => p.cos >= floor && p.lex[metric] >= tau && p.label === "unlabeled"
-    );
-    const sample = shuffle(newlyEscalated).slice(0, UNLABELED_SAMPLE);
-
-    const ti = idx.get("Table 1")!,
-      tj = idx.get("Table 2")!;
-    const vetoPairTripsLexical = lexical(metric, feats[ti], feats[tj]) >= tau;
-    const vetoHolds = digitSignature("Table 1") !== digitSignature("Table 2");
 
     console.log(
-      `\n  ${corpus.name}\n  curated aliases by zone: ` +
+      `\n  ################ ${corpus.name} ################\n  curated aliases by zone: ` +
         ["reject(<0.72)", "escalate[0.72,0.88)", "auto-merge(≥0.88)"]
           .map((z) => `${z.split("(")[0]}=${aliases.filter((x) => x.zone === z).length}`)
-          .join("  ") +
-        `\n  v2 would newly-escalate ${newlyEscalated.length} unlabeled pairs (sampling ${sample.length})`
+          .join("  ")
     );
 
-    const perModel: any[] = [];
-    for (const model of ADJ_MODELS) {
-      console.log(`    — adjudicating with ${model} …`);
-      const judgeProbe = async (pairs: ProbePair[]) => {
-        const v: Array<ProbePair & { merge: boolean | null }> = [];
-        for (const p of pairs) v.push({ ...p, merge: await adjudicate(model, p.a, p.b) });
-        return v;
-      };
-      const judgeBand = async (pairs: BandPair[]) => {
-        const v: Array<{ a: string; b: string; cos: number; lex: number; merge: boolean | null }> = [];
-        for (const p of pairs)
-          v.push({ a: names[p.i], b: names[p.j], cos: round(p.cos), lex: round(p.lex[metric]), merge: await adjudicate(model, names[p.i], names[p.j]) });
-        return v;
-      };
-      const aliasV = await judgeProbe(aliases);
-      const hypV = await judgeProbe(hypernyms);
-      const sampleV = await judgeBand(sample);
-      const acc = (v: any[]) => v.filter((x) => x.merge === true).length;
-      const inBand = aliasV.filter((x) => x.zone === "escalate[0.72,0.88)");
-      const m = {
-        model,
-        aliasRecallAll: `${acc(aliasV)}/${aliasV.length}`, // overall recall on curated aliases
-        aliasRecallEscalateBand: `${acc(inBand)}/${inBand.length}`, // recall where production ACTUALLY adjudicates
-        hypernymAccepted: `${acc(hypV)}/${hypV.length}`, // precision (want 0)
-        newlyEscalatedAccepted: `${acc(sampleV)}/${sampleV.length}`, // the band v2 adds (mostly noise)
-        rejectedTrueAliases: aliasV.filter((x) => x.merge !== true).map((x) => `${x.a} ✗ ${x.b} (cos ${x.cos}, ${x.zone})`),
-        falseAcceptedHypernyms: hypV.filter((x) => x.merge === true).map((x) => `${x.a} ✗ ${x.b} (cos ${x.cos})`),
-        newlyEscalatedAccepts: sampleV.filter((x) => x.merge === true).map((x) => `${x.a} ? ${x.b} (cos ${x.cos}, lex ${x.lex})`),
-        verdicts: { alias: aliasV, hypernym: hypV, newlyEscalatedSample: sampleV },
-      };
-      perModel.push(m);
-      console.log(
-        `      alias-recall(all) ${m.aliasRecallAll}  alias-recall(escalate-band) ${m.aliasRecallEscalateBand}  ` +
-          `hypernym-accept ${m.hypernymAccepted} (want 0)  newly-escalated-accept ${m.newlyEscalatedAccepted}`
-      );
+    const perVariant: any[] = [];
+    for (const variant of GUIDANCE_VARIANTS) {
+      const perModel: any[] = [];
+      for (const model of ADJ_MODELS) {
+        console.log(`    — ${variant.name} × ${model} …`);
+        const judge = async (pairs: ProbePair[]) => {
+          const v: Array<ProbePair & { merge: boolean | null }> = [];
+          for (const p of pairs) v.push({ ...p, merge: await adjudicate(model, p.a, p.b, variant.system) });
+          return v;
+        };
+        const aliasV = await judge(aliases);
+        const hypV = await judge(hypernyms);
+        const acc = (v: any[]) => v.filter((x) => x.merge === true).length;
+        const inBand = aliasV.filter((x) => x.zone === "escalate[0.72,0.88)");
+        perModel.push({
+          model,
+          aliasRecallAll: `${acc(aliasV)}/${aliasV.length}`, // overall recall on curated aliases
+          aliasRecallEscalateBand: `${acc(inBand)}/${inBand.length}`, // recall where production ACTUALLY adjudicates
+          hypernymAccepted: `${acc(hypV)}/${hypV.length}`, // precision (want 0)
+          rejectedTrueAliases: aliasV
+            .filter((x) => x.merge !== true)
+            .map((x) => `${x.a} ✗ ${x.b} (cos ${x.cos}, ${x.zone})`),
+          falseAcceptedHypernyms: hypV
+            .filter((x) => x.merge === true)
+            .map((x) => `${x.a} ✗ ${x.b} (cos ${x.cos})`),
+          verdicts: { alias: aliasV, hypernym: hypV },
+        });
+      }
+      perVariant.push({ variant: variant.name, perModel });
+    }
+
+    // ── side-by-side comparison table ──
+    console.log("\n  ── guidance bake-off ── (esc-band & overall recall ↑good · hyp-accept want 0) ──");
+    console.log("    variant            model               esc-band   overall   hyp-accept");
+    for (const pv of perVariant) {
+      for (const m of pv.perModel) {
+        console.log(
+          `    ${pv.variant.padEnd(18)} ${m.model.padEnd(18)} ${m.aliasRecallEscalateBand.padStart(8)}  ` +
+            `${m.aliasRecallAll.padStart(8)}  ${m.hypernymAccepted.padStart(8)}`
+        );
+      }
     }
 
     out.perCorpus.push({
@@ -622,22 +658,10 @@ async function runAdjudication(retained: any[], rec: any): Promise<any> {
         escalate: aliases.filter((x) => x.zone === "escalate[0.72,0.88)").length,
         autoMerge: aliases.filter((x) => x.zone === "auto-merge(≥0.88)").length,
       },
-      newlyEscalatedUnlabeled: newlyEscalated.length,
-      sampled: sample.length,
-      digitVeto: { tripsLexicalGate: vetoPairTripsLexical, vetoHolds },
-      perModel,
+      perVariant,
     });
   }
   return out;
-}
-
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
 }
 
 const round = (x: number) => (Number.isNaN(x) ? NaN : Math.round(x * 1000) / 1000);

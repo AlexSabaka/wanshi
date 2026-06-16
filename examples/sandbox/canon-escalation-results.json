@@ -1,0 +1,2779 @@
+{
+  "embeddingModel": "mxbai-embed-large:335m",
+  "bandLow": 0.72,
+  "adjudicators": [
+    "gemma4:12b",
+    "gemma4:31b-cloud"
+  ],
+  "corpora": [
+    {
+      "name": "telegram-sink (mixed: ML+hardware+cuisine)",
+      "sizes": {
+        "entities": 0,
+        "universe": 64
+      },
+      "separation": {
+        "aliasVsSibling": [
+          {
+            "metric": "trigram-overlap",
+            "auc": 0.863,
+            "dprime": 1.321
+          },
+          {
+            "metric": "token-overlap",
+            "auc": 0.809,
+            "dprime": 1.265
+          },
+          {
+            "metric": "token-jaccard",
+            "auc": 0.753,
+            "dprime": 0.939
+          }
+        ],
+        "aliasVsHypernym": [
+          {
+            "metric": "trigram-overlap",
+            "auc": 0.188,
+            "dprime": -1.155
+          },
+          {
+            "metric": "token-overlap",
+            "auc": 0.281,
+            "dprime": -1.157
+          },
+          {
+            "metric": "token-jaccard",
+            "auc": 0.656,
+            "dprime": 0.479
+          }
+        ]
+      },
+      "recoverableAliases": 0,
+      "totalAliases": 16,
+      "bandPairs": 1562,
+      "sweep": [
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.3,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 16,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.4,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 9,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.5,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 5,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.6,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 5,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.7,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.3,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 9,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.4,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 4,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.5,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 2,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.6,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 2,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.7,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.3,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 2,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.4,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 2,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.5,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 2,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.6,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 2,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.7,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.3,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 3,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.4,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 1,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.5,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 1,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.6,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.7,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.3,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 3,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.4,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 1,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.5,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 1,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.6,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.7,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.3,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.4,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.5,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.6,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.7,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.3,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.4,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.5,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.6,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.7,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.3,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.4,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.5,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.6,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.7,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.3,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.4,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.5,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.6,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.7,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        }
+      ],
+      "vetoHolds": true
+    },
+    {
+      "name": "wanshi self (code/technical)",
+      "sizes": {
+        "entities": 0,
+        "universe": 49
+      },
+      "separation": {
+        "aliasVsSibling": [
+          {
+            "metric": "trigram-overlap",
+            "auc": 0.852,
+            "dprime": 1.366
+          },
+          {
+            "metric": "token-overlap",
+            "auc": 0.778,
+            "dprime": 1.5
+          },
+          {
+            "metric": "token-jaccard",
+            "auc": 0.778,
+            "dprime": 1.492
+          }
+        ],
+        "aliasVsHypernym": [
+          {
+            "metric": "trigram-overlap",
+            "auc": 0.417,
+            "dprime": -0.54
+          },
+          {
+            "metric": "token-overlap",
+            "auc": 0.778,
+            "dprime": 1.5
+          },
+          {
+            "metric": "token-jaccard",
+            "auc": 0.778,
+            "dprime": 1.492
+          }
+        ]
+      },
+      "recoverableAliases": 0,
+      "totalAliases": 9,
+      "bandPairs": 1036,
+      "sweep": [
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.3,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 12,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.4,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 9,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.5,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 4,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.6,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 4,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.7,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 3,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.3,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 12,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.4,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 9,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.5,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 4,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.6,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 4,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.7,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 3,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.3,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 12,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.4,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 9,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.5,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 4,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.6,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 4,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "trigram-overlap",
+          "tau": 0.7,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 3,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.3,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.4,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.5,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.6,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.7,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.3,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.4,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.5,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.6,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.7,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.3,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.4,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.5,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.6,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-overlap",
+          "tau": 0.7,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.3,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.4,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.5,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.6,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.7,
+          "floor": 0.4,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.3,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.4,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.5,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.6,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.7,
+          "floor": 0.5,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.3,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.4,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.5,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.6,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        },
+        {
+          "metric": "token-jaccard",
+          "tau": 0.7,
+          "floor": 0.6,
+          "escalatedAliases": 0,
+          "recoverableAliases": 0,
+          "escalatedSetSize": 0,
+          "escalatedHypernyms": 0,
+          "escalatedSiblings": 0
+        }
+      ],
+      "vetoHolds": true
+    }
+  ],
+  "adjudication": {
+    "variants": [
+      "baseline",
+      "softened",
+      "softened+fewshot"
+    ],
+    "models": [
+      "gemma4:12b",
+      "gemma4:31b-cloud"
+    ],
+    "perCorpus": [
+      {
+        "name": "telegram-sink (mixed: ML+hardware+cuisine)",
+        "aliasZones": {
+          "reject": 0,
+          "escalate": 4,
+          "autoMerge": 12
+        },
+        "perVariant": [
+          {
+            "variant": "baseline",
+            "perModel": [
+              {
+                "model": "gemma4:12b",
+                "aliasRecallAll": "12/16",
+                "aliasRecallEscalateBand": "3/4",
+                "hypernymAccepted": "0/6",
+                "rejectedTrueAliases": [
+                  "UMAP projection ✗ UMAP (cos 0.897, auto-merge(≥0.88))",
+                  "Gaussian-mixture-model (GMM) partition ✗ Gaussian-mixture-model (cos 0.89, auto-merge(≥0.88))",
+                  "chef-facing tools ✗ chef-facing interface (cos 0.924, auto-merge(≥0.88))",
+                  "NAND chips ✗ NAND storage devices (cos 0.837, escalate[0.72,0.88))"
+                ],
+                "falseAcceptedHypernyms": [],
+                "verdicts": {
+                  "alias": [
+                    {
+                      "a": "ARMv8 architecture",
+                      "b": "ARMv8",
+                      "cos": 0.951,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "ARM RISC architecture",
+                      "b": "ARM RISC",
+                      "cos": 0.959,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "128-bit memory interface",
+                      "b": "128-bit wide memory interface",
+                      "cos": 0.979,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "shared level 2 cache",
+                      "b": "L2 cache",
+                      "cos": 0.826,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "UMAP projection",
+                      "b": "UMAP",
+                      "cos": 0.897,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "300-D embedding",
+                      "b": "300-D vector",
+                      "cos": 0.831,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Mode coherence",
+                      "b": "per-mode coherence",
+                      "cos": 0.924,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "FlavorGraph",
+                      "b": "FlavorGraph nomenclature",
+                      "cos": 0.911,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "chemistry-vs-recipe-context spectrum",
+                      "b": "chemistry-vs-recipe-context axis",
+                      "cos": 0.909,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Mediterranean savory cooking staples",
+                      "b": "Mediterranean savory pantry staples",
+                      "cos": 0.935,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Gaussian-mixture-model (GMM) partition",
+                      "b": "Gaussian-mixture-model",
+                      "cos": 0.89,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "macro-regional cuisine clusters",
+                      "b": "cuisine macro-regions",
+                      "cos": 0.906,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "compound-feature (CF) sensory categories",
+                      "b": "FlavorDB compound-feature (CF) sensory categories",
+                      "cos": 0.868,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "USDA macronutrient probes",
+                      "b": "eight USDA-macronutrient probes",
+                      "cos": 0.923,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "chef-facing tools",
+                      "b": "chef-facing interface",
+                      "cos": 0.924,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "NAND chips",
+                      "b": "NAND storage devices",
+                      "cos": 0.837,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ],
+                  "hypernym": [
+                    {
+                      "a": "cheese",
+                      "b": "cheddar cheese",
+                      "cos": 0.896,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "onion",
+                      "b": "red onion",
+                      "cos": 0.904,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Epicure",
+                      "b": "Epicure-Core",
+                      "cos": 0.891,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "swiss cheese",
+                      "b": "cheese",
+                      "cos": 0.832,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Apple Silicon",
+                      "b": "Apple",
+                      "cos": 0.733,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "generative AI",
+                      "b": "AI",
+                      "cos": 0.749,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ]
+                }
+              },
+              {
+                "model": "gemma4:31b-cloud",
+                "aliasRecallAll": "10/16",
+                "aliasRecallEscalateBand": "2/4",
+                "hypernymAccepted": "0/6",
+                "rejectedTrueAliases": [
+                  "UMAP projection ✗ UMAP (cos 0.897, auto-merge(≥0.88))",
+                  "FlavorGraph ✗ FlavorGraph nomenclature (cos 0.911, auto-merge(≥0.88))",
+                  "Mediterranean savory cooking staples ✗ Mediterranean savory pantry staples (cos 0.935, auto-merge(≥0.88))",
+                  "Gaussian-mixture-model (GMM) partition ✗ Gaussian-mixture-model (cos 0.89, auto-merge(≥0.88))",
+                  "compound-feature (CF) sensory categories ✗ FlavorDB compound-feature (CF) sensory categories (cos 0.868, escalate[0.72,0.88))",
+                  "NAND chips ✗ NAND storage devices (cos 0.837, escalate[0.72,0.88))"
+                ],
+                "falseAcceptedHypernyms": [],
+                "verdicts": {
+                  "alias": [
+                    {
+                      "a": "ARMv8 architecture",
+                      "b": "ARMv8",
+                      "cos": 0.951,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "ARM RISC architecture",
+                      "b": "ARM RISC",
+                      "cos": 0.959,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "128-bit memory interface",
+                      "b": "128-bit wide memory interface",
+                      "cos": 0.979,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "shared level 2 cache",
+                      "b": "L2 cache",
+                      "cos": 0.826,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "UMAP projection",
+                      "b": "UMAP",
+                      "cos": 0.897,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "300-D embedding",
+                      "b": "300-D vector",
+                      "cos": 0.831,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Mode coherence",
+                      "b": "per-mode coherence",
+                      "cos": 0.924,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "FlavorGraph",
+                      "b": "FlavorGraph nomenclature",
+                      "cos": 0.911,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "chemistry-vs-recipe-context spectrum",
+                      "b": "chemistry-vs-recipe-context axis",
+                      "cos": 0.909,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Mediterranean savory cooking staples",
+                      "b": "Mediterranean savory pantry staples",
+                      "cos": 0.935,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": null
+                    },
+                    {
+                      "a": "Gaussian-mixture-model (GMM) partition",
+                      "b": "Gaussian-mixture-model",
+                      "cos": 0.89,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "macro-regional cuisine clusters",
+                      "b": "cuisine macro-regions",
+                      "cos": 0.906,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "compound-feature (CF) sensory categories",
+                      "b": "FlavorDB compound-feature (CF) sensory categories",
+                      "cos": 0.868,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": null
+                    },
+                    {
+                      "a": "USDA macronutrient probes",
+                      "b": "eight USDA-macronutrient probes",
+                      "cos": 0.923,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "chef-facing tools",
+                      "b": "chef-facing interface",
+                      "cos": 0.924,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "NAND chips",
+                      "b": "NAND storage devices",
+                      "cos": 0.837,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ],
+                  "hypernym": [
+                    {
+                      "a": "cheese",
+                      "b": "cheddar cheese",
+                      "cos": 0.896,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": null
+                    },
+                    {
+                      "a": "onion",
+                      "b": "red onion",
+                      "cos": 0.904,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Epicure",
+                      "b": "Epicure-Core",
+                      "cos": 0.891,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "swiss cheese",
+                      "b": "cheese",
+                      "cos": 0.832,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Apple Silicon",
+                      "b": "Apple",
+                      "cos": 0.733,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "generative AI",
+                      "b": "AI",
+                      "cos": 0.749,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "variant": "softened",
+            "perModel": [
+              {
+                "model": "gemma4:12b",
+                "aliasRecallAll": "15/16",
+                "aliasRecallEscalateBand": "4/4",
+                "hypernymAccepted": "1/6",
+                "rejectedTrueAliases": [
+                  "chef-facing tools ✗ chef-facing interface (cos 0.924, auto-merge(≥0.88))"
+                ],
+                "falseAcceptedHypernyms": [
+                  "Epicure ✗ Epicure-Core (cos 0.891)"
+                ],
+                "verdicts": {
+                  "alias": [
+                    {
+                      "a": "ARMv8 architecture",
+                      "b": "ARMv8",
+                      "cos": 0.951,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "ARM RISC architecture",
+                      "b": "ARM RISC",
+                      "cos": 0.959,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "128-bit memory interface",
+                      "b": "128-bit wide memory interface",
+                      "cos": 0.979,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "shared level 2 cache",
+                      "b": "L2 cache",
+                      "cos": 0.826,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "UMAP projection",
+                      "b": "UMAP",
+                      "cos": 0.897,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "300-D embedding",
+                      "b": "300-D vector",
+                      "cos": 0.831,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Mode coherence",
+                      "b": "per-mode coherence",
+                      "cos": 0.924,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "FlavorGraph",
+                      "b": "FlavorGraph nomenclature",
+                      "cos": 0.911,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "chemistry-vs-recipe-context spectrum",
+                      "b": "chemistry-vs-recipe-context axis",
+                      "cos": 0.909,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Mediterranean savory cooking staples",
+                      "b": "Mediterranean savory pantry staples",
+                      "cos": 0.935,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Gaussian-mixture-model (GMM) partition",
+                      "b": "Gaussian-mixture-model",
+                      "cos": 0.89,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "macro-regional cuisine clusters",
+                      "b": "cuisine macro-regions",
+                      "cos": 0.906,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "compound-feature (CF) sensory categories",
+                      "b": "FlavorDB compound-feature (CF) sensory categories",
+                      "cos": 0.868,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "USDA macronutrient probes",
+                      "b": "eight USDA-macronutrient probes",
+                      "cos": 0.923,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "chef-facing tools",
+                      "b": "chef-facing interface",
+                      "cos": 0.924,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "NAND chips",
+                      "b": "NAND storage devices",
+                      "cos": 0.837,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    }
+                  ],
+                  "hypernym": [
+                    {
+                      "a": "cheese",
+                      "b": "cheddar cheese",
+                      "cos": 0.896,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "onion",
+                      "b": "red onion",
+                      "cos": 0.904,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Epicure",
+                      "b": "Epicure-Core",
+                      "cos": 0.891,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "swiss cheese",
+                      "b": "cheese",
+                      "cos": 0.832,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Apple Silicon",
+                      "b": "Apple",
+                      "cos": 0.733,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "generative AI",
+                      "b": "AI",
+                      "cos": 0.749,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ]
+                }
+              },
+              {
+                "model": "gemma4:31b-cloud",
+                "aliasRecallAll": "12/16",
+                "aliasRecallEscalateBand": "3/4",
+                "hypernymAccepted": "0/6",
+                "rejectedTrueAliases": [
+                  "chemistry-vs-recipe-context spectrum ✗ chemistry-vs-recipe-context axis (cos 0.909, auto-merge(≥0.88))",
+                  "Gaussian-mixture-model (GMM) partition ✗ Gaussian-mixture-model (cos 0.89, auto-merge(≥0.88))",
+                  "chef-facing tools ✗ chef-facing interface (cos 0.924, auto-merge(≥0.88))",
+                  "NAND chips ✗ NAND storage devices (cos 0.837, escalate[0.72,0.88))"
+                ],
+                "falseAcceptedHypernyms": [],
+                "verdicts": {
+                  "alias": [
+                    {
+                      "a": "ARMv8 architecture",
+                      "b": "ARMv8",
+                      "cos": 0.951,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "ARM RISC architecture",
+                      "b": "ARM RISC",
+                      "cos": 0.959,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "128-bit memory interface",
+                      "b": "128-bit wide memory interface",
+                      "cos": 0.979,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "shared level 2 cache",
+                      "b": "L2 cache",
+                      "cos": 0.826,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "UMAP projection",
+                      "b": "UMAP",
+                      "cos": 0.897,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "300-D embedding",
+                      "b": "300-D vector",
+                      "cos": 0.831,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Mode coherence",
+                      "b": "per-mode coherence",
+                      "cos": 0.924,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "FlavorGraph",
+                      "b": "FlavorGraph nomenclature",
+                      "cos": 0.911,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "chemistry-vs-recipe-context spectrum",
+                      "b": "chemistry-vs-recipe-context axis",
+                      "cos": 0.909,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": null
+                    },
+                    {
+                      "a": "Mediterranean savory cooking staples",
+                      "b": "Mediterranean savory pantry staples",
+                      "cos": 0.935,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Gaussian-mixture-model (GMM) partition",
+                      "b": "Gaussian-mixture-model",
+                      "cos": 0.89,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "macro-regional cuisine clusters",
+                      "b": "cuisine macro-regions",
+                      "cos": 0.906,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "compound-feature (CF) sensory categories",
+                      "b": "FlavorDB compound-feature (CF) sensory categories",
+                      "cos": 0.868,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "USDA macronutrient probes",
+                      "b": "eight USDA-macronutrient probes",
+                      "cos": 0.923,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "chef-facing tools",
+                      "b": "chef-facing interface",
+                      "cos": 0.924,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": null
+                    },
+                    {
+                      "a": "NAND chips",
+                      "b": "NAND storage devices",
+                      "cos": 0.837,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ],
+                  "hypernym": [
+                    {
+                      "a": "cheese",
+                      "b": "cheddar cheese",
+                      "cos": 0.896,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "onion",
+                      "b": "red onion",
+                      "cos": 0.904,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Epicure",
+                      "b": "Epicure-Core",
+                      "cos": 0.891,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": null
+                    },
+                    {
+                      "a": "swiss cheese",
+                      "b": "cheese",
+                      "cos": 0.832,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Apple Silicon",
+                      "b": "Apple",
+                      "cos": 0.733,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "generative AI",
+                      "b": "AI",
+                      "cos": 0.749,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "variant": "softened+fewshot",
+            "perModel": [
+              {
+                "model": "gemma4:12b",
+                "aliasRecallAll": "15/16",
+                "aliasRecallEscalateBand": "4/4",
+                "hypernymAccepted": "1/6",
+                "rejectedTrueAliases": [
+                  "Gaussian-mixture-model (GMM) partition ✗ Gaussian-mixture-model (cos 0.89, auto-merge(≥0.88))"
+                ],
+                "falseAcceptedHypernyms": [
+                  "Epicure ✗ Epicure-Core (cos 0.891)"
+                ],
+                "verdicts": {
+                  "alias": [
+                    {
+                      "a": "ARMv8 architecture",
+                      "b": "ARMv8",
+                      "cos": 0.951,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "ARM RISC architecture",
+                      "b": "ARM RISC",
+                      "cos": 0.959,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "128-bit memory interface",
+                      "b": "128-bit wide memory interface",
+                      "cos": 0.979,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "shared level 2 cache",
+                      "b": "L2 cache",
+                      "cos": 0.826,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "UMAP projection",
+                      "b": "UMAP",
+                      "cos": 0.897,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "300-D embedding",
+                      "b": "300-D vector",
+                      "cos": 0.831,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Mode coherence",
+                      "b": "per-mode coherence",
+                      "cos": 0.924,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "FlavorGraph",
+                      "b": "FlavorGraph nomenclature",
+                      "cos": 0.911,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "chemistry-vs-recipe-context spectrum",
+                      "b": "chemistry-vs-recipe-context axis",
+                      "cos": 0.909,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Mediterranean savory cooking staples",
+                      "b": "Mediterranean savory pantry staples",
+                      "cos": 0.935,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Gaussian-mixture-model (GMM) partition",
+                      "b": "Gaussian-mixture-model",
+                      "cos": 0.89,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "macro-regional cuisine clusters",
+                      "b": "cuisine macro-regions",
+                      "cos": 0.906,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "compound-feature (CF) sensory categories",
+                      "b": "FlavorDB compound-feature (CF) sensory categories",
+                      "cos": 0.868,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "USDA macronutrient probes",
+                      "b": "eight USDA-macronutrient probes",
+                      "cos": 0.923,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "chef-facing tools",
+                      "b": "chef-facing interface",
+                      "cos": 0.924,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "NAND chips",
+                      "b": "NAND storage devices",
+                      "cos": 0.837,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    }
+                  ],
+                  "hypernym": [
+                    {
+                      "a": "cheese",
+                      "b": "cheddar cheese",
+                      "cos": 0.896,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "onion",
+                      "b": "red onion",
+                      "cos": 0.904,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Epicure",
+                      "b": "Epicure-Core",
+                      "cos": 0.891,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "swiss cheese",
+                      "b": "cheese",
+                      "cos": 0.832,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Apple Silicon",
+                      "b": "Apple",
+                      "cos": 0.733,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "generative AI",
+                      "b": "AI",
+                      "cos": 0.749,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ]
+                }
+              },
+              {
+                "model": "gemma4:31b-cloud",
+                "aliasRecallAll": "15/16",
+                "aliasRecallEscalateBand": "4/4",
+                "hypernymAccepted": "0/6",
+                "rejectedTrueAliases": [
+                  "Gaussian-mixture-model (GMM) partition ✗ Gaussian-mixture-model (cos 0.89, auto-merge(≥0.88))"
+                ],
+                "falseAcceptedHypernyms": [],
+                "verdicts": {
+                  "alias": [
+                    {
+                      "a": "ARMv8 architecture",
+                      "b": "ARMv8",
+                      "cos": 0.951,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "ARM RISC architecture",
+                      "b": "ARM RISC",
+                      "cos": 0.959,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "128-bit memory interface",
+                      "b": "128-bit wide memory interface",
+                      "cos": 0.979,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "shared level 2 cache",
+                      "b": "L2 cache",
+                      "cos": 0.826,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "UMAP projection",
+                      "b": "UMAP",
+                      "cos": 0.897,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "300-D embedding",
+                      "b": "300-D vector",
+                      "cos": 0.831,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Mode coherence",
+                      "b": "per-mode coherence",
+                      "cos": 0.924,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "FlavorGraph",
+                      "b": "FlavorGraph nomenclature",
+                      "cos": 0.911,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "chemistry-vs-recipe-context spectrum",
+                      "b": "chemistry-vs-recipe-context axis",
+                      "cos": 0.909,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Mediterranean savory cooking staples",
+                      "b": "Mediterranean savory pantry staples",
+                      "cos": 0.935,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Gaussian-mixture-model (GMM) partition",
+                      "b": "Gaussian-mixture-model",
+                      "cos": 0.89,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "macro-regional cuisine clusters",
+                      "b": "cuisine macro-regions",
+                      "cos": 0.906,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "compound-feature (CF) sensory categories",
+                      "b": "FlavorDB compound-feature (CF) sensory categories",
+                      "cos": 0.868,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "USDA macronutrient probes",
+                      "b": "eight USDA-macronutrient probes",
+                      "cos": 0.923,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "chef-facing tools",
+                      "b": "chef-facing interface",
+                      "cos": 0.924,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "NAND chips",
+                      "b": "NAND storage devices",
+                      "cos": 0.837,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    }
+                  ],
+                  "hypernym": [
+                    {
+                      "a": "cheese",
+                      "b": "cheddar cheese",
+                      "cos": 0.896,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "onion",
+                      "b": "red onion",
+                      "cos": 0.904,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Epicure",
+                      "b": "Epicure-Core",
+                      "cos": 0.891,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "swiss cheese",
+                      "b": "cheese",
+                      "cos": 0.832,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Apple Silicon",
+                      "b": "Apple",
+                      "cos": 0.733,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "generative AI",
+                      "b": "AI",
+                      "cos": 0.749,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "wanshi self (code/technical)",
+        "aliasZones": {
+          "reject": 0,
+          "escalate": 8,
+          "autoMerge": 1
+        },
+        "perVariant": [
+          {
+            "variant": "baseline",
+            "perModel": [
+              {
+                "model": "gemma4:12b",
+                "aliasRecallAll": "0/9",
+                "aliasRecallEscalateBand": "0/8",
+                "hypernymAccepted": "0/4",
+                "rejectedTrueAliases": [
+                  "calculateSimilarity ✗ cosineSimilarity (cos 0.761, escalate[0.72,0.88))",
+                  "readConfigurationFile ✗ readConfig (cos 0.857, escalate[0.72,0.88))",
+                  "Whisper ASR ✗ asr (cos 0.878, escalate[0.72,0.88))",
+                  "Graceful shutdown ✗ shutdown (cos 0.825, escalate[0.72,0.88))",
+                  "@tanstack/react-query ✗ react-query (cos 0.827, escalate[0.72,0.88))",
+                  "getSystemPrompt ✗ systemPrompt (cos 0.916, auto-merge(≥0.88))",
+                  "progressNdjson ✗ NdjsonProgressEmitter (cos 0.821, escalate[0.72,0.88))",
+                  "mission_statement ✗ system_mission_statement (cos 0.865, escalate[0.72,0.88))",
+                  "graceful_cancel ✗ graceful_interrupts (cos 0.838, escalate[0.72,0.88))"
+                ],
+                "falseAcceptedHypernyms": [],
+                "verdicts": {
+                  "alias": [
+                    {
+                      "a": "calculateSimilarity",
+                      "b": "cosineSimilarity",
+                      "cos": 0.761,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "readConfigurationFile",
+                      "b": "readConfig",
+                      "cos": 0.857,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Whisper ASR",
+                      "b": "asr",
+                      "cos": 0.878,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Graceful shutdown",
+                      "b": "shutdown",
+                      "cos": 0.825,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "@tanstack/react-query",
+                      "b": "react-query",
+                      "cos": 0.827,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "getSystemPrompt",
+                      "b": "systemPrompt",
+                      "cos": 0.916,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "progressNdjson",
+                      "b": "NdjsonProgressEmitter",
+                      "cos": 0.821,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "mission_statement",
+                      "b": "system_mission_statement",
+                      "cos": 0.865,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "graceful_cancel",
+                      "b": "graceful_interrupts",
+                      "cos": 0.838,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ],
+                  "hypernym": [
+                    {
+                      "a": "EmbeddingService",
+                      "b": "OpenAIEmbeddingService",
+                      "cos": 0.867,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "merge",
+                      "b": "deepMerge",
+                      "cos": 0.826,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "interpretability",
+                      "b": "autointerpretability",
+                      "cos": 0.752,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "EmbeddingService",
+                      "b": "EmbeddingServiceFactory",
+                      "cos": 0.911,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    }
+                  ]
+                }
+              },
+              {
+                "model": "gemma4:31b-cloud",
+                "aliasRecallAll": "2/9",
+                "aliasRecallEscalateBand": "2/8",
+                "hypernymAccepted": "0/4",
+                "rejectedTrueAliases": [
+                  "calculateSimilarity ✗ cosineSimilarity (cos 0.761, escalate[0.72,0.88))",
+                  "Whisper ASR ✗ asr (cos 0.878, escalate[0.72,0.88))",
+                  "Graceful shutdown ✗ shutdown (cos 0.825, escalate[0.72,0.88))",
+                  "getSystemPrompt ✗ systemPrompt (cos 0.916, auto-merge(≥0.88))",
+                  "progressNdjson ✗ NdjsonProgressEmitter (cos 0.821, escalate[0.72,0.88))",
+                  "mission_statement ✗ system_mission_statement (cos 0.865, escalate[0.72,0.88))",
+                  "graceful_cancel ✗ graceful_interrupts (cos 0.838, escalate[0.72,0.88))"
+                ],
+                "falseAcceptedHypernyms": [],
+                "verdicts": {
+                  "alias": [
+                    {
+                      "a": "calculateSimilarity",
+                      "b": "cosineSimilarity",
+                      "cos": 0.761,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "readConfigurationFile",
+                      "b": "readConfig",
+                      "cos": 0.857,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Whisper ASR",
+                      "b": "asr",
+                      "cos": 0.878,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Graceful shutdown",
+                      "b": "shutdown",
+                      "cos": 0.825,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "@tanstack/react-query",
+                      "b": "react-query",
+                      "cos": 0.827,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "getSystemPrompt",
+                      "b": "systemPrompt",
+                      "cos": 0.916,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "progressNdjson",
+                      "b": "NdjsonProgressEmitter",
+                      "cos": 0.821,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "mission_statement",
+                      "b": "system_mission_statement",
+                      "cos": 0.865,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "graceful_cancel",
+                      "b": "graceful_interrupts",
+                      "cos": 0.838,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ],
+                  "hypernym": [
+                    {
+                      "a": "EmbeddingService",
+                      "b": "OpenAIEmbeddingService",
+                      "cos": 0.867,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "merge",
+                      "b": "deepMerge",
+                      "cos": 0.826,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "interpretability",
+                      "b": "autointerpretability",
+                      "cos": 0.752,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "EmbeddingService",
+                      "b": "EmbeddingServiceFactory",
+                      "cos": 0.911,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "variant": "softened",
+            "perModel": [
+              {
+                "model": "gemma4:12b",
+                "aliasRecallAll": "3/9",
+                "aliasRecallEscalateBand": "3/8",
+                "hypernymAccepted": "0/4",
+                "rejectedTrueAliases": [
+                  "calculateSimilarity ✗ cosineSimilarity (cos 0.761, escalate[0.72,0.88))",
+                  "readConfigurationFile ✗ readConfig (cos 0.857, escalate[0.72,0.88))",
+                  "Whisper ASR ✗ asr (cos 0.878, escalate[0.72,0.88))",
+                  "Graceful shutdown ✗ shutdown (cos 0.825, escalate[0.72,0.88))",
+                  "getSystemPrompt ✗ systemPrompt (cos 0.916, auto-merge(≥0.88))",
+                  "graceful_cancel ✗ graceful_interrupts (cos 0.838, escalate[0.72,0.88))"
+                ],
+                "falseAcceptedHypernyms": [],
+                "verdicts": {
+                  "alias": [
+                    {
+                      "a": "calculateSimilarity",
+                      "b": "cosineSimilarity",
+                      "cos": 0.761,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "readConfigurationFile",
+                      "b": "readConfig",
+                      "cos": 0.857,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Whisper ASR",
+                      "b": "asr",
+                      "cos": 0.878,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Graceful shutdown",
+                      "b": "shutdown",
+                      "cos": 0.825,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "@tanstack/react-query",
+                      "b": "react-query",
+                      "cos": 0.827,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "getSystemPrompt",
+                      "b": "systemPrompt",
+                      "cos": 0.916,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "progressNdjson",
+                      "b": "NdjsonProgressEmitter",
+                      "cos": 0.821,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "mission_statement",
+                      "b": "system_mission_statement",
+                      "cos": 0.865,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "graceful_cancel",
+                      "b": "graceful_interrupts",
+                      "cos": 0.838,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ],
+                  "hypernym": [
+                    {
+                      "a": "EmbeddingService",
+                      "b": "OpenAIEmbeddingService",
+                      "cos": 0.867,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "merge",
+                      "b": "deepMerge",
+                      "cos": 0.826,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "interpretability",
+                      "b": "autointerpretability",
+                      "cos": 0.752,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "EmbeddingService",
+                      "b": "EmbeddingServiceFactory",
+                      "cos": 0.911,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    }
+                  ]
+                }
+              },
+              {
+                "model": "gemma4:31b-cloud",
+                "aliasRecallAll": "4/9",
+                "aliasRecallEscalateBand": "4/8",
+                "hypernymAccepted": "0/4",
+                "rejectedTrueAliases": [
+                  "calculateSimilarity ✗ cosineSimilarity (cos 0.761, escalate[0.72,0.88))",
+                  "Whisper ASR ✗ asr (cos 0.878, escalate[0.72,0.88))",
+                  "Graceful shutdown ✗ shutdown (cos 0.825, escalate[0.72,0.88))",
+                  "getSystemPrompt ✗ systemPrompt (cos 0.916, auto-merge(≥0.88))",
+                  "graceful_cancel ✗ graceful_interrupts (cos 0.838, escalate[0.72,0.88))"
+                ],
+                "falseAcceptedHypernyms": [],
+                "verdicts": {
+                  "alias": [
+                    {
+                      "a": "calculateSimilarity",
+                      "b": "cosineSimilarity",
+                      "cos": 0.761,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "readConfigurationFile",
+                      "b": "readConfig",
+                      "cos": 0.857,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Whisper ASR",
+                      "b": "asr",
+                      "cos": 0.878,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Graceful shutdown",
+                      "b": "shutdown",
+                      "cos": 0.825,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "@tanstack/react-query",
+                      "b": "react-query",
+                      "cos": 0.827,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "getSystemPrompt",
+                      "b": "systemPrompt",
+                      "cos": 0.916,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "progressNdjson",
+                      "b": "NdjsonProgressEmitter",
+                      "cos": 0.821,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "mission_statement",
+                      "b": "system_mission_statement",
+                      "cos": 0.865,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "graceful_cancel",
+                      "b": "graceful_interrupts",
+                      "cos": 0.838,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ],
+                  "hypernym": [
+                    {
+                      "a": "EmbeddingService",
+                      "b": "OpenAIEmbeddingService",
+                      "cos": 0.867,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": null
+                    },
+                    {
+                      "a": "merge",
+                      "b": "deepMerge",
+                      "cos": 0.826,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "interpretability",
+                      "b": "autointerpretability",
+                      "cos": 0.752,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "EmbeddingService",
+                      "b": "EmbeddingServiceFactory",
+                      "cos": 0.911,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "variant": "softened+fewshot",
+            "perModel": [
+              {
+                "model": "gemma4:12b",
+                "aliasRecallAll": "3/9",
+                "aliasRecallEscalateBand": "3/8",
+                "hypernymAccepted": "0/4",
+                "rejectedTrueAliases": [
+                  "calculateSimilarity ✗ cosineSimilarity (cos 0.761, escalate[0.72,0.88))",
+                  "Whisper ASR ✗ asr (cos 0.878, escalate[0.72,0.88))",
+                  "Graceful shutdown ✗ shutdown (cos 0.825, escalate[0.72,0.88))",
+                  "getSystemPrompt ✗ systemPrompt (cos 0.916, auto-merge(≥0.88))",
+                  "progressNdjson ✗ NdjsonProgressEmitter (cos 0.821, escalate[0.72,0.88))",
+                  "graceful_cancel ✗ graceful_interrupts (cos 0.838, escalate[0.72,0.88))"
+                ],
+                "falseAcceptedHypernyms": [],
+                "verdicts": {
+                  "alias": [
+                    {
+                      "a": "calculateSimilarity",
+                      "b": "cosineSimilarity",
+                      "cos": 0.761,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "readConfigurationFile",
+                      "b": "readConfig",
+                      "cos": 0.857,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Whisper ASR",
+                      "b": "asr",
+                      "cos": 0.878,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Graceful shutdown",
+                      "b": "shutdown",
+                      "cos": 0.825,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "@tanstack/react-query",
+                      "b": "react-query",
+                      "cos": 0.827,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "getSystemPrompt",
+                      "b": "systemPrompt",
+                      "cos": 0.916,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "progressNdjson",
+                      "b": "NdjsonProgressEmitter",
+                      "cos": 0.821,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "mission_statement",
+                      "b": "system_mission_statement",
+                      "cos": 0.865,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "graceful_cancel",
+                      "b": "graceful_interrupts",
+                      "cos": 0.838,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ],
+                  "hypernym": [
+                    {
+                      "a": "EmbeddingService",
+                      "b": "OpenAIEmbeddingService",
+                      "cos": 0.867,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "merge",
+                      "b": "deepMerge",
+                      "cos": 0.826,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "interpretability",
+                      "b": "autointerpretability",
+                      "cos": 0.752,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "EmbeddingService",
+                      "b": "EmbeddingServiceFactory",
+                      "cos": 0.911,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    }
+                  ]
+                }
+              },
+              {
+                "model": "gemma4:31b-cloud",
+                "aliasRecallAll": "5/9",
+                "aliasRecallEscalateBand": "4/8",
+                "hypernymAccepted": "0/4",
+                "rejectedTrueAliases": [
+                  "calculateSimilarity ✗ cosineSimilarity (cos 0.761, escalate[0.72,0.88))",
+                  "Whisper ASR ✗ asr (cos 0.878, escalate[0.72,0.88))",
+                  "Graceful shutdown ✗ shutdown (cos 0.825, escalate[0.72,0.88))",
+                  "graceful_cancel ✗ graceful_interrupts (cos 0.838, escalate[0.72,0.88))"
+                ],
+                "falseAcceptedHypernyms": [],
+                "verdicts": {
+                  "alias": [
+                    {
+                      "a": "calculateSimilarity",
+                      "b": "cosineSimilarity",
+                      "cos": 0.761,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "readConfigurationFile",
+                      "b": "readConfig",
+                      "cos": 0.857,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "Whisper ASR",
+                      "b": "asr",
+                      "cos": 0.878,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "Graceful shutdown",
+                      "b": "shutdown",
+                      "cos": 0.825,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "@tanstack/react-query",
+                      "b": "react-query",
+                      "cos": 0.827,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "getSystemPrompt",
+                      "b": "systemPrompt",
+                      "cos": 0.916,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "progressNdjson",
+                      "b": "NdjsonProgressEmitter",
+                      "cos": 0.821,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "mission_statement",
+                      "b": "system_mission_statement",
+                      "cos": 0.865,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": true
+                    },
+                    {
+                      "a": "graceful_cancel",
+                      "b": "graceful_interrupts",
+                      "cos": 0.838,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    }
+                  ],
+                  "hypernym": [
+                    {
+                      "a": "EmbeddingService",
+                      "b": "OpenAIEmbeddingService",
+                      "cos": 0.867,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "merge",
+                      "b": "deepMerge",
+                      "cos": 0.826,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "interpretability",
+                      "b": "autointerpretability",
+                      "cos": 0.752,
+                      "zone": "escalate[0.72,0.88)",
+                      "merge": false
+                    },
+                    {
+                      "a": "EmbeddingService",
+                      "b": "EmbeddingServiceFactory",
+                      "cos": 0.911,
+                      "zone": "auto-merge(≥0.88)",
+                      "merge": false
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
