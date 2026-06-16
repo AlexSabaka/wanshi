@@ -496,6 +496,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       speaker: chunk.provenance?.speaker,
       source: chunk.provenance?.source ?? processedFile.path,
       occurredAt: chunk.provenance?.occurredAt,
+      sourceAdapter: chunk.provenance?.sourceAdapter,
+      locator: chunk.provenance?.locator,
     };
   }
 
@@ -522,6 +524,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
             ...(provenance.speaker ? { speaker: provenance.speaker } : {}),
             ...(provenance.source ? { source: provenance.source } : {}),
             ...(provenance.occurredAt ? { validAt: provenance.occurredAt } : {}),
+            ...(provenance.sourceAdapter ? { sourceAdapter: provenance.sourceAdapter } : {}),
+            ...(provenance.locator ? { locator: provenance.locator } : {}),
             createdAt,
           })
         ),

@@ -53,6 +53,10 @@ export class MarkerPdfReader extends FileReader {
     return "MarkerPdfReader";
   }
 
+  adapterId(): string {
+    return "pdf:marker";
+  }
+
   async read(filePath: string): Promise<FileReadResult> {
     await this.validateFile(filePath);
     try {

@@ -31,6 +31,10 @@ export class PdfReader extends FileReader {
     return "PdfReader";
   }
 
+  adapterId(): string {
+    return "pdf:pdf2json";
+  }
+
   async read(filePath: string): Promise<FileReadResult> {
     await this.validateFile(filePath);
 
@@ -74,7 +78,8 @@ export class PdfReader extends FileReader {
           startOffset: startOffset,
           endOffset: startOffset + page.length,
           index: index + 1,
-          totalChunks: content.length
+          totalChunks: content.length,
+          provenance: { locator: `p.${index + 1}` }, // 1-based page number (ECS locator)
         };
       });
 

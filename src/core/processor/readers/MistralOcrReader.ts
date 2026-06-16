@@ -46,6 +46,10 @@ export class MistralOcrReader extends FileReader {
     return "MistralOcrReader";
   }
 
+  adapterId(): string {
+    return "pdf:mistral";
+  }
+
   async read(filePath: string): Promise<FileReadResult> {
     await this.validateFile(filePath);
 
@@ -66,7 +70,11 @@ export class MistralOcrReader extends FileReader {
       let offset = 0;
       usable.forEach((p, i) => {
         const content = p.markdown;
-        chunks.push({ content, index: i + 1, totalChunks: usable.length, startOffset: offset, endOffset: offset + content.length });
+        chunks.push({
+          content, index: i + 1, totalChunks: usable.length,
+          startOffset: offset, endOffset: offset + content.length,
+          provenance: { locator: `p.${p.index + 1}` }, // 1-based page number (ECS locator)
+        });
         offset += content.length;
       });
 

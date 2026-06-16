@@ -68,6 +68,16 @@ export abstract class FileReader {
   abstract getName(): string;
 
   /**
+   * Stable, clean source-adapter id stamped onto every fact's provenance
+   * (`Observation.sourceAdapter`) so origin is queryable (ECS source-tagging).
+   * Defaults to the reader name minus the `Reader` suffix; readers with a more
+   * meaningful id (e.g. the PDF engines → "pdf:mistral") override this.
+   */
+  adapterId(): string {
+    return this.getName().replace(/Reader$/, "").toLowerCase();
+  }
+
+  /**
    * Validate file before reading
    */
   protected async validateFile(filePath: string): Promise<void> {

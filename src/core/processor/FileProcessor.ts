@@ -85,7 +85,12 @@ export class FileProcessor implements IFileProcessor {
             totalChunks: chunk.totalChunks,
             startOffset: chunk.startOffset,
             endOffset: chunk.endOffset,
-            ...(chunk.provenance && { provenance: chunk.provenance }),
+            // Central ECS source-tagging: stamp `sourceAdapter` from the matched
+            // reader onto every chunk (a reader may pre-set a finer id / a locator).
+            provenance: {
+              ...chunk.provenance,
+              sourceAdapter: chunk.provenance?.sourceAdapter ?? reader.adapterId(),
+            },
             ...(this.attachImages && {
               images: chunk.images?.map((image) => {
                 return {

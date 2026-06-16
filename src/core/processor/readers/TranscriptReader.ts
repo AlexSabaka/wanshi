@@ -39,6 +39,10 @@ export class TranscriptReader extends FileReader {
     return "TranscriptReader";
   }
 
+  adapterId(): string {
+    return "transcript";
+  }
+
   canRead(filePath: string): boolean {
     const lower = filePath.toLowerCase();
     if (TEXT_SUFFIXES.some((s) => lower.endsWith(s))) return true;

@@ -24,6 +24,11 @@ export interface Observation {
   // Inline grounding gate (Phase 3), set when `--grounding flag` is used.
   grounded?: boolean;
   groundingScore?: number; // 0..1 keyword-overlap with the source chunk
+  // ECS source-tagging (data-sink adapter track): which adapter produced this
+  // fact + where in the source. e.g. sourceAdapter "pdf:mistral"/"sqlite", locator
+  // "p.67"/"table:parts/row:42". Makes trust + origin queryable, not format-specific.
+  sourceAdapter?: string;
+  locator?: string;
 }
 
 /** An observation as stored may be a legacy bare string or a full object. */

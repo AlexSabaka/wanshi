@@ -39,6 +39,11 @@ export interface ChunkProvenance {
   speaker?: string;
   source?: string;
   occurredAt?: string; // ISO-8601; becomes the observation's validAt
+  // ECS source-tagging. `sourceAdapter` is stamped centrally by FileProcessor from
+  // the matched reader's `adapterId()` (so every fact is attributable); a reader may
+  // pre-set it for a finer id. `locator` (e.g. "p.67") is reader-supplied where meaningful.
+  sourceAdapter?: string;
+  locator?: string;
 }
 
 /**

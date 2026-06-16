@@ -41,6 +41,10 @@ export class JsonFileReader extends FileReader {
     return 'JsonFileReader';
   }
 
+  adapterId(): string {
+    return 'json';
+  }
+
   async read(filePath: string): Promise<FileReadResult> {
     await this.validateFile(filePath);
     this.logger.debug(`Reading JSON file: ${filePath}`);
