@@ -1,6 +1,7 @@
 export * from './AudioReader';
 export * from './BinaryReader';
 export * from './DoclingReader';
+export * from './EmailReader';
 export * from './FileReader';
 export * from './FileReaderFactory';
 export * from './HtmlReader';

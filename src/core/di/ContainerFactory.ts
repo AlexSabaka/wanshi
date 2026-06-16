@@ -297,6 +297,7 @@ export class ContainerFactory {
         BinaryReader,
         MarkdownReader,
         DoclingReader,
+        EmailReader,
         MarkerPdfReader,
         MistralOcrReader,
         HtmlReader,
@@ -388,6 +389,13 @@ export class ContainerFactory {
       // its content-sniffing canRead defers everything else.
       factory.registerReader(
         new TranscriptReader(chunker, logger, options.chunking.size)
+      );
+
+      // Email reader claims .eml/.mbox (otherwise unclaimed → skipped as binary).
+      // Each message becomes a conversational turn (sender→speaker, Date→occurredAt),
+      // reusing the shared transcript turn-packing. Registered before TextReader.
+      factory.registerReader(
+        new EmailReader(chunker, logger, options.chunking.size, options.readers.email)
       );
 
       // JSON reader claims .json/.jsonl/.geojson — must be registered before
