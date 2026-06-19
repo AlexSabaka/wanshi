@@ -26,6 +26,7 @@ import {
   RebelDataset,
   CrossREDataset,
   RedocredDataset,
+  SemEval2010Dataset,
   BenchmarkRunner,
   ConsoleReporter,
   JsonReporter,
@@ -110,7 +111,7 @@ const program = new Command('benchmark');
 
 program
   .description('Evaluate wanshi extraction quality against benchmark datasets')
-  .option('--dataset <name>',          'Dataset: rebel | crossre | redocred',                                'rebel')
+  .option('--dataset <name>',          'Dataset: rebel | crossre | redocred | semeval',                      'rebel')
   .option('--data-path <path>',        'Path to dataset file or directory (CrossRE: dir loads all splits)')
   .option('--limit <n>',               'Max number of samples to evaluate (0 = all)',                        '50')
   .option('--match-threshold <n>',     'Semantic similarity threshold for entity matching (0–1)',            '0.80')
@@ -162,15 +163,17 @@ program
 
     // Load dataset
     logger.info(`Loading dataset: ${datasetName} from ${dataPath}`);
-    let loader: RebelDataset | CrossREDataset | RedocredDataset;
+    let loader: RebelDataset | CrossREDataset | RedocredDataset | SemEval2010Dataset;
     if (datasetName === 'rebel') {
       loader = new RebelDataset();
     } else if (datasetName === 'crossre') {
       loader = new CrossREDataset();
     } else if (datasetName === 'redocred') {
       loader = new RedocredDataset();
+    } else if (datasetName === 'semeval') {
+      loader = new SemEval2010Dataset();
     } else {
-      logger.error(`Unknown dataset: ${datasetName}. Supported: rebel, crossre, redocred`);
+      logger.error(`Unknown dataset: ${datasetName}. Supported: rebel, crossre, redocred, semeval`);
       process.exit(1);
     }
 

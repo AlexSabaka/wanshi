@@ -2,6 +2,7 @@ export * from './datasets/IDataset';
 export * from './datasets/RebelDataset';
 export * from './datasets/CrossREDataset';
 export * from './datasets/RedocredDataset';
+export * from './datasets/SemEval2010Dataset';
 export * from './matching/ExactMatcher';
 export * from './matching/SemanticMatcher';
 export * from './metrics/TripleMetrics';
