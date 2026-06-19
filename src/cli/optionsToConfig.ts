@@ -48,6 +48,7 @@ export const FLAG_TO_PATH: Record<string, string> = {
   numSpeakers: "readers.asr.dual.numSpeakers",
   pdfEngine: "readers.pdfEngine",
   markerUseLlm: "readers.marker.useLlm",
+  tesseractLang: "readers.tesseract.lang",
   stripReferences: "readers.stripReferences",
   jsonStrategy: "readers.json.strategy",
   images: "readers.images",

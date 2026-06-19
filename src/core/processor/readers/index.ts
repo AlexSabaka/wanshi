@@ -18,5 +18,6 @@ export * from './OfficeReader';
 export * from './PdfReader';
 export * from './RtfReader';
 export * from './SubtitleReader';
+export * from './TesseractPdfReader';
 export * from './TextReader';
 export * from './TranscriptReader';

@@ -60,9 +60,10 @@ export const ExportFormatEnum = z.enum([
 ]);
 export const JsonStrategyEnum = z.enum(["structural", "raw"]);
 // PDF reading engine: `pdf2json` = built-in text extraction (default, no OCR,
-// portable); `docling`/`marker` = local Python tools (subprocess); `mistral` =
-// Mistral OCR HTTP API. Any non-default engine degrades to pdf2json on failure.
-export const PdfEngineEnum = z.enum(["pdf2json", "docling", "marker", "mistral"]);
+// portable); `tesseract` = pure-JS/WASM OCR (light-local floor, no system binary);
+// `docling`/`marker` = local Python tools (subprocess); `mistral` = Mistral OCR
+// HTTP API. Any non-default engine degrades to pdf2json on failure.
+export const PdfEngineEnum = z.enum(["pdf2json", "docling", "marker", "mistral", "tesseract"]);
 // AudioReader transcription engine: `whisper` = built-in single-model nodejs-whisper
 // (default, portable, network-free); `dual` = vendored Python audio-pipeline
 // (Silero VAD + Parakeet/Whisper dual-STT + diarization, Apple-Silicon only, opt-in).
@@ -341,11 +342,27 @@ const MistralSchema = z
   })
   .strict();
 
+// Tesseract OCR engine (pure-JS/WASM: pdf-to-png-converter rasterizes each page,
+// tesseract.js OCRs it; zero system binaries — the light-local floor for hardware
+// with no GPU/VLM). Only consulted when `pdfEngine: tesseract`; any failure
+// degrades to pdf2json. Language traineddata is fetched from the tesseract.js CDN
+// on first use and cached — set `langPath` for a fully offline mirror.
+const TesseractSchema = z
+  .object({
+    lang: z.string().default("eng").describe('Tesseract language code(s), e.g. "eng" or "eng+deu"'),
+    scale: z.coerce.number().positive().default(2).describe("PDF→PNG render scale before OCR (higher = sharper input, slower)"),
+    oem: z.coerce.number().int().optional().describe("OCR engine mode (tesseract.js OEM; default LSTM)"),
+    psm: z.coerce.number().int().optional().describe("Page segmentation mode (tessedit_pageseg_mode)"),
+    langPath: z.string().optional().describe("Offline traineddata dir/URL (no trailing slash); omit to use the CDN + cache"),
+  })
+  .strict();
+
 const ReadersSchema = z
   .object({
-    pdfEngine: PdfEngineEnum.default("pdf2json").describe("PDF reading engine: pdf2json (built-in) | docling | marker (Python subprocess) | mistral (HTTP OCR API)"),
+    pdfEngine: PdfEngineEnum.default("pdf2json").describe("PDF reading engine: pdf2json (built-in) | tesseract (pure-JS/WASM OCR) | docling | marker (Python subprocess) | mistral (HTTP OCR API)"),
     marker: MarkerSchema.default({}),
     mistral: MistralSchema.default({}),
+    tesseract: TesseractSchema.default({}),
     stripReferences: z.boolean().default(false).describe("Quarantine trailing references/bibliography sections before extraction (PDF + markdown)"),
     images: ImageProcessingModeEnum.default("auto").describe("Image processing mode"),
     json: JsonReaderSchema.default({}),

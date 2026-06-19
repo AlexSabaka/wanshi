@@ -96,6 +96,15 @@ describe("config schema", () => {
     expect(c.readers.mistral.model).toBe("mistral-ocr-2512");
   });
 
+  it("defaults the tesseract OCR engine knobs and accepts the engine value", () => {
+    expect(parseConfig({}).readers.tesseract.lang).toBe("eng");
+    expect(parseConfig({}).readers.tesseract.scale).toBe(2);
+    const c = parseConfig({ readers: { pdfEngine: "tesseract", tesseract: { lang: "eng+deu", psm: "6" } } });
+    expect(c.readers.pdfEngine).toBe("tesseract");
+    expect(c.readers.tesseract.lang).toBe("eng+deu");
+    expect(c.readers.tesseract.psm).toBe(6);
+  });
+
   it("migrates the retired readers.docling key to readers.pdfEngine", () => {
     let message = "";
     try {

@@ -304,6 +304,7 @@ export class ContainerFactory {
         LatexReader,
         MarkerPdfReader,
         MistralOcrReader,
+        TesseractPdfReader,
         HtmlReader,
         ImageReader,
         JsonFileReader,
@@ -377,6 +378,19 @@ export class ContainerFactory {
           factory.registerReader(
             new MistralOcrReader(
               { apiKey: mi.apiKey ?? process.env.MISTRAL_API_KEY, host: mi.host, model: mi.model, timeoutMs: mi.timeoutMs },
+              pdf2json,
+              chunker,
+              logger
+            )
+          );
+          break;
+        }
+        case "tesseract": {
+          const t = options.readers.tesseract;
+          logger.info(`PDF engine: tesseract (${t.lang})`);
+          factory.registerReader(
+            new TesseractPdfReader(
+              { lang: t.lang, scale: t.scale, oem: t.oem, psm: t.psm, langPath: t.langPath },
               pdf2json,
               chunker,
               logger

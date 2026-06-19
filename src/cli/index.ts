@@ -94,8 +94,9 @@ program
   .option("--num-speakers <n>", "dual engine: hint the diarizer's speaker count", (v) => parseInt(v, 10))
 
   // PDF reading engine selection
-  .option("--pdf-engine <engine>", "PDF reading engine: pdf2json (built-in) | docling | marker (Python subprocess) | mistral (HTTP OCR API)")
+  .option("--pdf-engine <engine>", "PDF reading engine: pdf2json (built-in) | tesseract (pure-JS/WASM OCR) | docling | marker (Python subprocess) | mistral (HTTP OCR API)")
   .option("--marker-use-llm", "marker engine: enable --use_llm hybrid mode (better tables, costs LLM calls)")
+  .option("--tesseract-lang <lang>", "tesseract engine: OCR language code(s), e.g. \"eng\" or \"eng+deu\" (default: eng)")
 
   // Quarantine trailing references/bibliography sections before extraction
   .option("--strip-references", "quarantine trailing references/bibliography sections before extraction (PDF + markdown, default: false)")
