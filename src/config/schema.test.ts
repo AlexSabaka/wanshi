@@ -39,6 +39,12 @@ describe("config schema", () => {
     expect(parseConfig({ readers: { chat: { skipSystem: false } } }).readers.chat.skipSystem).toBe(false);
   });
 
+  it("defaults the Jupyter reader knobs (outputs/images off)", () => {
+    expect(parseConfig({}).readers.jupyter.includeOutputs).toBe(false);
+    expect(parseConfig({}).readers.jupyter.includeImages).toBe(false);
+    expect(parseConfig({ readers: { jupyter: { includeOutputs: true } } }).readers.jupyter.includeOutputs).toBe(true);
+  });
+
   it("applies nested defaults from an empty config", () => {
     const c = parseConfig({});
     expect(c.input).toBe(".");

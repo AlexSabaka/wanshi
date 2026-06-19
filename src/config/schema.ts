@@ -293,6 +293,21 @@ const ChatReaderSchema = z
   })
   .strict();
 
+// Jupyter notebook reader knobs (.ipynb). Markdown narrative + fenced code are
+// always rendered; outputs/images are opt-in (they often carry noise).
+const JupyterReaderSchema = z
+  .object({
+    includeOutputs: z
+      .boolean()
+      .default(false)
+      .describe("Append code-cell text outputs (stream / text-plain results; error tracebacks always skipped)"),
+    includeImages: z
+      .boolean()
+      .default(false)
+      .describe("Attach base64 image outputs as chunk images (for the vision path)"),
+  })
+  .strict();
+
 const OutlineSchema = z
   .object({
     enabled: z.boolean().default(true).describe("Generate a per-file structural outline and inject it into the prompt"),
@@ -336,6 +351,7 @@ const ReadersSchema = z
     json: JsonReaderSchema.default({}),
     email: EmailReaderSchema.default({}),
     chat: ChatReaderSchema.default({}),
+    jupyter: JupyterReaderSchema.default({}),
     asr: AsrSchema.default({}),
     outline: OutlineSchema.default({}),
   })
