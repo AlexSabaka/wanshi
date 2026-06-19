@@ -299,6 +299,8 @@ export class ContainerFactory {
         MarkdownReader,
         DoclingReader,
         EmailReader,
+        EpubReader,
+        JupyterReader,
         LatexReader,
         MarkerPdfReader,
         MistralOcrReader,
@@ -417,6 +419,14 @@ export class ContainerFactory {
         new SubtitleReader(chunker, logger, options.chunking.size)
       );
       factory.registerReader(new LatexReader(chunker, logger, refCites));
+      // EPUB (zip→spine→chapter chunking) and Jupyter (cell-aware) — extensions
+      // were unclaimed (→ BinaryReader). Registered before Text/Binary.
+      factory.registerReader(
+        new EpubReader(chunker, logger, options.chunking.size)
+      );
+      factory.registerReader(
+        new JupyterReader(chunker, logger, options.readers.jupyter)
+      );
 
       // JSON reader claims .json/.jsonl/.geojson — must be registered before
       // TextReader (first-match-wins) so it handles them instead of TextReader.
