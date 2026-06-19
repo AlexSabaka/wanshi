@@ -18,6 +18,13 @@ import { MineFactResult, MineGraphScore, MineTool } from './types';
 export const MINE_JUDGE_INSTRUCTION =
   'Determine whether the context contains the information stated in the correct answer. Respond with 1 if yes, 0 if no.';
 
+// The verbatim criterion + a firm output directive. Without it, smaller judges
+// (gemma3:4b) intermittently EXPLAIN their answer (prose), which fails the schema →
+// retries → some land as a wrong 0, biasing scores low and unequally across the
+// graphs being compared. The directive (DSPy adds the equivalent internally) drives
+// a clean bare digit; the tolerant schema accepts it (or the object form).
+const JUDGE_SYSTEM = `${MINE_JUDGE_INSTRUCTION} Respond with ONLY the digit 1 or 0 — no explanation, no other text.`;
+
 // Output {evaluation: 0|1}. Tolerant of a BARE number/string too: gemma3:4b honors
 // the verbatim "respond with 1" prompt with a bare `1` under Ollama's soft format
 // constraint, so we coerce that into {evaluation:1} instead of 3x-retrying then
@@ -103,7 +110,7 @@ export class MineScorer {
 
   private async judgeFact(context: string, fact: string): Promise<0 | 1> {
     const messages: LLMMessage[] = [
-      { role: 'system', content: MINE_JUDGE_INSTRUCTION },
+      { role: 'system', content: JUDGE_SYSTEM },
       { role: 'user', content: `Context:\n${context}\n\nCorrect answer:\n${fact}` },
     ];
     try {

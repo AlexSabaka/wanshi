@@ -49,8 +49,9 @@ describe('MineScorer', () => {
 
     expect(res.accuracy).toBe(1);
     expect(res.perFact[0].context).toContain('butterfly undergo transformation');
-    // The judge was invoked with MINE's exact instruction as the system message.
-    expect(calls[0][0]).toEqual({ role: 'system', content: MINE_JUDGE_INSTRUCTION });
+    // The judge's system message preserves MINE's exact criterion (verbatim prefix).
+    expect(calls[0][0].role).toBe('system');
+    expect(calls[0][0].content).toContain(MINE_JUDGE_INSTRUCTION);
   });
 
   it('computes accuracy as correct/total across facts', async () => {
