@@ -67,6 +67,34 @@ short and link the file. Remove an item when it's paid down.
   import backend `src/` (separate package). Requires `npm run build` (or
   `KG_GEN_CMD`) before the run form renders.
 
+- **Data-sink readers (Class B + C) shipped but not live-validated.** `EmailReader` (`.eml`/`.mbox`),
+  `ChatExportReader` (WhatsApp/Telegram/Discord/Slack), `SubtitleReader` (`.srt`/`.vtt`), `LatexReader`
+  (`.tex`), `EpubReader` (`.epub`), `JupyterReader` (`.ipynb`) — all in `src/core/processor/readers/`,
+  unit-tested + DI-routed and off-corpus byte-identical, but **no live extraction run on real corpora yet**
+  (Sabaka to source test data; cloud gen + local embeddings). Per-reader deferrals: Email `.msg` +
+  `In-Reply-To→reply_to` edges + attachments; Chat Telegram/Discord HTML + Slack `thread_ts`→reply edges;
+  Subtitle cue-time `locator` (a cue offset is a media position, **deliberately not** stamped to
+  `occurredAt`/`validAt`); LaTeX `\ref`/`\label` + `\input` + `.bib` title resolution; EPUB TOC/nav titles
+  + embedded images; Jupyter cell-level locator + attachments.
+
+- **Data-sink formats not yet built (Dove's file-types brief).** Class B: **Viber** (CSV, undocumented
+  schema) + **Signal** (no native export — needs `sigtop`/`signal-export` output) chat exports, both
+  pending real samples. Class A graph-native adapters: **schema/IDL** (OpenAPI/`.proto`/GraphQL SDL/JSON
+  Schema), **iCal `.ics`/vCard `.vcf`**; plus the SQLite adapter's deferred M2M/junction→edge collapse,
+  composite PKs, and views (`src/core/adapters/SqliteAdapter.ts`). Class D domain-specific (kcd:
+  KiCad/SPICE/BOM).
+
+- **Gmail-connector PoC is unwired.** `examples/gmail-connector-poc/` (`MailListener` + `gmail-auth`,
+  carved from the retired kg-mail-assistant) is preserved source for a future *live Gmail data-source*,
+  **not** integrated — a streaming paradigm wanshi (a batch tool) doesn't have. Wiring it = have the
+  connector drop `.eml` into a watched dir for `EmailReader`, or build a proper source-adapter layer.
+
+- **canon-adjudicator-recall spike parked (failed gate).** The softened-adjudicator-guidance experiment
+  recovered curated aliases but **over-merged ~80% wrong on the real corpus** (the real alias:hypernym band
+  is ~1:10), failing the precision gate → **not merged**; held on `origin/canon-adjudicator-recall` for
+  Dove. Compounds the two canon items above — a better adjudicator is the prerequisite before canon's
+  recall lever is safe to pull.
+
 ## Paid down
 
 - **AST-seeded code extraction (Phase 8).** A deterministic Tree-sitter symbol pass
