@@ -42,3 +42,40 @@ describe("buildImageMetaGraph (EXIF)", () => {
     expect(buildImageMetaGraph(pf({}), "/corpus")).toBeNull();
   });
 });
+
+describe("buildImageMetaGraph (C2PA)", () => {
+  const pfMeta = (metadata: any): ProcessedFile =>
+    ({ path: "/corpus/photos/img.jpg", chunks: [], metadata }) as unknown as ProcessedFile;
+  const image = (g: any) => g.entities.find((e: any) => e.name === "photos/img.jpg");
+
+  it("records a valid credential as a non-verdict trust observation on the image", () => {
+    const g = buildImageMetaGraph(pfMeta({ c2pa: { present: true, valid: true, signer: "Truepic", aiGenerated: true } }), "/corpus")!;
+    const o = image(g).observations.find((x: any) => x.sourceAdapter === "c2pa")!;
+    expect(o.confidence).toBe(0.95);
+    expect(o.text).toContain("present and valid");
+    expect(o.text).toContain("Truepic");
+    expect(o.text).toContain("AI-generated");
+    expect(o.text).toContain("not truth"); // the mandatory hedge
+  });
+
+  it("records absence as a fact, not a verdict", () => {
+    const g = buildImageMetaGraph(pfMeta({ c2pa: { present: false } }), "/corpus")!;
+    const o = image(g).observations.find((x: any) => x.sourceAdapter === "c2pa")!;
+    expect(o.text).toContain("No C2PA Content Credential found");
+    expect(o.text).toContain("not evidence");
+  });
+
+  it("emits nothing when provenance could not be read (unavailable)", () => {
+    expect(buildImageMetaGraph(pfMeta({ c2pa: { present: false, unavailable: true } }), "/corpus")).toBeNull();
+  });
+
+  it("combines with EXIF on the same image node", () => {
+    const g = buildImageMetaGraph(
+      pfMeta({ exif: { camera: { make: "Sony", model: "A7" } }, c2pa: { present: true, valid: true } }),
+      "/corpus"
+    )!;
+    const adapters = new Set(image(g).observations.map((o: any) => o.sourceAdapter));
+    expect(adapters.has("c2pa")).toBe(true);
+    expect(g.entities.some((e) => e.entityType === "camera")).toBe(true);
+  });
+});

@@ -383,6 +383,17 @@ const ExifSchema = z
   })
   .strict();
 
+// C2PA content-credential read (deterministic validity signal). Shells the
+// official Adobe/CAI `c2patool` (reference-grade cryptographic validation),
+// degrade-if-absent like marker. Records a trust observation (present/valid/signer/
+// AI-claim) stamped sourceAdapter:"c2pa" — a fact, never a verdict. Default OFF.
+const C2paSchema = z
+  .object({
+    enabled: z.boolean().default(false).describe("Read C2PA content credentials (via the c2patool CLI) into a trust observation on the image"),
+    command: z.string().default("c2patool").describe("c2patool executable (on PATH; degrade to no-credential if absent)"),
+  })
+  .strict();
+
 const ReadersSchema = z
   .object({
     pdfEngine: PdfEngineEnum.default("pdf2json").describe("PDF reading engine: pdf2json (built-in) | tesseract (pure-JS/WASM OCR) | docling | marker (Python subprocess) | chandra (Python subprocess, SOTA) | mistral (HTTP OCR API)"),
@@ -393,6 +404,7 @@ const ReadersSchema = z
     stripReferences: z.boolean().default(false).describe("Quarantine trailing references/bibliography sections before extraction (PDF + markdown)"),
     images: ImageProcessingModeEnum.default("auto").describe("Image processing mode"),
     exif: ExifSchema.default({}),
+    c2pa: C2paSchema.default({}),
     json: JsonReaderSchema.default({}),
     email: EmailReaderSchema.default({}),
     chat: ChatReaderSchema.default({}),

@@ -118,6 +118,12 @@ describe("config schema", () => {
     expect(parseConfig({ readers: { exif: { enabled: true } } }).readers.exif.enabled).toBe(true);
   });
 
+  it("defaults the C2PA read off with the c2patool command", () => {
+    expect(parseConfig({}).readers.c2pa.enabled).toBe(false);
+    expect(parseConfig({}).readers.c2pa.command).toBe("c2patool");
+    expect(parseConfig({ readers: { c2pa: { enabled: true } } }).readers.c2pa.enabled).toBe(true);
+  });
+
   it("migrates the retired readers.docling key to readers.pdfEngine", () => {
     let message = "";
     try {

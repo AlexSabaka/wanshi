@@ -1,3 +1,4 @@
+import { spawn } from "child_process";
 import { Logger } from "../../../../shared";
 
 /**
@@ -52,4 +53,91 @@ export async function readExif(filePath: string, logger?: Logger): Promise<ExifM
     logger?.debug(`EXIF read failed for ${filePath}: ${e}`);
     return undefined;
   }
+}
+
+/**
+ * C2PA Content Credential facts. `present:false, unavailable:true` means we could
+ * NOT read provenance (c2patool missing / errored) — distinct from a clean
+ * `present:false` (no credential on the asset, itself a fact). Stores facts, never
+ * a verdict: a valid credential proves signed provenance, not truth; a missing one
+ * proves nothing.
+ */
+export interface C2paMetadata {
+  present: boolean;
+  valid?: boolean;
+  signer?: string;
+  aiGenerated?: boolean;
+  unavailable?: boolean;
+}
+
+/**
+ * Read C2PA Content Credentials by shelling the official Adobe/CAI `c2patool`
+ * (reference-grade cryptographic validation; degrade-if-absent like marker). Never
+ * throws — a missing binary / parse error yields `{present:false, unavailable:true}`.
+ */
+export async function readC2pa(
+  filePath: string,
+  command = "c2patool",
+  logger?: Logger
+): Promise<C2paMetadata> {
+  try {
+    const { code, stdout, stderr } = await runCommand(command, [filePath], 30_000);
+    if (code !== 0) {
+      // c2patool exits non-zero with "No claim found" when the asset has no
+      // credential — a real fact (absent), distinct from the tool being missing.
+      if (/no (claim|manifest|provenance|c2pa)/i.test(`${stderr}\n${stdout}`)) return { present: false };
+      logger?.debug(`c2patool exited ${code} for ${filePath}: ${stderr.trim().slice(-200)}`);
+      return { present: false, unavailable: true };
+    }
+    return parseC2pa(JSON.parse(stdout));
+  } catch (e) {
+    // ENOENT (binary not installed), timeout, or unparseable output → we could not
+    // read provenance. Distinct from "no credential present".
+    logger?.debug(`C2PA read unavailable for ${filePath}: ${e}`);
+    return { present: false, unavailable: true };
+  }
+}
+
+/** Map a c2patool manifest-store JSON report to the trust facts we record. */
+function parseC2pa(json: any): C2paMetadata {
+  const manifests = json?.manifests ?? {};
+  const active = json?.active_manifest;
+  const present = !!active || Object.keys(manifests).length > 0;
+  if (!present) return { present: false };
+
+  const m = (active && manifests[active]) || Object.values(manifests)[0] || {};
+  const sigInfo = (m as any)?.signature_info ?? {};
+  const signer = typeof sigInfo.issuer === "string" ? sigInfo.issuer : typeof sigInfo.common_name === "string" ? sigInfo.common_name : undefined;
+  const vstatus: any[] = Array.isArray(json?.validation_status) ? json.validation_status : [];
+  const valid = vstatus.every((v) => !/error|invalid|fail/i.test(String(v?.code ?? "")));
+  // C2PA's AI-generation indicator (digitalSourceType …trainedAlgorithmicMedia).
+  const aiGenerated = /trainedAlgorithmicMedia/i.test(JSON.stringify(json));
+  return { present: true, valid, signer, aiGenerated };
+}
+
+/** Spawn a CLI with captured output + timeout; rejects on launch error (ENOENT). */
+function runCommand(
+  command: string,
+  args: string[],
+  timeoutMs: number
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (d) => (stdout += d.toString()));
+    child.stderr?.on("data", (d) => (stderr += d.toString()));
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(`${command} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code: code ?? 0, stdout, stderr });
+    });
+  });
 }

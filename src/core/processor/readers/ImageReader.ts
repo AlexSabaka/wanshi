@@ -3,12 +3,14 @@ import * as path from "path";
 import { FileReader, FileReadResult } from "./FileReader";
 import { Logger } from "../../../shared";
 import { TextChunker } from "../chunking";
-import { readExif } from "./image/imageMetadata";
+import { readExif, readC2pa } from "./image/imageMetadata";
 
 /** Deterministic image-metadata toggles (off by default → byte-identical run). */
 export interface ImageReaderOptions {
   /** Extract EXIF (GPS/time/camera) into `metadata.exif` for the graph fragment. */
   exif: boolean;
+  /** Read C2PA content credentials (shell c2patool) into `metadata.c2pa`. */
+  c2pa: { enabled: boolean; command: string };
 }
 
 /**
@@ -18,7 +20,11 @@ export interface ImageReaderOptions {
  * VLM read. Metadata extraction is additive and independent of the VLM mode.
  */
 export class ImageReader extends FileReader {
-  constructor(chunker: TextChunker, logger: Logger, private readonly opts: ImageReaderOptions = { exif: false }) {
+  constructor(
+    chunker: TextChunker,
+    logger: Logger,
+    private readonly opts: ImageReaderOptions = { exif: false, c2pa: { enabled: false, command: "c2patool" } }
+  ) {
     super(
       [
         ".jpg",
@@ -76,6 +82,9 @@ export class ImageReader extends FileReader {
       if (this.opts.exif) {
         const exif = await readExif(filePath, this.logger);
         if (exif) metadata.exif = exif;
+      }
+      if (this.opts.c2pa.enabled) {
+        metadata.c2pa = await readC2pa(filePath, this.opts.c2pa.command, this.logger);
       }
 
       return {
