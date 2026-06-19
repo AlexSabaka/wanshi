@@ -133,8 +133,9 @@ interface Observation {
   invalidAt?: string; // valid time end
   createdAt?: string; // transaction time: when extracted/ingested
   expiredAt?: string; // transaction time: when superseded (facts are superseded, never deleted)
-  sourceAdapter?: string; // ECS source-tagging: which adapter produced it ("pdf:mistral","sqlite",…)
+  sourceAdapter?: string; // ECS source-tagging: which adapter produced it ("pdf:mistral","sqlite","exif","c2pa",…)
   locator?: string;       // where in the source ("p.67","table:parts/row:42")
+  confidence?: number;    // 0..1 read-reliability (NOT a truth verdict); set by EXIF/C2PA + the CV pre-pass
 }
 ```
 
@@ -227,7 +228,9 @@ const svc = container.get<ISomeService>(TYPES.SomeService);
 `FileReaderFactory` maps file extensions to reader implementations (first-match-wins). All readers extend the abstract `FileReader` base class. Each exposes `adapterId()` (the `sourceAdapter` tag stamped onto every fact).
 **To add a new file format**: implement `FileReader`, register in `FileReaderFactory.ts`.
 
-**PDF engine selector.** The PDF slot is chosen by `readers.pdfEngine` (`pdf2json` default | `docling` | `marker` | `mistral`), not a boolean — the dispatch in `ContainerFactory` registers the chosen reader; `marker`/`mistral` degrade to `pdf2json` on failure. The legacy `readers.docling: true` errors with a `readers.pdfEngine: docling` migration hint. `MarkerPdfReader` shells the `marker_single` CLI; `MistralOcrReader` is native HTTP (Mistral OCR API).
+**PDF engine selector.** The PDF slot is chosen by `readers.pdfEngine` (`pdf2json` default | `tesseract` | `docling` | `marker` | `chandra` | `mistral`), not a boolean — the dispatch in `ContainerFactory` registers the chosen reader, each passed the pre-built `pdf2json` instance as its `fallback`; any non-default engine degrades to `pdf2json` on failure. The legacy `readers.docling: true` errors with a `readers.pdfEngine: docling` migration hint. Hardware-aware ladder: **tesseract (light/CPU) → pdf2json → docling → marker → chandra → mistral (cloud)**. `TesseractPdfReader` is pure-JS/WASM (`pdf-to-png-converter` rasterizes each page → `tesseract.js` OCRs it; per-page `locator`, `<pdf>.tesseract.json` sidecar, heavy deps lazy+injectable); `MarkerPdfReader`/`ChandraPdfReader` shell the `marker_single`/`chandra` CLIs (Chandra = slow SOTA/handwriting 4B VLM, weights modified OpenRAIL-M — license caveat in its schema describe); `MistralOcrReader` is native HTTP (Mistral OCR API).
+
+**Image enrichment (EXIF/C2PA, `src/core/knowledge/images/imageMetaGraph.ts`).** Image files go to the VLM *and*, opt-in, get deterministic metadata facts that **augment** (never replace) the VLM read. This is **NOT** a structured-emit adapter — an adapter match early-returns and bypasses the LLM (`DirectoryProcessor.processFile`), which would suppress the VLM read; instead it's the **reader-metadata→fragment** pattern (the references precedent): `ImageReader` stashes `metadata.exif` (`exifr`, pure-JS, `--exif`/`readers.exif.enabled`) + `metadata.c2pa` (shell `c2patool`, `--c2pa`/`readers.c2pa.enabled`), and the pure `buildImageMetaGraph()` turns them into a fragment `DirectoryProcessor` unions into `graphs[]` (alongside the AST seed + reference graph). EXIF → GPS `location` entity + `taken_at` edge (capture time → bitemporal `validAt`), camera → `captured_with`, author/software → image-node observations (`sourceAdapter:"exif"`, `confidence` 0.9). C2PA → a **fact-not-verdict** trust observation (`sourceAdapter:"c2pa"`, `confidence` 0.95): present/valid/signer/AI-claim, or "no credential found (absence is not evidence)"; an unreadable `c2patool` (`unavailable`) emits nothing. Both default **OFF** ⇒ byte-identical run. *Live e2e (real photos/credentials) is deferred to the benchmark-corpus validation sweep.*
 
 ### 2b. Strategy Pattern — Structured-emit adapters (data-sink track)
 
@@ -510,13 +513,15 @@ is caught and the run continues without it. Flags: `--corpus-profiling disabled|
 | `JsonFileReader` | `.json`, `.jsonl`, `.geojson` | Built-in (registered before `TextReader`) |
 | `MarkdownReader` | `.md` | Built-in |
 | `PdfReader` | `.pdf` (`pdfEngine: pdf2json`, default) | `pdf2json` |
+| `TesseractPdfReader` | `.pdf` (`pdfEngine: tesseract`) | `pdf-to-png-converter` + `tesseract.js` (pure-JS/WASM, light-local floor) |
 | `MarkerPdfReader` | `.pdf` (`pdfEngine: marker`) | `marker_single` CLI (Python; optional `--use_llm`) |
+| `ChandraPdfReader` | `.pdf` (`pdfEngine: chandra`) | `chandra` CLI (Python; SOTA/handwriting 4B VLM) |
 | `MistralOcrReader` | `.pdf` (`pdfEngine: mistral`) | Mistral OCR HTTP API (native fetch) |
 | `DoclingReader` | `.pdf` (`pdfEngine: docling`); also `.doc`/`.ppt` | Docling CLI (opt-in) |
 | `HtmlReader` | `.html`, `.htm` | `cheerio` + `html-to-text` |
 | `OfficeReader` | `.docx`, `.xlsx`, `.pptx` | `officeparser` |
 | `RtfReader` | `.rtf` | `rtf-parser` |
-| `ImageReader` | `.jpg`, `.png`, `.gif`, `.webp`, etc. | Vision model via Ollama |
+| `ImageReader` | `.jpg`, `.png`, `.gif`, `.webp`, etc. | Vision model via Ollama (+ opt-in `exifr` EXIF / `c2patool` C2PA enrichment → graph facts) |
 | `AudioReader` | `.mp3`, `.wav`, `.ogg`, `.m4a`, etc. | `whisper` engine (`nodejs-whisper`) or `dual` engine (Python `audio-pipeline`: VAD + Parakeet/Whisper dual-STT + diarization) |
 | `BinaryReader` | Unknown/binary | Skips gracefully |
 
