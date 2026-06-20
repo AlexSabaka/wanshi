@@ -74,6 +74,20 @@ describe('MineScorer', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('is concurrency-invariant — the bounded pool preserves order + results', async () => {
+    const { judge } = makeJudge();
+    const facts = [
+      'Butterflies undergo a remarkable transformation.', // supported
+      'Photosynthesis occurs in every plant.',            // not in the graph
+      'Caterpillars become butterflies.',                 // supported
+    ];
+    const seq = await new MineScorer(fakeEmbeddings, judge, { topK: 15, concurrency: 1 }).score('wanshi', graph, facts);
+    const par = await new MineScorer(fakeEmbeddings, judge, { topK: 15, concurrency: 8 }).score('wanshi', graph, facts);
+    expect(par.perFact.map((f) => f.fact)).toEqual(facts); // order preserved despite parallelism
+    expect(par.perFact.map((f) => f.evaluation)).toEqual(seq.perFact.map((f) => f.evaluation));
+    expect(par.accuracy).toBe(seq.accuracy);
+  });
+
   it('honors topK (fewer retrieved nodes ⇒ smaller context)', async () => {
     const { judge } = makeJudge();
     const wide = new MineScorer(fakeEmbeddings, judge, { topK: 15 });

@@ -40,6 +40,10 @@ export interface MineScorerOptions {
   /** Entities retrieved per fact; their incident triples form the context.
    *  Mirrors kg-gen's node-embedding retrieve (default tuned to its context size). */
   topK: number;
+  /** Facts judged concurrently. The judge is ~15 LLM calls/graph and the bottleneck;
+   *  the calls are independent so a bounded pool is a pure ~10× speedup (same results).
+   *  The provider already retries 429s, so a modest pool is safe against rate limits. */
+  concurrency?: number;
 }
 
 export class MineScorer {
@@ -54,12 +58,19 @@ export class MineScorer {
     const nodeEmb = nodes.length ? await this.embeddings.embedBatch(nodes) : [];
     const incident = this.buildIncident(graph);
 
-    const perFact: MineFactResult[] = [];
-    for (const fact of facts) {
-      const context = nodes.length ? await this.retrieve(fact, nodes, nodeEmb, incident) : '';
-      const evaluation = context ? await this.judgeFact(context, fact) : 0;
-      perFact.push({ fact, context, evaluation });
-    }
+    // Judge facts through a bounded-concurrency pool (order preserved by index).
+    const perFact: MineFactResult[] = new Array(facts.length);
+    const limit = Math.max(1, Math.min(this.opts.concurrency ?? 8, facts.length || 1));
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      for (let i = next++; i < facts.length; i = next++) {
+        const fact = facts[i];
+        const context = nodes.length ? await this.retrieve(fact, nodes, nodeEmb, incident) : '';
+        const evaluation = context ? await this.judgeFact(context, fact) : 0;
+        perFact[i] = { fact, context, evaluation };
+      }
+    };
+    await Promise.all(Array.from({ length: limit }, () => worker()));
 
     const correct = perFact.reduce((s, r) => s + r.evaluation, 0);
     const total = facts.length;

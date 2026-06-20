@@ -141,6 +141,7 @@ program
   .option('--judge-host <url>',        'MINE judge host / OpenAI-compatible base URL (default: generation host)')
   .option('--judge-api-key <key>',     'MINE judge API key (default: the generation key)')
   .option('--retrieval-top-k <n>',     'MINE: entities retrieved per fact (incident triples form the context)','15')
+  .option('--judge-concurrency <n>',   'MINE: facts judged in parallel (bounded pool; the judge is the bottleneck)','8')
   .option('--no-rescore-baselines',    'MINE: skip re-scoring the stored KGGen/GraphRAG/OpenIE graphs (wanshi only)')
   .option('--corpus-profiling',        'MINE: build a corpus glossary (domain entity/relation vocab) before extraction — fixes the code-biased base vocab collapsing general-knowledge prose to related_to')
   .option('--open-predicate',          'Free-vocabulary extraction: drop the closed entity/relation enum (no related_to coercion) — measures the canonicalization tax')
@@ -205,7 +206,8 @@ program
       }
 
       const topK = parseInt(opts.retrievalTopK, 10) || 15;
-      const scorer = new MineScorer(embeddingService, judge, { topK });
+      const concurrency = parseInt(opts.judgeConcurrency, 10) || 8;
+      const scorer = new MineScorer(embeddingService, judge, { topK, concurrency });
 
       logger.info(`Loading MINE from ${dataPath}`);
       const mineSamples = await new MineDataset().load(dataPath, limit, logger);
