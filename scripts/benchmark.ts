@@ -245,11 +245,15 @@ program
       }
 
       const mineRunner = new MineRunner(kgBuilder as any, promptManager, scorer, logger);
+      const armKey = `${opts.promptVersion}${glossary ? '+glossary' : ''}`;
       const mineResult = await mineRunner.run(mineSamples, {
         model: opts.model,
         judgeModel,
         rescoreBaselines: opts.rescoreBaselines !== false,
         glossary,
+        // Per-article checkpoint sidecar next to the report (crash-resilient sweep).
+        checkpointPath: opts.output ? `${opts.output}.mine-checkpoint.jsonl` : undefined,
+        armKey,
       });
 
       const mineReporter = new MineReporter();

@@ -4,6 +4,7 @@ import { Logger } from '../../shared';
 import { CorpusGlossary, ProcessedFile } from '../../types';
 import { KnowledgeGraph } from '../../types/KnowledgeGraph';
 import { MineScorer } from './MineScorer';
+import { MineCheckpoint } from './MineCheckpoint';
 import {
   MINE_PUBLISHED,
   MineArticleResult,
@@ -24,6 +25,12 @@ export interface MineRunnerOptions {
    *  instead of the code-biased base set that collapses general-knowledge prose to
    *  `related_to`. Only affects wanshi's extraction; the stored baselines are untouched. */
   glossary?: CorpusGlossary;
+  /** Per-article checkpoint sidecar (JSONL). When set, completed articles are
+   *  persisted and a re-run resumes after a crash (the overnight reboot wiped a run). */
+  checkpointPath?: string;
+  /** Run-config signature folded into the checkpoint key (prompt arm / glossary /
+   *  open-predicate) so a config change invalidates stale checkpointed articles. */
+  armKey?: string;
 }
 
 const BASELINE_TOOLS: Exclude<MineTool, 'wanshi'>[] = ['kggen', 'graphrag', 'openie'];
@@ -58,8 +65,25 @@ export class MineRunner {
     }
     const perArticle: MineArticleResult[] = [];
 
+    // Per-article checkpoint: resume after a crash; key folds in the run config so a
+    // config change never reuses a stale article.
+    const checkpoint = opts.checkpointPath
+      ? new MineCheckpoint(opts.checkpointPath, this.logger)
+      : undefined;
+    if (checkpoint) await checkpoint.load();
+    const keyFor = (id: string) =>
+      `${opts.model}␟${opts.judgeModel}␟${opts.armKey ?? ''}␟${opts.rescoreBaselines}␟${id}`;
+
     for (let i = 0; i < samples.length; i++) {
       const s = samples[i];
+
+      const cached = checkpoint?.get(keyFor(s.id));
+      if (cached) {
+        this.logger.info(`[${i + 1}/${samples.length}] MINE article ${s.id} (${s.topic}) — restored from checkpoint`);
+        perArticle.push(cached);
+        continue;
+      }
+
       this.logger.info(`[${i + 1}/${samples.length}] MINE article ${s.id} (${s.topic}) — ${s.facts.length} facts`);
 
       const wanshiKg = await this.extract(s, systemPrompt, opts.glossary);
@@ -79,13 +103,15 @@ export class MineRunner {
           .map((t) => `${t}=${(scores[t]!.accuracy * 100).toFixed(1)}%`)
           .join('  ')}`
       );
-      perArticle.push({
+      const article: MineArticleResult = {
         id: s.id,
         topic: s.topic,
         scores,
         wanshiGraph: wanshiKg,
         relatedToShare: relatedToShare(wanshiKg),
-      });
+      };
+      perArticle.push(article);
+      if (checkpoint) await checkpoint.append(keyFor(s.id), article);
     }
 
     const meanRelatedTo = perArticle.length
