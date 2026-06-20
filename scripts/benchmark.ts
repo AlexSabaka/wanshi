@@ -204,7 +204,7 @@ program
       const scorer = new MineScorer(embeddingService, judge, { topK });
 
       logger.info(`Loading MINE from ${dataPath}`);
-      const mineSamples = await new MineDataset().load(dataPath, limit);
+      const mineSamples = await new MineDataset().load(dataPath, limit, logger);
       logger.info(`Loaded ${mineSamples.length} MINE articles (judge: ${judgeModel}, top-k: ${topK})`);
       if (mineSamples.length === 0) {
         logger.error('No MINE samples loaded — check the data path (run scripts/fetch-mine.ts)');

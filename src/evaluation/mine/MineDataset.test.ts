@@ -46,3 +46,34 @@ describe('MineDataset.parseRow', () => {
     expect(g.relations).toHaveLength(1);
   });
 });
+
+describe('MineDataset alignment guard (the HF mirror essay↔graph desync)', () => {
+  const vrEssay =
+    'Virtual reality in education. VR technology lets students explore simulations and ' +
+    'practice procedures in an immersive virtual classroom.';
+
+  it('alignmentScore is ~1 for the essay’s own graph, ~0 for a foreign one', () => {
+    const own = MineDataset.toGraph({ entities: ['virtual reality', 'students', 'simulations'], relations: [] });
+    const foreign = MineDataset.toGraph({ entities: ['backgammon', 'medieval', 'dice'], relations: [] });
+    expect(MineDataset.alignmentScore(vrEssay, own)).toBeGreaterThanOrEqual(0.6);
+    expect(MineDataset.alignmentScore(vrEssay, foreign)).toBeLessThan(0.25);
+  });
+
+  it('drops a misaligned baseline graph but keeps the aligned one', () => {
+    const sample = MineDataset.parseRow(
+      {
+        id: 19,
+        essay_topic: 'Virtual Reality in Education',
+        essay_content: vrEssay,
+        generated_queries: ['VR helps students learn.'],
+        // kggen is THIS essay's graph; graphrag is a board-games graph (the desync bug).
+        kggen: { entities: ['virtual reality', 'students'], edges: [], relations: [] },
+        graphrag_kg: { entities: ['backgammon', 'medieval', 'dice'], edges: [], relations: [] },
+      },
+      0
+    )!;
+    MineDataset.guardBaselineAlignment([sample]);
+    expect(sample.baselines.kggen).toBeDefined();      // aligned → kept
+    expect(sample.baselines.graphrag).toBeUndefined(); // misaligned → dropped (not scored as 0)
+  });
+});

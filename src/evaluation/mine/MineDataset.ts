@@ -1,7 +1,20 @@
 import * as fs from 'fs';
 import * as readline from 'readline';
 import { Entity, KnowledgeGraph, Relation } from '../../types/KnowledgeGraph';
-import { MineBaselineGraphRaw, MineSample } from './types';
+import { Logger } from '../../shared';
+import { MineBaselineGraphRaw, MineSample, MineTool } from './types';
+
+/**
+ * Alignment guard threshold. The third-party HF mirror
+ * (josancamon/kg-gen-MINE-evaluation-dataset) ships baseline-graph columns that
+ * are DESYNCED from the essays past ~row 18 (verified against the live API: row 19
+ * is a VR essay carrying a board-games kggen graph). A misaligned baseline scores
+ * ~0 on every fact and silently poisons the four-way table. Guard: a baseline whose
+ * entities barely appear in its own essay belongs to a different article — drop it
+ * so it's excluded from scoring rather than counted as a (fake) zero. Aligned rows
+ * overlap ≥0.4; misaligned ~0.05, so 0.25 cleanly separates with margin.
+ */
+const MIN_BASELINE_ALIGNMENT = 0.25;
 
 // MINE benchmark (KGGen paper). One JSON object per line, written by
 // scripts/fetch-mine.ts from josancamon/kg-gen-MINE-evaluation-dataset:
@@ -24,7 +37,7 @@ interface MineRawRow {
 }
 
 export class MineDataset {
-  async load(dataPath: string, limit: number): Promise<MineSample[]> {
+  async load(dataPath: string, limit: number, logger?: Logger): Promise<MineSample[]> {
     if (!fs.existsSync(dataPath)) {
       throw new Error(
         `MINE data not found at: ${dataPath}\n` +
@@ -53,7 +66,49 @@ export class MineDataset {
       if (sample) samples.push(sample);
     }
 
+    MineDataset.guardBaselineAlignment(samples, logger);
     return samples;
+  }
+
+  /**
+   * Drop baseline graphs that don't belong to their essay (the HF mirror's
+   * essay↔graph desync). Mutates each sample's `baselines`, removing any non-empty
+   * graph whose entities barely appear in the essay; a dropped baseline is then
+   * skipped by the runner (so it never counts as a fake zero). Logs a per-tool tally
+   * — a high drop count is the loud signal that the data source is corrupt.
+   */
+  static guardBaselineAlignment(samples: MineSample[], logger?: Logger): void {
+    const dropped: Record<string, number> = {};
+    for (const s of samples) {
+      for (const tool of Object.keys(s.baselines) as Exclude<MineTool, 'wanshi'>[]) {
+        const g = s.baselines[tool];
+        if (!g || g.entities.length === 0) continue; // empty = legit absence, not misalignment
+        if (MineDataset.alignmentScore(s.text, g) < MIN_BASELINE_ALIGNMENT) {
+          delete s.baselines[tool];
+          dropped[tool] = (dropped[tool] ?? 0) + 1;
+        }
+      }
+    }
+    const total = Object.values(dropped).reduce((a, b) => a + b, 0);
+    if (total > 0 && logger) {
+      const detail = Object.entries(dropped).map(([t, n]) => `${t}:${n}`).join(' ');
+      logger.warn(
+        `MINE alignment guard dropped ${total} misaligned baseline graph(s) [${detail}] ` +
+          `across ${samples.length} articles — the source's essay↔graph columns are desynced. ` +
+          `Those (tool,article) cells are excluded from the four-way (not scored as 0).`
+      );
+    }
+  }
+
+  /** Fraction of a graph's entity names that appear (case-insensitive substring)
+   *  in the essay. ~1 when the graph is this essay's; ~0 when it's another's. */
+  static alignmentScore(text: string, graph: KnowledgeGraph): number {
+    const ents = graph.entities;
+    if (ents.length === 0) return 0;
+    const hay = text.toLowerCase();
+    let hit = 0;
+    for (const e of ents) if (e.name && hay.includes(e.name.toLowerCase())) hit++;
+    return hit / ents.length;
   }
 
   /** Pure row → MineSample mapping (static for unit testing without a file). */
