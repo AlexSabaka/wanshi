@@ -28,7 +28,8 @@ describe('MineDataset.parseRow', () => {
       relationType: ['undergo'],
     });
     expect(s.baselines.graphrag!.entities).toHaveLength(1);
-    expect(s.baselines.openie!.entities).toHaveLength(0);
+    // openie has no entities → omitted entirely (not scored as a fake 0).
+    expect(s.baselines.openie).toBeUndefined();
   });
 
   it('returns null when essay text or facts are missing', () => {

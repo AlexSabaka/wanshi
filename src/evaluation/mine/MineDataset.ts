@@ -117,17 +117,19 @@ export class MineDataset {
     const facts = raw.generated_queries;
     if (!text || !facts || facts.length === 0) return null;
 
-    return {
-      id: String(raw.id ?? index),
-      topic: raw.essay_topic ?? '',
-      text,
-      facts,
-      baselines: {
-        kggen: MineDataset.toGraph(raw.kggen),
-        graphrag: MineDataset.toGraph(raw.graphrag_kg),
-        openie: MineDataset.toGraph(raw.openie_kg),
-      },
-    };
+    // Only include a baseline when it actually carries a graph. An empty/absent
+    // graph (the tool produced nothing, OR our re-align found no confident match —
+    // see scripts/realign-mine.ts) must be OMITTED, not scored as a fake 0, so the
+    // four-way aggregate covers only the (article, tool) cells we really have.
+    const baselines: MineSample['baselines'] = {};
+    const kggen = MineDataset.toGraph(raw.kggen);
+    if (kggen.entities.length) baselines.kggen = kggen;
+    const graphrag = MineDataset.toGraph(raw.graphrag_kg);
+    if (graphrag.entities.length) baselines.graphrag = graphrag;
+    const openie = MineDataset.toGraph(raw.openie_kg);
+    if (openie.entities.length) baselines.openie = openie;
+
+    return { id: String(raw.id ?? index), topic: raw.essay_topic ?? '', text, facts, baselines };
   }
 
   /** Map a stored {entities, edges, relations} baseline graph to a wanshi
