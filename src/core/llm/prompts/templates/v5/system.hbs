@@ -62,6 +62,13 @@ User's description of the working directory:
 
 ## Controlled vocabularies
 
+{{#if openVocabulary}}
+**No fixed vocabulary.** For each entity choose the most natural type, and for each
+relation the single most precise predicate that names what the text says — use the
+exact verb/relationship the sentence implies (`feeds_on`, `becomes`,
+`lays_eggs_on`, `regulates`, …). All lowercase `snake_case`. Always prefer a
+specific predicate; **never** fall back to a generic `related_to`.
+{{else}}
 {{#if entityTypeVocabulary}}
 **Entity types — use these and only these.** If an entity does not fit any of
 them, choose the closest fit. Coining a new type fragments the merged graph, so
@@ -100,6 +107,7 @@ produces, consumes, configures, references, defines, targets,
 located_in, works_at, member_of, precedes, causes, has_attribute,
 related_to
 ```
+{{/if}}
 {{/if}}
 
 ## Extraction rules

@@ -126,6 +126,10 @@ export interface BuilderOptions {
   // Experiment 2) can judge edges. Off by default — keeps the baseline graph
   // free of the extra weight. Wired from `pipeline.grounding.enabled`.
   attachSourceSpans?: boolean;
+  // Free-vocabulary extraction: skip the closed entity/relation enum entirely so
+  // the model emits any predicate/type (no `related_to`/`other` coercion). The
+  // canonicalization-tax measurement. Wired from `pipeline.extraction.openPredicate`.
+  openPredicate?: boolean;
 }
 
 /**
@@ -142,6 +146,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   private logger: Logger;
   private progress: IProgressEmitter;
   private grounding: GroundingMode;
+  private openPredicate: boolean;
   private groundingMinScore: number;
   private groundingChecker: IGroundingChecker;
   private groundingSignature: string;
@@ -167,6 +172,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       options.groundingChecker ?? new KeywordGroundingChecker(this.groundingMinScore);
     this.groundingSignature = options.groundingSignature ?? '';
     this.attachSourceSpans = options.attachSourceSpans ?? false;
+    this.openPredicate = options.openPredicate ?? false;
   }
 
   /** Chunks whose extraction failed this run (empty when all succeeded). */
@@ -489,7 +495,9 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   private resolveAllowedTypes(
     contentClasses?: ClassificationResult[],
     glossary?: CorpusGlossary
-  ): string[] {
+  ): string[] | undefined {
+    // Open-predicate: no enum at all → buildGraphSchema falls to free `z.string()`.
+    if (this.openPredicate) return undefined;
     return allowedEntityTypes(contentClasses, glossary?.entityTypes ?? []);
   }
 
@@ -503,7 +511,9 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
   private resolveAllowedRelationTypes(
     contentClasses?: ClassificationResult[],
     glossary?: CorpusGlossary
-  ): string[] {
+  ): string[] | undefined {
+    // Open-predicate: no enum at all → buildGraphSchema falls to free `z.string()`.
+    if (this.openPredicate) return undefined;
     return allowedRelationTypes(contentClasses, glossary?.relationTypes ?? []);
   }
 

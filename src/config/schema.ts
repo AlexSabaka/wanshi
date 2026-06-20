@@ -711,6 +711,22 @@ const StageToggleSchema = z
   .object({ enabled: z.boolean().default(true) })
   .strict();
 
+// The extraction stage: the bare toggle plus the vocabulary mode. `openPredicate`
+// drops the closed entity/relation enum (and the `related_to`/`other` coercion) for
+// free `z.string()` types — the measurement of the canonicalization tax: it lifts
+// information recall (MINE) at the cost of merge/graph hygiene. Default closed.
+const ExtractionStageSchema = z
+  .object({
+    enabled: z.boolean().default(true),
+    openPredicate: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Free-vocabulary extraction: emit any predicate/entity type (no closed enum, no related_to/other coercion). Lifts recall, costs merge hygiene. Default closed."
+      ),
+  })
+  .strict();
+
 const TfAnalysisStageSchema = z
   .object({
     enabled: z.boolean().default(true),
@@ -828,7 +844,7 @@ const PipelineSchema = z
       .describe("Ordered stage list; reorder for Experiment 2 (typeless-first)"),
     tfAnalysis: TfAnalysisStageSchema.default({}),
     schemaInduction: StageToggleSchema.default({}),
-    extraction: StageToggleSchema.default({}),
+    extraction: ExtractionStageSchema.default({}),
     grounding: PipelineGroundingSchema.default({}),
     canonicalization: CanonicalizationSchema.default({}),
     relationFilter: PipelineRelationFilterSchema.default({}),

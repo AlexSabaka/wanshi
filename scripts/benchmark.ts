@@ -73,6 +73,7 @@ function buildProcessingOptions(opts: {
   embeddingsModel: string;
   embeddingsHost: string;
   promptVersion: string;
+  openPredicate?: boolean;
 }): ProcessingOptions {
   // One sample at a time: chunking / retrieval / corpus profiling / grounding
   // off. Generation targets Ollama or any OpenAI-compatible endpoint
@@ -105,6 +106,7 @@ function buildProcessingOptions(opts: {
     retrieval: { mode: 'disabled' },
     corpus: { profiling: 'disabled' },
     grounding: { mode: 'disabled' },
+    ...(opts.openPredicate ? { pipeline: { extraction: { openPredicate: true } } } : {}),
     classifier: { mode: opts.classifier as any },
     readers: { asr: { mode: 'disabled' }, images: 'disabled', outline: { enabled: false } },
     logging: { level: 'info' },
@@ -141,6 +143,7 @@ program
   .option('--retrieval-top-k <n>',     'MINE: entities retrieved per fact (incident triples form the context)','15')
   .option('--no-rescore-baselines',    'MINE: skip re-scoring the stored KGGen/GraphRAG/OpenIE graphs (wanshi only)')
   .option('--corpus-profiling',        'MINE: build a corpus glossary (domain entity/relation vocab) before extraction — fixes the code-biased base vocab collapsing general-knowledge prose to related_to')
+  .option('--open-predicate',          'Free-vocabulary extraction: drop the closed entity/relation enum (no related_to coercion) — measures the canonicalization tax')
   .action(async (opts) => {
     const datasetName = opts.dataset as string;
     const limitRaw    = parseInt(opts.limit, 10);
@@ -166,6 +169,7 @@ program
       embeddingsModel: opts.embeddingsModel,
       embeddingsHost: opts.embeddingsHost,
       promptVersion: opts.promptVersion,
+      openPredicate: !!opts.openPredicate,
     });
 
     const container = ContainerFactory.createContainer({ processingOptions });
@@ -245,12 +249,13 @@ program
       }
 
       const mineRunner = new MineRunner(kgBuilder as any, promptManager, scorer, logger);
-      const armKey = `${opts.promptVersion}${glossary ? '+glossary' : ''}`;
+      const armKey = `${opts.promptVersion}${glossary ? '+glossary' : ''}${opts.openPredicate ? '+open' : ''}`;
       const mineResult = await mineRunner.run(mineSamples, {
         model: opts.model,
         judgeModel,
         rescoreBaselines: opts.rescoreBaselines !== false,
         glossary,
+        openPredicate: !!opts.openPredicate,
         // Per-article checkpoint sidecar next to the report (crash-resilient sweep).
         checkpointPath: opts.output ? `${opts.output}.mine-checkpoint.jsonl` : undefined,
         armKey,

@@ -104,7 +104,8 @@ export class PromptManager {
     filter: string,
     description?: string,
     contentClasses?: ClassificationResult[],
-    glossary?: CorpusGlossary
+    glossary?: CorpusGlossary,
+    openVocabulary?: boolean
   ): Promise<string> {
     if (this.customSystemPrompt) {
       return this.customSystemPrompt;
@@ -125,14 +126,22 @@ export class PromptManager {
         userDescription: description,
       };
 
-      // Promote the corpus glossary to the *authoritative* closed vocabularies
-      // rendered in the system prompt (v5). Absent → the template falls back to
-      // its base entity/relation vocab. Names stay in the user prompt.
-      if (glossary?.entityTypes?.length) {
-        context.entityTypeVocabulary = glossary.entityTypes.join(', ');
-      }
-      if (glossary?.relationTypes?.length) {
-        context.relationTypeVocabulary = glossary.relationTypes.join(', ');
+      // Open-vocabulary mode (the canonicalization-tax arm): suppress every vocab
+      // constraint so the template renders "use any concise predicate" instead of a
+      // closed/base set — mirrors the builder dropping the Zod enum. Overrides the
+      // glossary (free predicates win over a controlled set).
+      if (openVocabulary) {
+        context.openVocabulary = true;
+      } else {
+        // Promote the corpus glossary to the *authoritative* closed vocabularies
+        // rendered in the system prompt (v5). Absent → the template falls back to
+        // its base entity/relation vocab. Names stay in the user prompt.
+        if (glossary?.entityTypes?.length) {
+          context.entityTypeVocabulary = glossary.entityTypes.join(', ');
+        }
+        if (glossary?.relationTypes?.length) {
+          context.relationTypeVocabulary = glossary.relationTypes.join(', ');
+        }
       }
 
       // Inject domain-specific examples if classification is available

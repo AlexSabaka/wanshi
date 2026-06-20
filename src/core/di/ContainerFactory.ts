@@ -799,6 +799,9 @@ export class ContainerFactory {
           // Stamp edge source spans only when the pipeline grounding gate needs
           // them, so the baseline graph stays free of the extra weight.
           attachSourceSpans: options.pipeline.grounding.enabled,
+          // Free-vocabulary extraction (canonicalization-tax measurement): drops the
+          // closed entity/relation enum so the model emits any predicate/type.
+          openPredicate: options.pipeline.extraction.openPredicate,
         },
         logger
       );

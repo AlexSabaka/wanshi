@@ -31,6 +31,10 @@ export interface MineRunnerOptions {
   /** Run-config signature folded into the checkpoint key (prompt arm / glossary /
    *  open-predicate) so a config change invalidates stale checkpointed articles. */
   armKey?: string;
+  /** Open-predicate arm: relax the system prompt's vocabulary instruction to match
+   *  the builder dropping the Zod enum (the builder reads the flag from config; the
+   *  prompt is rendered here, so the runner must pass it through). */
+  openPredicate?: boolean;
 }
 
 const BASELINE_TOOLS: Exclude<MineTool, 'wanshi'>[] = ['kggen', 'graphrag', 'openie'];
@@ -55,7 +59,8 @@ export class MineRunner {
       '**/*.txt',
       'MINE benchmark',
       undefined,
-      opts.glossary
+      opts.glossary,
+      opts.openPredicate
     );
     if (opts.glossary?.relationTypes?.length) {
       this.logger.info(

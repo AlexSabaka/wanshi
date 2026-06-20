@@ -163,6 +163,9 @@ describe("config schema", () => {
       "grounding",
       "canonicalization",
     ]);
+    // Extraction defaults to the closed vocabulary (open-predicate is opt-in).
+    expect(c.pipeline.extraction.enabled).toBe(true);
+    expect(c.pipeline.extraction.openPredicate).toBe(false);
     // Both new graph→transform stages are OFF by default → baseline behavior.
     expect(c.pipeline.grounding.enabled).toBe(false);
     expect(c.pipeline.grounding.requireCooccurrence).toBe(true);

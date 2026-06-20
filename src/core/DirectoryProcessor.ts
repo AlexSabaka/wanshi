@@ -531,7 +531,8 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       options.filter.join(', '),
       options.description,
       processedFile.metadata?.classes,
-      corpusProfile?.glossary
+      corpusProfile?.glossary,
+      options.pipeline.extraction.openPredicate
     );
 
     const graphs = await kgBuilder.build(
@@ -599,7 +600,8 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         options.filter.join(", "),
         options.description,
         pf.metadata?.classes,
-        corpusProfile?.glossary
+        corpusProfile?.glossary,
+        options.pipeline.extraction.openPredicate
       );
       return kgBuilder.build(pf, systemPrompt, undefined, corpusProfile?.glossary);
     };
@@ -656,7 +658,8 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         options.filter.join(", "),
         options.description,
         pf.metadata?.classes,
-        corpusProfile?.glossary
+        corpusProfile?.glossary,
+        options.pipeline.extraction.openPredicate
       );
       const graphs = await kgBuilder.build(pf, systemPrompt, undefined, corpusProfile?.glossary);
       return { chunks, graphs };
