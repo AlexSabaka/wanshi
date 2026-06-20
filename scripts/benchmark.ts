@@ -12,6 +12,7 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { Command } from 'commander';
 import { ContainerFactory, TYPES } from '../src/core/di';
@@ -20,7 +21,7 @@ import { KnowledgeGraphBuilder } from '../src/core/knowledge/KnowledgeGraphBuild
 import { PromptManager } from '../src/core/llm/prompts/PromptManager';
 import { EmbeddingService } from '../src/core/llm/EmbeddingService';
 import { Logger } from '../src/shared';
-import { ProcessingOptions } from '../src/types';
+import { ICorpusAnalyzer, ProcessingOptions } from '../src/types';
 
 import {
   RebelDataset,
@@ -129,7 +130,7 @@ program
   .option('--embeddings-model <name>', 'Embedding model',                                                    'nomic-embed-text')
   .option('--embeddings-host <url>',   'Embeddings host / OpenAI-compatible base URL',                       'http://localhost:11434')
   .option('--classifier <mode>',       'Content classifier: disabled | heuristic | llm | bert',              'heuristic')
-  .option('--prompt-version <ver>',    'Prompt template version to use (e.g. v4, v4.5)',                    'v4.5')
+  .option('--prompt-version <ver>',    'Prompt template version to use (e.g. v4.5, v5)',                    'v5')
   .option('--domain <domains>',        'Domain filter: single (ai) or comma-separated (ai,news,science)')
   .option('--output <path>',           'Save full JSON report to this file path')
   // ── MINE-only (--dataset mine): retrieve+judge scoring, four-way comparison ──
@@ -139,6 +140,7 @@ program
   .option('--judge-api-key <key>',     'MINE judge API key (default: the generation key)')
   .option('--retrieval-top-k <n>',     'MINE: entities retrieved per fact (incident triples form the context)','15')
   .option('--no-rescore-baselines',    'MINE: skip re-scoring the stored KGGen/GraphRAG/OpenIE graphs (wanshi only)')
+  .option('--corpus-profiling',        'MINE: build a corpus glossary (domain entity/relation vocab) before extraction — fixes the code-biased base vocab collapsing general-knowledge prose to related_to')
   .action(async (opts) => {
     const datasetName = opts.dataset as string;
     const limitRaw    = parseInt(opts.limit, 10);
@@ -209,11 +211,45 @@ program
         process.exit(1);
       }
 
+      // Optional corpus glossary: build a domain entity/relation vocabulary from
+      // the articles before extraction (the production pre-pass), so wanshi's
+      // closed vocab fits general-knowledge prose instead of collapsing it to
+      // `related_to`. Faithful path: write the articles to a temp corpus dir and
+      // run the real CorpusAnalyzer (term freq + classify + one LLM glossary call).
+      // Only wanshi's extraction sees it; the stored baselines are untouched.
+      let glossary;
+      if (opts.corpusProfiling) {
+        try {
+          const corpusDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wanshi-mine-corpus-'));
+          const files = mineSamples.map((s) => {
+            const fp = path.join(corpusDir, `${s.id}.txt`);
+            fs.writeFileSync(fp, s.text, 'utf-8');
+            return fp;
+          });
+          const analyzer = await container.resolve<ICorpusAnalyzer>(TYPES.CorpusAnalyzer);
+          const profileOptions: ProcessingOptions = {
+            ...processingOptions,
+            input: corpusDir,
+            output: path.join(corpusDir, 'profile'),
+            corpus: { ...processingOptions.corpus, profiling: 'enabled' },
+          };
+          const profile = await analyzer.analyzeOrLoad(files, profileOptions);
+          glossary = profile.glossary;
+          logger.info(
+            `MINE corpus glossary: ${glossary.relationTypes.length} relation types ` +
+              `[${glossary.relationTypes.slice(0, 12).join(', ')}${glossary.relationTypes.length > 12 ? ', …' : ''}]`
+          );
+        } catch (err) {
+          logger.warn(`MINE corpus profiling failed; extracting with the base vocab: ${err}`);
+        }
+      }
+
       const mineRunner = new MineRunner(kgBuilder as any, promptManager, scorer, logger);
       const mineResult = await mineRunner.run(mineSamples, {
         model: opts.model,
         judgeModel,
         rescoreBaselines: opts.rescoreBaselines !== false,
+        glossary,
       });
 
       const mineReporter = new MineReporter();

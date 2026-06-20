@@ -1,7 +1,7 @@
 import { KnowledgeGraphBuilder } from '../../core/knowledge/KnowledgeGraphBuilder';
 import { PromptManager } from '../../core/llm/prompts/PromptManager';
 import { Logger } from '../../shared';
-import { ProcessedFile } from '../../types';
+import { CorpusGlossary, ProcessedFile } from '../../types';
 import { KnowledgeGraph } from '../../types/KnowledgeGraph';
 import { MineScorer } from './MineScorer';
 import {
@@ -19,6 +19,11 @@ export interface MineRunnerOptions {
   /** Re-score the stored KGGen/GraphRAG/OpenIE graphs with the same retrieve+judge
    *  (the apples-to-apples four-way table). Off ⇒ wanshi-only. */
   rescoreBaselines: boolean;
+  /** Corpus-specific glossary (entity/relation vocab) built by the pre-pass. When
+   *  present it becomes wanshi's closed extraction vocabulary — domain predicates
+   *  instead of the code-biased base set that collapses general-knowledge prose to
+   *  `related_to`. Only affects wanshi's extraction; the stored baselines are untouched. */
+  glossary?: CorpusGlossary;
 }
 
 const BASELINE_TOOLS: Exclude<MineTool, 'wanshi'>[] = ['kggen', 'graphrag', 'openie'];
@@ -38,14 +43,26 @@ export class MineRunner {
 
   async run(samples: MineSample[], opts: MineRunnerOptions): Promise<MineResult> {
     const start = Date.now();
-    const systemPrompt = await this.promptManager.getSystemPrompt('mine', '**/*.txt', 'MINE benchmark');
+    const systemPrompt = await this.promptManager.getSystemPrompt(
+      'mine',
+      '**/*.txt',
+      'MINE benchmark',
+      undefined,
+      opts.glossary
+    );
+    if (opts.glossary?.relationTypes?.length) {
+      this.logger.info(
+        `MINE glossary active: ${opts.glossary.relationTypes.length} relation types, ` +
+          `${opts.glossary.entityTypes.length} entity types`
+      );
+    }
     const perArticle: MineArticleResult[] = [];
 
     for (let i = 0; i < samples.length; i++) {
       const s = samples[i];
       this.logger.info(`[${i + 1}/${samples.length}] MINE article ${s.id} (${s.topic}) — ${s.facts.length} facts`);
 
-      const wanshiKg = await this.extract(s, systemPrompt);
+      const wanshiKg = await this.extract(s, systemPrompt, opts.glossary);
       const scores: Partial<Record<MineTool, MineGraphScore>> = {
         wanshi: await this.scorer.score('wanshi', wanshiKg, s.facts),
       };
@@ -76,7 +93,11 @@ export class MineRunner {
     };
   }
 
-  private async extract(s: MineSample, systemPrompt: string): Promise<KnowledgeGraph> {
+  private async extract(
+    s: MineSample,
+    systemPrompt: string,
+    glossary?: CorpusGlossary
+  ): Promise<KnowledgeGraph> {
     try {
       const processedFile: ProcessedFile = {
         path: `mine/${s.id}.txt`,
@@ -85,7 +106,7 @@ export class MineRunner {
         ],
         metadata: {},
       };
-      const graphs = await this.kgBuilder.build(processedFile, systemPrompt);
+      const graphs = await this.kgBuilder.build(processedFile, systemPrompt, undefined, glossary);
       return graphs.length > 0 ? graphs[0] : { entities: [], relations: [] };
     } catch (err) {
       this.logger.warn(`MINE article ${s.id} extraction failed: ${err}`);
