@@ -1,0 +1,36 @@
+/**
+ * CSS files with the .module.css suffix will be treated as CSS modules
+ * and scoped locally.
+ */
+
+.heroBanner {
+  padding: 4rem 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  /* "neon-graph-on-petrol" — the hero is dark in both themes (dark is the brand). */
+  background: radial-gradient(120% 160% at 18% -10%, #11414a 0%, #0c2834 45%, #07171c 100%);
+  color: #d8faf6;
+}
+
+.heroBanner :global(.hero__title) {
+  color: #4fe6d7;
+  text-shadow: 0 0 28px rgba(79, 230, 215, 0.35);
+}
+
+.heroBanner :global(.hero__subtitle) {
+  color: #7aecdf;
+  font-weight: 500;
+}
+
+@media screen and (max-width: 996px) {
+  .heroBanner {
+    padding: 2rem;
+  }
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

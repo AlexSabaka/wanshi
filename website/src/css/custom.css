@@ -1,0 +1,37 @@
+/**
+ * Global styles. Infima variables overridden to the wanshi brand palette,
+ * harvested from the dark/light banner SVGs + avatar: a cool cyan/teal spine
+ * with a single warm amber accent (kept precious — used only in the logo).
+ * Dark is the hero.
+ */
+
+/* Light mode — primary = brand teal (#0c8f84), legible on white. */
+:root {
+  --ifm-color-primary: #0c8f84;
+  --ifm-color-primary-dark: #0b8178;
+  --ifm-color-primary-darker: #0a796f;
+  --ifm-color-primary-darkest: #08605a;
+  --ifm-color-primary-light: #0e9d91;
+  --ifm-color-primary-lighter: #10a89b;
+  --ifm-color-primary-lightest: #15c3b4;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(12, 143, 132, 0.1);
+}
+
+/* Dark mode (the hero) — primary = neon cyan (#4fe6d7) on a petrol ground. */
+[data-theme='dark'] {
+  --ifm-color-primary: #4fe6d7;
+  --ifm-color-primary-dark: #34e1cf;
+  --ifm-color-primary-darker: #27dec9;
+  --ifm-color-primary-darkest: #1cae9d;
+  --ifm-color-primary-light: #6aebde;
+  --ifm-color-primary-lighter: #7aecdf;
+  --ifm-color-primary-lightest: #a0f1e9;
+
+  /* Petrol ground from the dark banner (#0c2834), nudged darker for text contrast. */
+  --ifm-background-color: #0c2329;
+  --ifm-background-surface-color: #102e35;
+  --ifm-navbar-background-color: #0b2027;
+  --ifm-footer-background-color: #081a1f;
+  --docusaurus-highlighted-code-line-bg: rgba(79, 230, 215, 0.12);
+}
