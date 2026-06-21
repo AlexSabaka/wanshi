@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { EventEmitter } from "node:events"
 import { createInterface } from "node:readline"
 import { randomUUID } from "node:crypto"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { buildKgConfig, type KgGenConfig } from "@/lib/kg-options"
@@ -58,14 +58,21 @@ export function repoCwd(): string {
   return process.env.WANSHI_CWD || path.resolve(process.cwd(), "..")
 }
 /**
- * How to launch the CLI. Defaults to the built binary — a single node process,
- * so one SIGINT reaches the CLI's graceful-shutdown handler directly. (An `npx`
- * wrapper would forward the signal too, double-counting it into a force-quit.)
- * Requires `npm run build` in the repo root; override with WANSHI_CMD to point
- * at a ts-node invocation if you prefer running from source.
+ * How to launch the CLI. Resolution order:
+ *  1. `WANSHI_CMD` (explicit override), else
+ *  2. the built binary `node dist/index.js` when `dist/` exists — a single node
+ *     process, so one SIGINT reaches the CLI's graceful-shutdown handler directly
+ *     (an `npx` wrapper would forward the signal too, double-counting it), else
+ *  3. run from source via `ts-node --transpile-only src/index.ts` (still a single
+ *     process) so the frontend works without a prior `npm run build`.
  */
 export function launchCmd(): string[] {
-  return (process.env.WANSHI_CMD || "node dist/index.js").split(/\s+/)
+  if (process.env.WANSHI_CMD) return process.env.WANSHI_CMD.split(/\s+/)
+  const root = repoCwd()
+  if (existsSync(path.join(root, "dist", "index.js"))) return ["node", "dist/index.js"]
+  const localTsNode = path.join(root, "node_modules", ".bin", "ts-node")
+  const bin = existsSync(localTsNode) ? localTsNode : "ts-node"
+  return [bin, "--transpile-only", "src/index.ts"]
 }
 
 /**
