@@ -81,7 +81,7 @@ function loadDotEnv(): void {
 function buildProcessingOptions(opts: {
   provider: string; model: string; host: string; apiKey?: string;
   embeddingsProvider: string; embeddingsModel: string; embeddingsHost: string;
-  promptVersion: string; openPredicate: boolean;
+  promptVersion: string; openPredicate: boolean; strictVocabulary: boolean;
 }): ProcessingOptions {
   return parseConfig({
     input: 'benchmark',
@@ -104,7 +104,7 @@ function buildProcessingOptions(opts: {
     grounding: { mode: 'disabled' },
     classifier: { mode: 'disabled' },
     readers: { asr: { mode: 'disabled' }, images: 'disabled', outline: { enabled: false } },
-    pipeline: { extraction: { openPredicate: opts.openPredicate } },
+    pipeline: { extraction: { openPredicate: opts.openPredicate, strictVocabulary: opts.strictVocabulary } },
     logging: { level: 'info' },
   });
 }
@@ -217,6 +217,8 @@ program
       apiKey: opts.apiKey || process.env.OPENAI_API_KEY || process.env.WANSHI_API_KEY || process.env.KG_API_KEY,
       embeddingsProvider: opts.embeddingsProvider, embeddingsModel: opts.embeddingsModel,
       embeddingsHost: opts.embeddingsHost, promptVersion: opts.promptVersion, openPredicate,
+      // A supplied closed schema (H4) is STRICT — exactly those predicates, base NOT unioned.
+      strictVocabulary: !!relationVocab,
     });
     const container = ContainerFactory.createContainer({ processingOptions });
     const logger = await container.resolve<Logger>(TYPES.Logger);
