@@ -10,6 +10,10 @@ on:
         description: "Dry run (build/test/pack, but do NOT publish)"
         type: boolean
         default: true
+      tag:
+        description: "npm dist-tag (latest, next, beta, ...)"
+        type: string
+        default: latest
 
 jobs:
   publish:
@@ -41,6 +45,6 @@ jobs:
 
       - name: Publish
         if: ${{ !inputs.dry_run }}
-        run: npm publish --access public --ignore-scripts
+        run: npm publish --access public --tag ${{ inputs.tag }} --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,7 +1,23 @@
 {
   "name": "wanshi",
-  "version": "1.0.0",
-  "description": "Knowledge Graph Generator",
+  "version": "0.1.0",
+  "description": "Local-first CLI that turns files, code, PDFs, audio and transcripts into a provenance-tracked knowledge graph — via local Ollama or any OpenAI-compatible LLM.",
+  "keywords": [
+    "knowledge-graph",
+    "knowledge-graph-extraction",
+    "entity-extraction",
+    "relation-extraction",
+    "ner",
+    "llm",
+    "ollama",
+    "openai",
+    "rag",
+    "mcp",
+    "provenance",
+    "temporal-knowledge-graph",
+    "cli",
+    "typescript"
+  ],
   "main": "./dist/index.js",
   "bin": {
     "wanshi": "./dist/cli/index.js"
@@ -13,11 +29,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AlexSabaka/wanshi.git"
+    "url": "git+https://github.com/wanshi-kg/wanshi.git"
   },
-  "homepage": "https://github.com/AlexSabaka/wanshi#readme",
+  "homepage": "https://github.com/wanshi-kg/wanshi#readme",
   "bugs": {
-    "url": "https://github.com/AlexSabaka/wanshi/issues"
+    "url": "https://github.com/wanshi-kg/wanshi/issues"
   },
   "engines": {
     "node": ">=18"
