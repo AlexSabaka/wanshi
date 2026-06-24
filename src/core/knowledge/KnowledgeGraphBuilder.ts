@@ -210,10 +210,13 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
    * The *deterministic* extraction inputs other than the chunk's own text (KG-07),
    * folded into the checkpoint key's `extra` so toggling any of them between
    * `--resume` runs re-extracts the affected chunks instead of silently reusing a
-   * graph built under different settings: the grounding signature (Phase 5), the
-   * rendered system prompt (which already encodes the resolved entity/relation
-   * vocabulary + domain examples → the "schema shape"), the corpus glossary, and
-   * the classifier classes.
+   * graph built under different settings: the grounding signature (Phase 5, now
+   * including `escalateAbove`+`host`), the rendered system prompt (which already
+   * encodes the resolved entity/relation vocabulary + domain examples → the "schema
+   * shape"), the corpus glossary, and the classifier classes. Also `strictVocabulary`
+   * + `openPredicate`: these change the resolved Zod *enum* (glossary REPLACES vs.
+   * augments the base sets / drops the enum entirely) **without** changing the
+   * system-prompt string, so they'd be invisible to the key otherwise (KG-07).
    *
    * Deliberately EXCLUDES the chunk's retrieved context: retrieval pulls from the
    * graph built by *prior* (temperature>0, non-deterministic) extractions, so it
@@ -233,6 +236,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       systemPrompt,
       glossary ? JSON.stringify(glossary) : '',
       contentClasses ? JSON.stringify(contentClasses) : '',
+      this.strictVocabulary ? 'strict' : '',
+      this.openPredicate ? 'open' : '',
     ]) {
       h.update(part);
       h.update('\x00');

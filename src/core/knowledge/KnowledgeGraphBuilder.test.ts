@@ -456,4 +456,45 @@ describe("KnowledgeGraphBuilder", () => {
     expect(extras[5]).toBe(extras[0]);
     expect(extras[6]).toBe(extras[5]);
   });
+
+  // KG-07 residual: `strictVocabulary` changes the resolved enum WITHOUT changing
+  // the system-prompt string, and `escalateAbove`/`host` (the minicheck short-circuit
+  // threshold + endpoint) ride in via the grounding signature. Both were absent from
+  // the key, so toggling either across --resume reused chunks built under a different
+  // enum / gate threshold. The key must re-key on each, and stay stable otherwise.
+  it("checkpoint key (extra) is sensitive to strictVocabulary and the grounding escalate/host", async () => {
+    const extras: string[] = [];
+    const checkpoint = {
+      computeKey: (...args: any[]) => {
+        extras.push(String(args[5])); // the extractionExtra signature
+        return args.join("|");
+      },
+      has: () => false,
+      get: () => undefined,
+      append: async () => {},
+    } as any;
+    const build = async (opts: any) => {
+      const builder = new KnowledgeGraphBuilder(
+        { llmService: hallucinatingLlm(), promptManager: promptStub(), model: "m", resume: true, checkpoint, ...opts },
+        stubLogger()
+      );
+      await builder.build(oneChunkFile(), "sys");
+    };
+
+    // strictVocabulary toggle (resolved enum changes, system prompt identical)
+    await build({}); // [0] strictVocabulary defaults false
+    await build({ strictVocabulary: true }); // [1] strict on → must re-key
+    await build({ strictVocabulary: true }); // [2] strict on again → stable
+
+    // escalateAbove rides in via the grounding signature (built by ContainerFactory)
+    await build({ groundingSignature: "drop|minicheck|0.5|m|0.8|" }); // [3]
+    await build({ groundingSignature: "drop|minicheck|0.5|m|0.9|" }); // [4] escalateAbove 0.8→0.9
+    // host rides in the same signature
+    await build({ groundingSignature: "drop|minicheck|0.5|m|0.8|http://h2:11434" }); // [5]
+
+    expect(extras[1]).not.toBe(extras[0]); // strictVocabulary re-keys
+    expect(extras[2]).toBe(extras[1]); // same strict setting → stable key
+    expect(extras[4]).not.toBe(extras[3]); // escalateAbove change re-keys
+    expect(extras[5]).not.toBe(extras[3]); // host change re-keys
+  });
 });

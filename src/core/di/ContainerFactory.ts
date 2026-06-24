@@ -770,8 +770,13 @@ export class ContainerFactory {
       // toggling the gate between --resume runs re-extracts affected chunks
       // (disabled ⇒ empty signature == legacy key, preserving old checkpoints).
       const g = options.grounding;
+      // KG-07: include `escalateAbove` (the minicheck short-circuit threshold) and
+      // `host` so toggling either across --resume re-extracts affected chunks
+      // instead of reusing a graph gated under a different threshold/endpoint.
       const groundingSignature =
-        g.mode === "disabled" ? "" : `${g.mode}|${g.checker}|${g.minScore}|${g.model}`;
+        g.mode === "disabled"
+          ? ""
+          : `${g.mode}|${g.checker}|${g.minScore}|${g.model}|${g.escalateAbove}|${g.host ?? ""}`;
       let groundingChecker: IGroundingChecker | undefined;
       if (g.mode !== "disabled" && g.checker === "minicheck") {
         const { MiniCheckGroundingChecker } = await import(
