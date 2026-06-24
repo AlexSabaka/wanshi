@@ -850,7 +850,7 @@ export class ContainerFactory {
 
       // Return a wrapper that implements the interface
       return {
-        merge: async (graphs) => {
+        merge: async (graphs, knownExternalEndpointNames) => {
           const records: import("../knowledge/MergeRecord").MergeRecord[] = [];
           const wantMergeLog = options.inspection.emitMergeLog;
           // The merge-log seam doubles as the trace merge-decision source: fold each
@@ -892,6 +892,7 @@ export class ContainerFactory {
               enableSimilarityMerging: options.merging.enableSimilarityMerging,
               contradictionChecker,
               onMergeRecord,
+              knownExternalEndpointNames,
             },
             embeddingService,
             logger

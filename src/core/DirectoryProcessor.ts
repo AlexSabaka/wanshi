@@ -97,6 +97,16 @@ export class DirectoryProcessor implements IDirectoryProcessor {
   constructor(private container: DIContainer) {}
 
   /**
+   * Names of entities that live outside this run's extracted set but are legitimate
+   * edge endpoints (KG-04): the loaded prior-graph entities + corpus-glossary
+   * `entityNames`, both already fed to retrieval so the v5 prompt points relations at
+   * them by name. Computed in `processFiles` (where both are in scope) and consumed by
+   * `mergeGraphs` so a compliant cross-run edge isn't dropped as a true dangler. Empty
+   * on the common default run (no prior graph, no glossary) ⇒ merge is byte-identical.
+   */
+  private knownExternalEndpointNames: Set<string> = new Set<string>();
+
+  /**
    * Process a directory and generate knowledge graphs
    */
   async processDirectory(options: ProcessingOptions): Promise<void> {
@@ -232,6 +242,18 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     // Optional corpus analysis pre-pass: build/load a corpus-specific glossary
     // (and cached per-file classification) once, before extraction.
     const corpusProfile = await this.buildCorpusProfile(files, options, logger);
+
+    // KG-04: the names retrieval can surface but merge won't re-extract — prior-graph
+    // entities + corpus-glossary entityNames. A v5-compliant edge pointing at one of
+    // these (by name, not re-emitted) must survive the dangling-edge gate; this set is
+    // threaded to mergeGraphs. Empty when there's no prior graph and no glossary (the
+    // common default), so the merge stays byte-identical to before.
+    const externalNames = new Set<string>();
+    for (const g of priorGraphs) {
+      for (const e of g.entities) externalNames.add(e.name);
+    }
+    for (const name of corpusProfile?.glossary.entityNames ?? []) externalNames.add(name);
+    this.knownExternalEndpointNames = externalNames;
 
     const fileProcessor = await this.container.resolve<IFileProcessor>(
       TYPES.FileProcessor
@@ -782,7 +804,10 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       TYPES.KnowledgeGraphMerger
     );
 
-    return await merger.merge(graphs);
+    // KG-04: pass the prior-graph + glossary names so a v5-compliant edge pointing at a
+    // retrieved (not re-emitted) entity survives the dangling-edge gate. Empty set ⇒
+    // no behavior change.
+    return await merger.merge(graphs, this.knownExternalEndpointNames);
   }
 
   /**

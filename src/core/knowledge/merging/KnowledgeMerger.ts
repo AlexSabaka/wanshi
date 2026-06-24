@@ -210,6 +210,18 @@ export interface MergeOptions {
   onMergeRecord?: (record: MergeRecord) => void;
   /** Called once at end-of-merge with the cross-file linking health (KG-04). */
   onMergeStats?: (stats: MergeStats) => void;
+  /**
+   * Names of entities that exist OUTSIDE this run's extracted set but are legitimate
+   * edge endpoints (KG-04): prior-graph entities + corpus-glossary `entityNames`, both
+   * fed to retrieval so the v5 prompt instructs the model to point relations at them
+   * *by name without re-emitting them*. An edge to such a name would otherwise die at
+   * the global dangling-edge gate (entityMap holds only current-run entities). When an
+   * endpoint resolves to one of these (and to no real entity), a lightweight STUB entity
+   * is materialized so the graph stays referentially intact without re-merging the
+   * external entity's observations. Empty/undefined (the common default, no prior graph
+   * and no glossary) ⇒ behavior is byte-identical to before.
+   */
+  knownExternalEndpointNames?: Set<string>;
   /** When set, run merge-time supersession (KG-10): a newer fact contradicting an
    *  older one invalidates the older (bi-temporal `invalidAt`/`expiredAt`) rather
    *  than deleting it. Off ⇒ no supersession (default). */
@@ -687,6 +699,24 @@ async function mergeGlobally(
   // file pass no longer destroys them.
   let droppedDanglingEdges = 0;
   let crossFileEdges = 0;
+  const externalNames = options.knownExternalEndpointNames;
+
+  // KG-04: an endpoint that no file in THIS run extracted, but which is a known
+  // external name (a prior-graph or corpus-glossary entity fed to retrieval — exactly
+  // what the v5 prompt instructs the model to point at by name), is a *legitimate*
+  // cross-run reference, not a true dangler. Materialize a lightweight STUB entity so
+  // the edge survives with referential integrity — name + a neutral type only, files
+  // empty, NO fabricated observations (we don't re-merge the external entity's facts).
+  // Returns true iff a stub was materialized (or already exists) for this name.
+  const materializeExternalStub = (name: string): boolean => {
+    if (entityMap.has(name)) return true;
+    if (!externalNames || !externalNames.has(name)) return false;
+    entityMap.set(name, { name, entityType: ENTITY_CATCH_ALL, files: [], observations: [] });
+    entityFileMap.set(name, new Set<string>());
+    entityTypeVotes.set(name, [ENTITY_CATCH_ALL]);
+    return true;
+  };
+
   fileGraphs.forEach((graph, gi) => {
     const localRename = renamePerGraph[gi];
     for (const relation of graph.relations) {
@@ -702,8 +732,13 @@ async function mergeGlobally(
       // mapping can also collapse both endpoints onto the same entity.
       if (fromEntity === toEntity) continue;
 
-      const fromNode = entityMap.get(fromEntity);
-      const toNode = entityMap.get(toEntity);
+      // An endpoint missing from entityMap survives ONLY if it's a known external
+      // name (→ a stub); an endpoint in neither set stays a true dangler and is dropped.
+      const fromOk = materializeExternalStub(fromEntity);
+      const toOk = materializeExternalStub(toEntity);
+
+      const fromNode = fromOk ? entityMap.get(fromEntity) : undefined;
+      const toNode = toOk ? entityMap.get(toEntity) : undefined;
       if (fromNode && toNode) {
         const relationType = canonicalizeRelationType(relation.relationType);
         const relationKey = `${fromEntity}->${toEntity}:${relationType.join(",")}`;

@@ -300,6 +300,88 @@ describe("KnowledgeMerger — cross-file linking (KG-04)", () => {
   });
 });
 
+describe("KnowledgeMerger — cross-RUN edge linking (KG-04 knownExternalEndpointNames)", () => {
+  it("keeps an edge pointing at a known external (prior-graph / glossary) name and materializes a stub endpoint", async () => {
+    // The v5 contract for the cross-RUN case: this run extracts only "Orchestrator"
+    // and points an edge at "Graph Store" — an entity that lives in the prior graph /
+    // glossary (fed to retrieval), NOT re-emitted this run. Before the fix this edge
+    // died at the global dangling gate (entityMap is current-run only).
+    const g: KnowledgeGraph = {
+      entities: [mkEnt("Orchestrator", "service", "a.txt")],
+      relations: [{ from: "Orchestrator", to: "Graph Store", relationType: ["produces"] }],
+    };
+
+    const stats: MergeStats[] = [];
+    const merged = await mergeKnowledgeGraphs(
+      [g],
+      {
+        ...opts,
+        onMergeStats: (s) => stats.push(s),
+        knownExternalEndpointNames: new Set(["Graph Store"]),
+      },
+      stubEmbed,
+      stubLogger()
+    );
+
+    // Edge survives...
+    expect(merged.relations).toHaveLength(1);
+    expect(merged.relations[0]).toMatchObject({ from: "Orchestrator", to: "Graph Store" });
+    expect(stats[0].droppedDanglingEdges).toBe(0);
+    // ...and a lightweight stub endpoint exists, with NO fabricated observations.
+    const stub = merged.entities.find((e) => e.name === "Graph Store");
+    expect(stub).toBeDefined();
+    expect(stub!.observations).toHaveLength(0);
+    expect(stub!.entityType).toBe("other");
+  });
+
+  it("still drops an edge whose endpoint is in NEITHER entityMap NOR the external set (no fabrication)", async () => {
+    const g: KnowledgeGraph = {
+      entities: [mkEnt("Orchestrator", "service", "a.txt")],
+      relations: [{ from: "Orchestrator", to: "Hallucinated", relationType: ["produces"] }],
+    };
+
+    const stats: MergeStats[] = [];
+    const merged = await mergeKnowledgeGraphs(
+      [g],
+      {
+        ...opts,
+        onMergeStats: (s) => stats.push(s),
+        // External set names a DIFFERENT entity; "Hallucinated" is in neither set.
+        knownExternalEndpointNames: new Set(["Graph Store"]),
+      },
+      stubEmbed,
+      stubLogger()
+    );
+
+    expect(merged.relations).toHaveLength(0);
+    expect(merged.entities.find((e) => e.name === "Hallucinated")).toBeUndefined();
+    expect(stats[0].droppedDanglingEdges).toBe(1);
+  });
+
+  it("with an empty external set, a dangling edge to an unknown name is still dropped (default unchanged)", async () => {
+    const g: KnowledgeGraph = {
+      entities: [mkEnt("Orchestrator", "service", "a.txt")],
+      relations: [{ from: "Orchestrator", to: "Nonexistent", relationType: ["produces"] }],
+    };
+
+    const stats: MergeStats[] = [];
+    const merged = await mergeKnowledgeGraphs(
+      [g],
+      {
+        ...opts,
+        onMergeStats: (s) => stats.push(s),
+        knownExternalEndpointNames: new Set<string>(),
+      },
+      stubEmbed,
+      stubLogger()
+    );
+
+    expect(merged.relations).toHaveLength(0);
+    expect(merged.entities.find((e) => e.name === "Nonexistent")).toBeUndefined();
+    expect(stats[0]).toEqual({ crossFileEdges: 0, droppedDanglingEdges: 1 });
+  });
+});
+
 describe("KnowledgeMerger — relation hygiene (cheap wins)", () => {
   const ent = (name: string) => ({
     name,
