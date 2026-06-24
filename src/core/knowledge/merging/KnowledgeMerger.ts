@@ -500,9 +500,11 @@ const ENTITY_CATCH_ALL = "other";
  * different files are distinct artifacts that must NOT fuse, whereas a `function`
  * or `concept` of the same name across files is the same thing and *should* merge
  * (the whole point of global cross-file linking). So identity is name+file for
- * these types only.
+ * these types only. `config` is included because a model commonly types a
+ * `package.json`/`tsconfig.json` artifact `config`, which otherwise fused across
+ * projects via the bare-name fast path.
  */
-const FILE_IDENTITY_TYPES = new Set(["file", "document"]);
+const FILE_IDENTITY_TYPES = new Set(["file", "document", "config"]);
 
 /** Field separator for a name+file qualified identity key (unit separator). */
 const ID_SEP = "␟";

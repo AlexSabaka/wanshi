@@ -22,6 +22,29 @@ const opts = {
 };
 
 describe("KnowledgeMerger — provenance & bi-temporal", () => {
+  it("keeps same-name config-typed file artifacts from different projects distinct (KG-13)", async () => {
+    const cfg = (file: string): KnowledgeGraph => ({
+      entities: [
+        {
+          name: "package.json",
+          entityType: "config",
+          files: [file],
+          observations: [{ text: `config at ${file}`, source: file, createdAt: "2026-01-01T00:00:00Z" }],
+        },
+      ],
+      relations: [],
+    });
+    const merged = await mergeKnowledgeGraphs(
+      [cfg("proj-a/package.json"), cfg("proj-b/package.json")],
+      opts,
+      stubEmbed,
+      stubLogger()
+    );
+    // Before KG-13, `config` wasn't a file-identity type, so the two distinct
+    // package.json artifacts fused (bare-name fast path + fuzzy JW 1.0). Now they stay apart.
+    expect(merged.entities.filter((e) => e.entityType === "config")).toHaveLength(2);
+  });
+
   it("keeps per-source attribution: two sources asserting one fact → two observations", async () => {
     const g1: KnowledgeGraph = {
       entities: [
