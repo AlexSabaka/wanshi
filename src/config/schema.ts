@@ -511,6 +511,9 @@ const ReferencesSchema = z
             uncertainBand: z
               .tuple([z.coerce.number(), z.coerce.number()])
               .default([0.34, 0.67])
+              .refine(([lo, hi]) => lo >= 0 && hi <= 1 && lo <= hi, {
+                message: "uncertainBand must satisfy 0 <= lo <= hi <= 1",
+              })
               .describe("[lo, hi]: support score ≤lo ⇒ unsupported, ≥hi ⇒ supported, between ⇒ uncertain"),
             cachePath: z
               .string()

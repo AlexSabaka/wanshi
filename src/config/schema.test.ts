@@ -84,6 +84,14 @@ describe("config schema", () => {
     expect(() => parseConfig({ llm: { provider: "bogus" } })).toThrow(ConfigError);
   });
 
+  it("rejects an inverted or out-of-range citation uncertainBand (WS-35)", () => {
+    const band = (b: number[]) => ({ references: { citations: { fetch: { uncertainBand: b } } } });
+    expect(() => parseConfig(band([0.7, 0.3]))).toThrow(ConfigError); // inverted
+    expect(() => parseConfig(band([-0.1, 0.5]))).toThrow(ConfigError); // lo < 0
+    expect(() => parseConfig(band([0.5, 1.5]))).toThrow(ConfigError); // hi > 1
+    expect(parseConfig(band([0.3, 0.7])).references.citations.fetch.uncertainBand).toEqual([0.3, 0.7]);
+  });
+
   it("rejects a legacy flat key and names the new nested path", () => {
     let message = "";
     try {
