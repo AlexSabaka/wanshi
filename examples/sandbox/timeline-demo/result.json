@@ -1,0 +1,142 @@
+{
+  "name": "Project Atlas — status",
+  "type": "personal_chat",
+  "id": 777001,
+  "messages": [
+    {
+      "id": 1,
+      "type": "message",
+      "date": "2026-01-10T09:00:00",
+      "date_unixtime": "1768035600",
+      "from": "Alice",
+      "from_id": "user101",
+      "text": "Project Atlas has officially kicked off. I'm the project lead.",
+      "text_entities": [
+        {
+          "type": "plain",
+          "text": "Project Atlas has officially kicked off. I'm the project lead."
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "message",
+      "date": "2026-01-12T11:30:00",
+      "date_unixtime": "1768217400",
+      "from": "Bob",
+      "from_id": "user202",
+      "text": "Staging is up — the payments API is enabled and serving test traffic.",
+      "text_entities": [
+        {
+          "type": "plain",
+          "text": "Staging is up — the payments API is enabled and serving test traffic."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "message",
+      "date": "2026-02-03T14:15:00",
+      "date_unixtime": "1770128100",
+      "from": "Alice",
+      "from_id": "user101",
+      "text": "Carol joined the team today as our backend engineer.",
+      "text_entities": [
+        {
+          "type": "plain",
+          "text": "Carol joined the team today as our backend engineer."
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "message",
+      "date": "2026-02-20T10:05:00",
+      "date_unixtime": "1771581900",
+      "from": "Bob",
+      "from_id": "user202",
+      "text": "Decision: the database is PostgreSQL, hosted on AWS.",
+      "text_entities": [
+        {
+          "type": "plain",
+          "text": "Decision: the database is PostgreSQL, hosted on AWS."
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "message",
+      "date": "2026-03-15T16:40:00",
+      "date_unixtime": "1773592800",
+      "from": "Bob",
+      "from_id": "user202",
+      "text": "Heads up — the payments API is now disabled while we run a security review.",
+      "text_entities": [
+        {
+          "type": "plain",
+          "text": "Heads up — the payments API is now disabled while we run a security review."
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "message",
+      "date": "2026-04-01T09:20:00",
+      "date_unixtime": "1775035200",
+      "from": "Carol",
+      "from_id": "user303",
+      "text": "We finished migrating the database to GCP.",
+      "text_entities": [
+        {
+          "type": "plain",
+          "text": "We finished migrating the database to GCP."
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "message",
+      "date": "2026-04-10T13:00:00",
+      "date_unixtime": "1775826000",
+      "from": "Alice",
+      "from_id": "user101",
+      "text": "The launch deadline is set for Q3 2026.",
+      "text_entities": [
+        {
+          "type": "plain",
+          "text": "The launch deadline is set for Q3 2026."
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "message",
+      "date": "2026-05-22T15:10:00",
+      "date_unixtime": "1779462600",
+      "from": "Bob",
+      "from_id": "user202",
+      "text": "Good news: the payments API is re-enabled — the security review passed.",
+      "text_entities": [
+        {
+          "type": "plain",
+          "text": "Good news: the payments API is re-enabled — the security review passed."
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "message",
+      "date": "2026-06-05T08:45:00",
+      "date_unixtime": "1780649100",
+      "from": "Carol",
+      "from_id": "user303",
+      "text": "Org update: Carol is now the tech lead for Project Atlas.",
+      "text_entities": [
+        {
+          "type": "plain",
+          "text": "Org update: Carol is now the tech lead for Project Atlas."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+# Timeline demo corpus — a Telegram "Project Atlas" status chat that tells a
+# superseding story across dates (the payments_api flips enabled→disabled→enabled).
+# Run it to produce a graph with real valid-time (validAt per message date) +
+# supersession (invalidAt/expiredAt) + a trace sidecar — the data the Phase-C
+# timeline view needs across all three axes.
+#
+#   npx ts-node ./src/cli/index.ts --config examples/sandbox/timeline-demo/config.yaml
+#
+# Local Ollama (no cloud key needed); the corpus is tiny.
+
+input: ./examples/sandbox/timeline-demo
+filter: ["**/result.json"]
+output: ./examples/sandbox/timeline-demo/graph.json
+description: "Project Atlas status chat — timeline demo (superseding story across dates)"
+
+llm:
+  provider: ollama
+  model: qwen3:8b
+  host: http://localhost:11434
+  temperature: 0
+  promptVersion: v5
+
+embeddings:
+  provider: ollama
+  model: nomic-embed-text
+  host: http://localhost:11434
+
+# Small chunk size forces one message per chunk, so each fact inherits *its own*
+# message date as validAt (packTurns stamps a chunk's occurredAt from its first
+# turn) — the per-date spread the timeline renders.
+chunking:
+  mode: enabled
+  size: 100
+  overlap: 0
+
+merging:
+  enableSimilarityMerging: true
+  supersession: heuristic   # antonyms+negation → sets invalidAt/expiredAt (no LLM)
+  entitySimilarityThreshold: 0.9
+  observationSimilarityThreshold: 0.7
+
+trace:
+  enabled: true             # emit graph.json.trace.jsonl → the processing-time axis
+
+export:
+  format: json
+
+logging:
+  level: info
