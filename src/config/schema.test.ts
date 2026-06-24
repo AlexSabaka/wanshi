@@ -68,6 +68,16 @@ describe("config schema", () => {
     expect(c.filter).toEqual(["**/*.ts"]);
   });
 
+  it("treats a bare/empty outline maxDepth as omitted, not 0 (WS-32)", () => {
+    // omitted -> undefined -> the generator's own default (byte-identical default run)
+    expect(parseConfig({}).readers.outline.maxDepth).toBeUndefined();
+    expect(parseConfig({ readers: { outline: { maxDepth: null as any } } }).readers.outline.maxDepth).toBeUndefined();
+    expect(parseConfig({ readers: { outline: { maxDepth: "" as any } } }).readers.outline.maxDepth).toBeUndefined();
+    // an explicit value is preserved (incl. a deliberate 0)
+    expect(parseConfig({ readers: { outline: { maxDepth: 4 } } }).readers.outline.maxDepth).toBe(4);
+    expect(parseConfig({ readers: { outline: { maxDepth: 0 } } }).readers.outline.maxDepth).toBe(0);
+  });
+
   it("maps a bare/empty numeric value to the default, not 0 (WS-19)", () => {
     // A YAML `size:` parses to null; an empty CLI value to "". Both must fall
     // through to the default rather than coercing to 0.

@@ -323,7 +323,9 @@ const JupyterReaderSchema = z
 const OutlineSchema = z
   .object({
     enabled: z.boolean().default(true).describe("Generate a per-file structural outline and inject it into the prompt"),
-    maxDepth: z.coerce.number().optional().describe("Limit outline nesting depth"),
+    maxDepth: z
+      .preprocess((v) => (v === "" || v === null ? undefined : v), z.coerce.number().optional())
+      .describe("Limit outline nesting depth; omit (or a bare/empty value) defers to the generator's default rather than coercing to 0 (WS-32)"),
     includeLineNumbers: z.boolean().default(false).describe("Include line numbers in the outline"),
     includePrivate: z.boolean().default(false).describe("Include private/internal members"),
     includeComments: z.boolean().default(false).describe("Include comments"),
