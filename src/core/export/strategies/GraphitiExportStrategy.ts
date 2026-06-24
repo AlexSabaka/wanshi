@@ -40,7 +40,7 @@ export class GraphitiExportStrategy implements IExportStrategy {
         if (!t) continue;
         ensureNode(r.from);
         ensureNode(r.to);
-        edges.push({
+        const edge: any = {
           uuid: this.uuid(`${r.from}|${t}|${r.to}`),
           name: this.upperSnake(String(t)),
           fact: `${r.from} ${t} ${r.to}`,
@@ -48,7 +48,15 @@ export class GraphitiExportStrategy implements IExportStrategy {
           target_node_uuid: this.uuid(r.to),
           created_at: now,
           // valid_at / invalid_at: wanshi relations carry no edge-level valid time yet
-        });
+        };
+        // Reference-resolution + citation-faithfulness provenance the merger
+        // preserves (WS-36): emit as edge properties when present. Only set when
+        // defined so ordinary LLM-extracted edges serialize byte-identically.
+        if (r.resolved !== undefined) edge.resolved = r.resolved;
+        if (r.faithfulness !== undefined) edge.faithfulness = r.faithfulness;
+        if (r.faithfulnessScore !== undefined) edge.faithfulness_score = r.faithfulnessScore;
+        if (r.supportingSpan !== undefined) edge.supporting_span = r.supportingSpan;
+        edges.push(edge);
       }
     }
 

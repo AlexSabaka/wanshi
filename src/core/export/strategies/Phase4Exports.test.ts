@@ -119,4 +119,48 @@ describe("Graphiti export", () => {
     expect(a.created_at).toBe("2026-01-01T00:00:00Z"); // earliest observation createdAt
     expect(a.labels).toEqual(["concept"]);
   });
+
+  // WS-36: the merger preserves resolved/faithfulness/faithfulnessScore/supportingSpan
+  // on a Relation; the Graphiti exporter must carry them as edge properties.
+  it("carries reference/faithfulness provenance as edge properties (WS-36)", () => {
+    const g: KnowledgeGraph = {
+      entities: [
+        { name: "DocA", entityType: "document", files: [], observations: [] },
+        { name: "PaperB", entityType: "document", files: [], observations: [] },
+      ],
+      relations: [
+        {
+          from: "DocA",
+          to: "PaperB",
+          relationType: ["cites"],
+          resolved: true,
+          faithfulness: "supported",
+          faithfulnessScore: 0.91,
+          supportingSpan: "the cited passage backing the claim",
+        },
+      ],
+    };
+    const doc = JSON.parse(new GraphitiExportStrategy().export(g));
+    expect(doc.edges).toHaveLength(1);
+    expect(doc.edges[0]).toMatchObject({
+      resolved: true,
+      faithfulness: "supported",
+      faithfulness_score: 0.91,
+      supporting_span: "the cited passage backing the claim",
+    });
+  });
+
+  it("omits provenance keys on a plain LLM edge (byte-identical default) (WS-36)", () => {
+    const g: KnowledgeGraph = {
+      entities: [
+        { name: "A", entityType: "concept", files: [], observations: [] },
+        { name: "B", entityType: "thing", files: [], observations: [] },
+      ],
+      relations: [{ from: "A", to: "B", relationType: ["uses"] }],
+    };
+    const edge = JSON.parse(new GraphitiExportStrategy().export(g)).edges[0];
+    for (const k of ["resolved", "faithfulness", "faithfulness_score", "supporting_span"]) {
+      expect(edge).not.toHaveProperty(k);
+    }
+  });
 });
