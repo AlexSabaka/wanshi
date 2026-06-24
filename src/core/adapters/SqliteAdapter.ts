@@ -31,9 +31,17 @@ interface ColInfo {
   pk: boolean;
 }
 interface FkInfo {
+  id: number; // PRAGMA foreign_key_list `id` — composite-FK group key
   from: string; // child column
   table: string; // parent table
   to: string; // parent column referenced
+}
+
+/** A composite (or single-column) foreign key: all child→parent column pairs sharing one `id`. */
+interface FkGroup {
+  id: number;
+  table: string; // parent table
+  parts: { from: string; to: string }[];
 }
 
 const SQLITE_MAGIC = "SQLite format 3"; // 16-byte magic
@@ -95,77 +103,139 @@ export class SqliteAdapter implements IStructuredAdapter {
     const tables = this.userTables(db).filter((t) => !this.opts.excludeTables.includes(t));
     if (tables.length === 0) return null;
 
-    // Schema per table + which columns are referenced as FK targets (so we can index them).
-    const schema = new Map<string, { cols: ColInfo[]; pk: string | null; fks: FkInfo[] }>();
-    const referencedCols = new Map<string, Set<string>>();
+    // Schema per table: columns, the (possibly composite) PK columns, whether the table is
+    // WITHOUT ROWID, and the FK groups (one per composite-FK `id`, with null `to` resolved).
+    const schema = new Map<
+      string,
+      { cols: ColInfo[]; pks: string[]; withoutRowid: boolean; fkGroups: FkGroup[] }
+    >();
     for (const t of tables) {
       const cols = this.tableInfo(db, t);
-      const fks = this.fkList(db, t);
-      schema.set(t, { cols, pk: cols.find((c) => c.pk)?.name ?? null, fks });
+      schema.set(t, {
+        cols,
+        pks: cols.filter((c) => c.pk).map((c) => c.name),
+        withoutRowid: this.isWithoutRowid(db, t),
+        fkGroups: [], // filled below, once every table's PK is known (for implicit-PK FKs)
+      });
     }
-    for (const { fks } of schema.values()) {
-      for (const fk of fks) {
-        if (!referencedCols.has(fk.table)) referencedCols.set(fk.table, new Set());
-        referencedCols.get(fk.table)!.add(fk.to);
+    // Resolve FK groups (WS-06 grouping by `id`; WS-07 null `to` → parent PK columns).
+    for (const t of tables) {
+      const parentPk = (parent: string): string[] => schema.get(parent)?.pks ?? [];
+      schema.get(t)!.fkGroups = this.fkGroups(db, t, parentPk);
+    }
+
+    // Which parent (table, column-set) tuples are referenced as FK targets (so we index them).
+    // Map<parentTable, Set<canonical sorted column list>>.
+    const referencedTuples = new Map<string, Set<string>>();
+    for (const { fkGroups } of schema.values()) {
+      for (const g of fkGroups) {
+        const cols = g.parts.map((p) => p.to).sort();
+        if (!referencedTuples.has(g.table)) referencedTuples.set(g.table, new Set());
+        referencedTuples.get(g.table)!.add(cols.join("␟"));
       }
     }
 
     const entities: Entity[] = [];
     const relations: Relation[] = [];
-    // `${table}␟${col}` → (cell value → entity name), for resolving FK targets in pass 2.
+    // `${table}␟${sortedCols}` → (canonical tuple value → entity name), for FK resolution in pass 2.
     const index = new Map<string, Map<string, string>>();
     // Cache the (possibly capped) rows + their computed entity names per table for pass 2.
     const rowsByTable = new Map<string, { rows: Record<string, unknown>[]; names: string[] }>();
 
     // ── pass 1: rows → entities (+ observations), build the FK-target index ──
     for (const t of tables) {
-      const { cols, pk, fks } = schema.get(t)!;
-      const fkFrom = new Set(fks.map((f) => f.from));
+      const { cols, pks, fkGroups } = schema.get(t)!;
+      const fkFrom = new Set(fkGroups.flatMap((g) => g.parts.map((p) => p.from)));
       const labelCol = this.pickLabelCol(cols);
       const rows = this.selectRows(db, t);
       const names: string[] = [];
-      const idxCols = new Set<string>([...(pk ? [pk] : []), ...(referencedCols.get(t) ?? [])]);
+      const tupleSets = referencedTuples.get(t) ?? new Set<string>();
 
-      rows.forEach((row, i) => {
-        const pkVal = pk != null && row[pk] != null ? String(row[pk]) : String(i);
-        const name = this.entityName(t, row, labelCol, pkVal);
+      rows.forEach((row) => {
+        const pkVal = this.rowPkValue(t, row, pks, schema.get(t)!.withoutRowid);
+        // WS-30: identity is ALWAYS PK-based (table#pk); a non-unique label can't fuse rows.
+        const name = `${t}#${pkVal}`;
         names.push(name);
 
         const observations: Observation[] = [];
+        // WS-30: surface the human label (if any) as an alias observation, not the identity.
+        if (labelCol) {
+          const labelText = this.cellObservation(labelCol, row[labelCol], this.colType(cols, labelCol));
+          if (labelText) observations.push(this.stampObs(labelText, t, pkVal, filePath));
+        }
         for (const c of cols) {
+          if (c.name === labelCol) continue; // already surfaced as the alias observation
           if (fkFrom.has(c.name)) continue; // FK columns become edges, not observations
-          const text = this.cellObservation(c.name, row[c.name]);
-          if (text) observations.push({ text, sourceAdapter: this.id, locator: `table:${t}/row:${pkVal}`, source: filePath });
+          const text = this.cellObservation(c.name, row[c.name], c.type);
+          if (text) observations.push(this.stampObs(text, t, pkVal, filePath));
         }
         entities.push({ name, entityType: t, files: [filePath], observations });
 
-        for (const col of idxCols) {
-          if (row[col] == null) continue;
-          const key = `${t}␟${col}`;
+        // Index every referenced parent-column tuple so child FKs can resolve to this row.
+        for (const tupleKey of tupleSets) {
+          const refCols = tupleKey.split("␟");
+          if (refCols.some((col) => row[col] == null)) continue;
+          const valueKey = refCols.map((col) => String(row[col])).join("␟");
+          const key = `${t}␟${tupleKey}`;
           if (!index.has(key)) index.set(key, new Map());
-          index.get(key)!.set(String(row[col]), name);
+          index.get(key)!.set(valueKey, name);
         }
       });
       rowsByTable.set(t, { rows, names });
     }
 
     // ── pass 2: foreign keys → edges (child row → referenced parent row) ──
+    // WS-06: one edge per composite FK group, only when ALL parts resolve to the same parent tuple.
     for (const t of tables) {
-      const { fks } = schema.get(t)!;
-      if (fks.length === 0) continue;
+      const { fkGroups } = schema.get(t)!;
+      if (fkGroups.length === 0) continue;
       const { rows, names } = rowsByTable.get(t)!;
       rows.forEach((row, i) => {
-        for (const fk of fks) {
-          const val = row[fk.from];
-          if (val == null) continue;
-          const parent = index.get(`${fk.table}␟${fk.to}`)?.get(String(val));
+        for (const g of fkGroups) {
+          if (g.parts.some((p) => row[p.from] == null)) continue; // partial FK → no edge
+          const refCols = g.parts.map((p) => p.to).sort();
+          const valueKey = refCols
+            .map((col) => {
+              const part = g.parts.find((p) => p.to === col)!;
+              return String(row[part.from]);
+            })
+            .join("␟");
+          const parent = index.get(`${g.table}␟${refCols.join("␟")}`)?.get(valueKey);
           if (!parent) continue; // target row not emitted (capped / missing) → no dangling edge
-          relations.push({ from: names[i], to: parent, relationType: [this.fkPredicate(fk)] });
+          relations.push({ from: names[i], to: parent, relationType: [this.fkPredicate(g)] });
         }
       });
     }
 
     return { entities, relations };
+  }
+
+  /** Provenance-stamped observation for a cell value. */
+  private stampObs(text: string, table: string, pkVal: string, filePath: string): Observation {
+    return { text, sourceAdapter: this.id, locator: `table:${table}/row:${pkVal}`, source: filePath };
+  }
+
+  private colType(cols: ColInfo[], name: string): string {
+    return cols.find((c) => c.name === name)?.type ?? "";
+  }
+
+  /**
+   * Stable per-row identity (WS-08 composite PK · WS-57 no-PK rowid):
+   * - declared PK(s) present → the joined tuple (composite-safe);
+   * - no PK on a rowid table → the injected `__rowid__` (stable across re-ingest/reorder);
+   * - no PK on a WITHOUT ROWID table → fall back to all columns joined (no rowid available).
+   */
+  private rowPkValue(table: string, row: Record<string, unknown>, pks: string[], withoutRowid: boolean): string {
+    if (pks.length > 0 && pks.every((col) => row[col] != null)) {
+      return pks.map((col) => String(row[col])).join("|");
+    }
+    if (!withoutRowid && row.__rowid__ != null) return String(row.__rowid__);
+    // WITHOUT ROWID table with no usable PK: derive a deterministic key from the full row.
+    return Object.keys(row)
+      .filter((k) => k !== "__rowid__")
+      .sort()
+      .map((k) => String(row[k]))
+      .join("|");
   }
 
   // ── sql.js helpers ──────────────────────────────────────────────────────────
@@ -199,17 +269,67 @@ export class SqliteAdapter implements IStructuredAdapter {
     }));
   }
 
+  /** Raw FK rows from PRAGMA, carrying the `id` composite-FK group key. */
   private fkList(db: Database, table: string): FkInfo[] {
     return this.queryRows(db, `PRAGMA foreign_key_list("${table.replace(/"/g, '""')}")`).map((r) => ({
+      id: Number(r.id),
       from: String(r.from),
       table: String(r.table),
-      to: String(r.to),
+      to: r.to == null ? "" : String(r.to),
     }));
+  }
+
+  /**
+   * FK rows grouped by `id` into composite-FK groups (WS-06). For each group, an implicit-PK
+   * shorthand (`REFERENCES parent` with no column, `to` empty) resolves to the parent table's
+   * PK column(s) positionally (WS-07); groups whose `to` can't be resolved are dropped.
+   */
+  private fkGroups(db: Database, table: string, parentPk: (parent: string) => string[]): FkGroup[] {
+    const byId = new Map<number, FkInfo[]>();
+    for (const fk of this.fkList(db, table)) {
+      if (!byId.has(fk.id)) byId.set(fk.id, []);
+      byId.get(fk.id)!.push(fk);
+    }
+    const groups: FkGroup[] = [];
+    for (const [id, rows] of byId) {
+      const parent = rows[0].table;
+      const missingTo = rows.filter((r) => !r.to);
+      let parts: { from: string; to: string }[];
+      if (missingTo.length === 0) {
+        parts = rows.map((r) => ({ from: r.from, to: r.to }));
+      } else {
+        // Implicit-PK shorthand: map child columns onto the parent's PK columns in order.
+        const pkCols = parentPk(parent);
+        if (pkCols.length !== rows.length) continue; // can't resolve — drop rather than fabricate
+        parts = rows.map((r, i) => ({ from: r.from, to: r.to || pkCols[i] }));
+      }
+      if (parts.some((p) => !p.to)) continue; // unresolved target → drop the edge
+      groups.push({ id, table: parent, parts });
+    }
+    return groups;
+  }
+
+  /** True when the table is declared WITHOUT ROWID (no implicit rowid to use as a stable key). */
+  private isWithoutRowid(db: Database, table: string): boolean {
+    const sql = this.queryColumn(
+      db,
+      `SELECT sql FROM sqlite_master WHERE type='table' AND name='${table.replace(/'/g, "''")}'`
+    );
+    return /\bwithout\s+rowid\b/i.test(sql[0] ?? "");
   }
 
   private selectRows(db: Database, table: string): Record<string, unknown>[] {
     const cap = this.opts.maxRowsPerTable;
-    const rows = this.queryRows(db, `SELECT * FROM "${table.replace(/"/g, '""')}" LIMIT ${cap + 1}`);
+    const q = (cols: string) =>
+      this.queryRows(db, `SELECT ${cols} FROM "${table.replace(/"/g, '""')}" LIMIT ${cap + 1}`);
+    // WS-57: project the implicit rowid (as __rowid__) so no-PK rows get a stable identity.
+    // WITHOUT ROWID tables have no rowid — fall back to a plain SELECT *.
+    let rows: Record<string, unknown>[];
+    try {
+      rows = this.isWithoutRowid(db, table) ? q("*") : q("*, rowid AS __rowid__");
+    } catch {
+      rows = q("*"); // defensive: any rowid-projection failure degrades to plain select
+    }
     if (rows.length > cap) {
       this.logger.warn(
         `SQLite adapter: table '${table}' exceeds maxRowsPerTable=${cap}; emitting the first ${cap} rows (raise adapters.sqlite.maxRowsPerTable to include more).`
@@ -229,26 +349,56 @@ export class SqliteAdapter implements IStructuredAdapter {
     return null;
   }
 
-  private entityName(table: string, row: Record<string, unknown>, labelCol: string | null, pkVal: string): string {
-    if (labelCol) {
-      const v = row[labelCol];
-      if (typeof v === "string" && v.trim()) return v.trim();
-      if (typeof v === "number") return String(v);
-    }
-    return `${table}#${pkVal}`;
-  }
-
-  /** Render a non-FK cell as an observation; skip nulls/empties/blobs. */
-  private cellObservation(col: string, value: unknown): string | null {
+  /**
+   * Render a non-FK cell as an observation; skip nulls/empties/blobs.
+   * WS-58: consult the declared column type — render BOOLEAN as true/false and
+   * normalize DATE/DATETIME/TIMESTAMP to ISO-8601 where the value is unambiguous.
+   */
+  private cellObservation(col: string, value: unknown, type = ""): string | null {
     if (value === null || value === undefined) return null;
     if (value instanceof Uint8Array) return null; // BLOB — skip
-    const s = String(value).trim();
+    const rendered = this.renderTyped(value, type);
+    const s = rendered.trim();
     return s ? `${col}: ${s}` : null;
   }
 
+  private renderTyped(value: unknown, type: string): string {
+    const t = type.toUpperCase();
+    if (/\bBOOL/.test(t)) {
+      // SQLite stores booleans as 0/1; render canonically. Non-0/1 values pass through.
+      if (value === 0 || value === "0") return "false";
+      if (value === 1 || value === "1") return "true";
+    }
+    if (/\b(DATE|DATETIME|TIMESTAMP)\b/.test(t)) {
+      const iso = this.toIsoDate(value);
+      if (iso) return iso;
+    }
+    return String(value);
+  }
+
+  /** Best-effort ISO-8601 normalization; returns null when the value isn't a parseable date. */
+  private toIsoDate(value: unknown): string | null {
+    if (typeof value === "number") {
+      // Unix epoch seconds (SQLite DATE/strftime convention); ms heuristic for large values.
+      const ms = value > 1e12 ? value : value * 1000;
+      const d = new Date(ms);
+      return isNaN(d.getTime()) ? null : d.toISOString();
+    }
+    if (typeof value === "string") {
+      const s = value.trim();
+      if (!s) return null;
+      // Pure date (YYYY-MM-DD) → midnight UTC; otherwise let Date parse it.
+      const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00Z` : s);
+      return isNaN(d.getTime()) ? null : d.toISOString();
+    }
+    return null;
+  }
+
   /** Predicate for a FK edge: the child column minus a trailing id suffix, else the parent table. */
-  private fkPredicate(fk: FkInfo): string {
-    const stripped = fk.from.replace(/[_-]?id$/i, "").trim();
-    return (stripped || fk.table).toLowerCase();
+  private fkPredicate(g: FkGroup): string {
+    // Single-column FK → derive from the child column; composite → use the parent table name.
+    const base = g.parts.length === 1 ? g.parts[0].from : g.table;
+    const stripped = base.replace(/[_-]?id$/i, "").trim();
+    return (stripped || g.table).toLowerCase();
   }
 }
