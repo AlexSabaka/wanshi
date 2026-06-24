@@ -4,6 +4,8 @@ import * as path from "path";
 import { DirectoryProcessor } from "./DirectoryProcessor";
 import { DIContainer, TYPES } from "./di";
 import { stubLogger, makeConfig } from "../__tests__/helpers";
+import { meter } from "./cost";
+import { shutdown } from "../shared";
 
 describe("DirectoryProcessor — double-count regression", () => {
   let tmp: string;
@@ -80,5 +82,60 @@ describe("DirectoryProcessor — double-count regression", () => {
       })
     );
     expect(spy).toHaveBeenCalledWith(path.join(tmp, "kg.jsonl"), expect.anything());
+  });
+});
+
+describe("DirectoryProcessor — cost ledger persisted on crash (WS-23)", () => {
+  let tmp: string;
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kgdp-cost-"));
+  });
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    meter.reset();
+    shutdown.reset();
+    jest.restoreAllMocks();
+  });
+
+  it("persists this run's spend to the ledger even when a step after extraction throws", async () => {
+    const ledgerPath = path.join(tmp, "kg.cost.json");
+
+    const container = new DIContainer();
+    container.registerValue(TYPES.Logger, stubLogger());
+    container.registerValue(TYPES.ProgressEmitter, { emit: () => undefined } as any);
+    container.registerValue(TYPES.FileDiscoveryService, {
+      discover: async () => ["/synthetic/file.md"],
+    } as any);
+
+    // Cost meter: enabled with a ledger + a real recorded spend this run.
+    meter.configure({
+      enabled: true,
+      currency: "USD",
+      prices: { "test-model": { in: 10, out: 30 } },
+      ledgerPath,
+    });
+    meter.record("test-model", { promptTokens: 1_000_000, completionTokens: 0 }); // $10
+    expect(meter.thisRunCost).toBeCloseTo(10, 6);
+
+    const dp = new DirectoryProcessor(container);
+    // Extraction "succeeds" (returns graphs) but the merge step crashes mid-run.
+    jest.spyOn(dp as any, "processFiles").mockResolvedValue([]);
+    jest.spyOn(dp as any, "logCostEstimate").mockResolvedValue(undefined);
+    jest
+      .spyOn(dp as any, "mergeGraphs")
+      .mockRejectedValue(new Error("boom — merge blew up"));
+
+    const options = makeConfig({
+      output: path.join(tmp, "kg.json"),
+      cost: { enabled: true, ledgerPath },
+    });
+
+    await expect(dp.processDirectory(options)).rejects.toThrow("boom");
+
+    // The finally block must have persisted the ledger despite the crash.
+    expect(fs.existsSync(ledgerPath)).toBe(true);
+    const ledger = JSON.parse(fs.readFileSync(ledgerPath, "utf-8"));
+    expect(ledger.total.cost).toBeCloseTo(10, 6);
+    expect(ledger.runs).toBe(1);
   });
 });

@@ -156,11 +156,8 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         relations: finalKG.relations.length,
       });
       this.logSuccess(finalKG, outputPath, logger);
-      // Cost meter: exact end-of-run tally + persist the resume-safe cumulative ledger.
-      if (meter.enabled) {
-        logger.info(meter.summary());
-        meter.persistLedger();
-      }
+      // Cost meter: exact end-of-run tally (persisting the ledger happens in finally).
+      if (meter.enabled) logger.info(meter.summary());
       progress.emit({
         type: "done",
         entities: finalKG.entities.length,
@@ -175,6 +172,11 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         message: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      // WS-23: persist the resume-safe cumulative ledger even when a step after
+      // extraction (merge/canon/export) crashes — otherwise this run's spend is
+      // lost from the cumulative total. persistLedger is best-effort/never-throws.
+      if (meter.enabled) meter.persistLedger();
     }
   }
 
