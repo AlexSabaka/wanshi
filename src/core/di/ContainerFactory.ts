@@ -652,6 +652,7 @@ export class ContainerFactory {
           maxBytes: w.maxBytes,
           relevanceCheck: w.relevanceCheck,
           robots: w.robots,
+          failClosed: w.failClosed,
         },
         llm,
         logger

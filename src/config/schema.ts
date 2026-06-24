@@ -590,6 +590,12 @@ const ReferencesSchema = z
           .default(true)
           .describe("LLM relevance pre-check on title/meta before the extraction pass"),
         robots: z.boolean().default(true).describe("Respect robots.txt Disallow rules"),
+        failClosed: z
+          .boolean()
+          .default(false)
+          .describe(
+            "When a robots.txt fetch or the LLM relevance check ERRORS, block the fetch (fail-closed) instead of allowing it (fail-open, the default — preserves backward-compatible behavior)"
+          ),
         cachePath: z
           .string()
           .optional()
