@@ -9,7 +9,7 @@ import { ObservationItem } from "@/components/graph/observation-item"
 import { colorForType } from "@/lib/graph-colors"
 import { deriveRelationTrust } from "@/lib/trust"
 import { basename } from "@/lib/utils"
-import type { Entity, Relation } from "@/types"
+import type { Entity, Observation, Relation } from "@/types"
 
 export interface Neighbor {
   name: string
@@ -75,6 +75,7 @@ export function GraphDetailPanel({
   runId,
   onClose,
   onSelectNeighbor,
+  onViewSource,
 }: {
   entity?: Entity
   /** Falls back to this when the node is an unresolved relation endpoint. */
@@ -87,6 +88,8 @@ export function GraphDetailPanel({
   name: string
   onClose: () => void
   onSelectNeighbor: (name: string) => void
+  /** When set, each observation gets a "view source" action (provenance view). */
+  onViewSource?: (observation: Observation) => void
 }) {
   const typeMap = new Map(neighbors.map((n) => [n.name, n.entityType]))
   const typeOf = (n: string) => typeMap.get(n) ?? "(unresolved)"
@@ -128,7 +131,7 @@ export function GraphDetailPanel({
               ) : (
                 <div className="space-y-2.5">
                   {entity.observations.map((o, i) => (
-                    <ObservationItem key={i} observation={o} />
+                    <ObservationItem key={i} observation={o} onViewSource={onViewSource} />
                   ))}
                 </div>
               )}

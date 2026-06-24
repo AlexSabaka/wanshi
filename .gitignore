@@ -163,3 +163,9 @@ runs/
 # benchmark output (regenerable) + the KGGen comparison venv
 results/
 .venv-kggen/
+
+# ...but the broad `runs/`/`results/` artifact ignores above are unanchored, so
+# they'd shadow the frontend's API-route + page directories of the same name —
+# which are real tracked source. Re-include those.
+!frontend/app/api/runs/
+!frontend/app/results/

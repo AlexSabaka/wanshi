@@ -6,10 +6,12 @@ import { Eye, EyeOff, Maximize2, RotateCcw, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { GraphDetailPanel, type Neighbor } from "@/components/graph/graph-detail-panel"
+import { SourceView } from "@/components/source/source-view"
 import { entityTypeCounts, toForceData } from "@/lib/graph-stats"
 import { colorForType } from "@/lib/graph-colors"
 import { cn } from "@/lib/utils"
-import type { Entity, ForceData, ForceNode, KnowledgeGraph } from "@/types"
+import type { SourceTarget } from "@/hooks/use-source"
+import type { Entity, ForceData, ForceNode, KnowledgeGraph, Observation } from "@/types"
 
 const ForceGraph = dynamic(() => import("@/components/graph/force-graph"), {
   ssr: false,
@@ -52,6 +54,7 @@ export function GraphExplorer({
   const [hoverId, setHoverId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [labels, setLabels] = useState(true)
+  const [sourceTarget, setSourceTarget] = useState<SourceTarget | null>(null)
 
   const entityMap = useMemo(() => {
     const m = new Map<string, Entity>()
@@ -108,7 +111,13 @@ export function GraphExplorer({
   useEffect(() => {
     setSelectedId(null)
     setHiddenTypes(new Set())
+    setSourceTarget(null)
   }, [graph])
+
+  function viewSource(o: Observation) {
+    if (!o.source) return
+    setSourceTarget({ source: o.source, locator: o.locator, fuzzyText: o.text })
+  }
 
   const selectedEntity = selectedId ? entityMap.get(selectedId) : undefined
   const selectedNode = selectedId
@@ -285,6 +294,18 @@ export function GraphExplorer({
             runId={runId}
             onClose={() => setSelectedId(null)}
             onSelectNeighbor={focusNode}
+            onViewSource={runId ? viewSource : undefined}
+          />
+        </div>
+      )}
+
+      {/* source / provenance view — opposite the inspector, claim next to original */}
+      {runId && sourceTarget && (
+        <div className="pointer-events-none absolute bottom-3 left-3 top-16 flex">
+          <SourceView
+            runId={runId}
+            target={sourceTarget}
+            onClose={() => setSourceTarget(null)}
           />
         </div>
       )}

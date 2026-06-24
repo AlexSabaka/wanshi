@@ -1,3 +1,4 @@
+import { FileSearch } from "lucide-react"
 import { TrustBadge } from "@/components/trust-badge"
 import { ProvenanceChip } from "@/components/provenance-chip"
 import { deriveObservationTrust } from "@/lib/trust"
@@ -19,9 +20,14 @@ function fmtDate(s?: string): string | null {
  */
 export function ObservationItem({
   observation,
+  onViewSource,
   className,
 }: {
   observation: Observation
+  /** When set and the fact has a `source`, shows a "view source" action that
+   *  opens the provenance view at the cited span. Omitted ⇒ no action (e.g. the
+   *  results table), so this stays backward-compatible. */
+  onViewSource?: (observation: Observation) => void
   className?: string
 }) {
   const o = observation
@@ -38,7 +44,9 @@ export function ObservationItem({
   const invalid = fmtDate(o.invalidAt) ?? fmtDate(o.expiredAt)
   if (invalid) meta.push(`superseded ${invalid}`)
 
-  const hasChrome = showTrust || o.sourceAdapter || o.locator || typeof o.confidence === "number"
+  const canViewSource = !!onViewSource && !!o.source
+  const hasChrome =
+    showTrust || o.sourceAdapter || o.locator || typeof o.confidence === "number" || canViewSource
 
   return (
     <div className={cn("border-l-2 border-border pl-2.5", className)}>
@@ -51,6 +59,16 @@ export function ObservationItem({
             locator={o.locator}
             confidence={o.confidence}
           />
+          {canViewSource && (
+            <button
+              type="button"
+              onClick={() => onViewSource!(o)}
+              className="inline-flex items-center gap-1 rounded border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title="Open the source at this fact's span"
+            >
+              <FileSearch className="size-3 shrink-0" /> source
+            </button>
+          )}
         </div>
       )}
       {meta.length > 0 && (
