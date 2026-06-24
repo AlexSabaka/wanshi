@@ -75,7 +75,16 @@ export class AstSeedService {
     const entities: Entity[] = [];
     const qualifiedToName = new Map<string, string>();
 
-    const obs = (text: string): Observation => ({ text, source: filePath, createdAt });
+    // WS-24: stamp the same ECS provenance the sibling deterministic seeds
+    // (EXIF/C2PA/sqlite) carry — `sourceAdapter:"ast"` always, and an `L<line>`
+    // locator for symbol facts that have a source span.
+    const obs = (text: string, locator?: string): Observation => ({
+      text,
+      source: filePath,
+      sourceAdapter: "ast",
+      locator,
+      createdAt,
+    });
 
     for (const sym of table.symbols) {
       if (!shouldSeedSymbol(sym)) continue;
@@ -86,7 +95,10 @@ export class AstSeedService {
         entityType: SYMBOL_KIND_TO_ENTITY_TYPE[sym.kind],
         files: [filePath],
         observations: [
-          obs(`${sym.kind} ${sym.qualifiedName}${sym.signature ?? ""}${sym.exported ? " (exported)" : ""}`),
+          obs(
+            `${sym.kind} ${sym.qualifiedName}${sym.signature ?? ""}${sym.exported ? " (exported)" : ""}`,
+            `L${sym.span.startLine}`
+          ),
         ],
       });
     }

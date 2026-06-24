@@ -52,6 +52,15 @@ describe("AstSeedService (Phase 8)", () => {
     for (const r of g.relations) for (const p of r.relationType) expect(preds.has(p)).toBe(true);
   });
 
+  it("stamps AST provenance on seeded observations (WS-24)", async () => {
+    const g = (await service().seedGraph(tsFile()))!;
+    const ct = g.entities.find((e) => e.name === "countTerms")!;
+    expect(ct.observations[0].sourceAdapter).toBe("ast"); // attributed like EXIF/C2PA/sqlite seeds
+    expect(ct.observations[0].locator).toMatch(/^L\d+$/); // L<startLine>
+    // every seeded observation carries the ast sourceAdapter (deps have none).
+    for (const e of g.entities) for (const o of e.observations) expect(o.sourceAdapter).toBe("ast");
+  });
+
   it("emits calls + imports edges (imports → depends_on on a dependency entity)", async () => {
     const g = (await service().seedGraph(tsFile()))!;
     expect(g.relations.some((r) => r.relationType.includes("calls"))).toBe(true);
