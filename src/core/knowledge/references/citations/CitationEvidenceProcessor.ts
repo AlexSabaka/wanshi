@@ -5,7 +5,7 @@ import { cosineSimilarity, jaroWinklerSimilarity } from "../../../../shared/util
 import { RawCitation } from "../../../processor/readers/referenceExtraction";
 import { citationNodeName, citationObservations } from "../ReferenceResolver";
 import { GatedFetcher } from "../web/GatedFetcher";
-import { FetchCacheService } from "../web/FetchCacheService";
+import { FetchCacheService, isTransientFetchReason } from "../web/FetchCacheService";
 import { CitationResolver, ResolvableCitation } from "./CitationResolver";
 
 /**
@@ -204,16 +204,16 @@ export class CitationEvidenceProcessor {
       return this.unresolved(citingRel, nodeName, statedObs);
     }
 
-    // Never refetch: a cached resolved fetch reuses the cited work's content; the
-    // edge is re-emitted for THIS citing doc (faithfulness only carried when the
-    // cached edge was this same doc — the claim, hence the verdict, is per-doc).
+    // WS-04: a cached fetch reuses the cited work's CONTENT (URL-scoped), but
+    // span-select + judge run PER citing doc on every call — the verdict is
+    // claim-specific, so a work cited by two docs gets two faithfulness labels.
     const cached = this.cache.get(target.url);
-    if (cached?.graph) {
-      return this.fromCache(citingRel, nodeName, ctx, target.url, statedObs, cached.graph);
+    if (cached?.citationContent) {
+      const { chunks, graphs, resolved } = cached.citationContent;
+      return this.judgeAndBuild(citingRel, nodeName, ctx, target.url, statedObs, chunks, graphs, resolved, createdAt);
     }
 
     const r = await this.fetcher.fetch(target.url, "");
-    let graph: KnowledgeGraph;
     if (r.resolved && r.tempPath) {
       let chunks: string[] = [];
       let graphs: KnowledgeGraph[] = [];
@@ -224,28 +224,60 @@ export class CitationEvidenceProcessor {
       } finally {
         fs.promises.unlink(r.tempPath).catch(() => undefined);
       }
-      const span = await this.selectSpan(ctx.citingClaim, chunks);
-      const verdict = await this.judge(ctx, span);
-      const faithNote =
-        !verdict && ctx.citingClaim && ctx.soleReferent === false
-          ? "co-cited with other works — faithfulness not assessed"
-          : undefined;
-      graph = this.contribution(citingRel, nodeName, target.url, statedObs, graphs, span, verdict, faithNote, createdAt);
-    } else {
-      this.logger.info(`Citation not resolved (${r.reason}): ${target.url}`);
-      graph = this.contribution(citingRel, nodeName, target.url, statedObs, [], null, null, undefined, createdAt, false);
+      // Cache the fetched CONTENT (not the verdict) so a later doc re-judges its
+      // own claim without a refetch.
+      await this.cache.append({
+        url: target.url,
+        resolved: true,
+        status: r.status,
+        contentType: r.contentType,
+        fetchedAt: createdAt,
+        citationContent: { chunks, graphs, resolved: true },
+      });
+      return this.judgeAndBuild(citingRel, nodeName, ctx, target.url, statedObs, chunks, graphs, true, createdAt);
     }
 
+    // Not resolved. WS-03: cache a DETERMINISTIC negative permanently (don't
+    // refetch a not-allowlisted/robots/too-large URL), but mark a TRANSIENT
+    // failure so the cache expires it and a later run retries.
+    this.logger.info(`Citation not resolved (${r.reason}): ${target.url}`);
+    const transient = isTransientFetchReason(r.reason);
     await this.cache.append({
       url: target.url,
-      resolved: !!r.resolved,
+      resolved: false,
       reason: r.reason,
       status: r.status,
       contentType: r.contentType,
       fetchedAt: createdAt,
-      graph,
+      citationContent: { chunks: [], graphs: [], resolved: false },
+      ...(transient ? { transient: true } : {}),
     });
-    return graph;
+    return this.contribution(citingRel, nodeName, target.url, statedObs, [], null, null, undefined, createdAt, false);
+  }
+
+  /** Span-select + judge for THIS doc's claim, then assemble the contribution.
+   * Shared by the fresh-fetch and cache-hit paths (WS-04). */
+  private async judgeAndBuild(
+    citingRel: string,
+    nodeName: string,
+    ctx: CitationContext,
+    url: string,
+    statedObs: Observation[],
+    chunks: string[],
+    graphs: KnowledgeGraph[],
+    resolved: boolean,
+    createdAt: string
+  ): Promise<KnowledgeGraph> {
+    if (!resolved) {
+      return this.contribution(citingRel, nodeName, url, statedObs, [], null, null, undefined, createdAt, false);
+    }
+    const span = await this.selectSpan(ctx.citingClaim, chunks);
+    const verdict = await this.judge(ctx, span);
+    const faithNote =
+      !verdict && ctx.citingClaim && ctx.soleReferent === false
+        ? "co-cited with other works — faithfulness not assessed"
+        : undefined;
+    return this.contribution(citingRel, nodeName, url, statedObs, graphs, span, verdict, faithNote, createdAt);
   }
 
   /** Assemble the cited-work node (stated metadata + fetched content) + the
@@ -295,40 +327,6 @@ export class CitationEvidenceProcessor {
       entities: [{ name: nodeName, entityType: "document", files: [], observations: statedObs }],
       relations: [{ from: citingRel, to: nodeName, relationType: ["cites"], source: citingRel, resolved: false }],
     };
-  }
-
-  /** Reuse a cached fetch's content, re-emitting the edge for the current doc. */
-  private fromCache(
-    citingRel: string,
-    nodeName: string,
-    ctx: CitationContext,
-    url: string,
-    statedObs: Observation[],
-    cachedGraph: KnowledgeGraph
-  ): KnowledgeGraph {
-    const entities: Entity[] = [
-      { name: nodeName, entityType: "document", files: [], observations: statedObs },
-    ];
-    for (const e of cachedGraph.entities) {
-      if (e.name === nodeName) {
-        // carry the fetched content observations onto our stated-metadata node
-        entities[0].observations.push(...e.observations.filter((o) => o.source === url));
-      } else {
-        entities.push(e);
-      }
-    }
-    const cachedEdge = cachedGraph.relations.find(
-      (r) => r.to === nodeName && r.relationType.includes("cites")
-    );
-    const resolved = cachedEdge?.resolved ?? true;
-    const edge: Relation = { from: citingRel, to: nodeName, relationType: ["cites"], source: citingRel, resolved };
-    // Faithfulness is claim-specific: only carry it when the cache came from THIS doc.
-    if (cachedEdge?.faithfulness && cachedEdge.source === citingRel) {
-      edge.faithfulness = cachedEdge.faithfulness;
-      edge.faithfulnessScore = cachedEdge.faithfulnessScore;
-      edge.supportingSpan = cachedEdge.supportingSpan;
-    }
-    return { entities, relations: [edge] };
   }
 
   /** Merge GROBID's marker-linked contexts (claims) with the regex id-bearing set. */
@@ -406,6 +404,14 @@ export class CitationEvidenceProcessor {
     if (ctx.soleReferent === false) return null; // co-cited — not attributable
     try {
       const v = await this.faithfulness.check(ctx.citingClaim, span.span);
+      // WS-18: if the NLI model didn't actually run (the checker degraded to a
+      // keyword-overlap fallback during an outage), ABSTAIN rather than emit a
+      // low-confidence keyword verdict — which would otherwise bias the cited
+      // work's faithfulness toward `unsupported`. No label, no caching.
+      if (v.checker === "keyword") {
+        this.logger.info("Faithfulness checker degraded to keyword fallback; abstaining (no label)");
+        return null;
+      }
       return { label: this.label(v.score), score: v.score };
     } catch (err) {
       this.logger.warn(`Faithfulness check failed: ${err}`);

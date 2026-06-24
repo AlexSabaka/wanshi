@@ -193,16 +193,22 @@ describe("CitationEvidenceProcessor", () => {
     expect(edge.supportingSpan).not.toContain("References Shazeer");
   });
 
-  it("reuses the fetch cache and never refetches the same cited work", async () => {
+  it("reuses the cached CONTENT and never refetches the same cited work", async () => {
     const c = cache();
     const url = "https://arxiv.org/pdf/1701.06538";
     await c.append({
       url,
       resolved: true,
-      fetchedAt: "t",
-      graph: {
-        entities: [{ name: "arXiv:1701.06538", entityType: "document", files: [], observations: [{ text: "cached content", source: url }] }],
-        relations: [{ from: "paper.pdf", to: "arXiv:1701.06538", relationType: ["cites"], source: "paper.pdf", resolved: true }],
+      fetchedAt: new Date().toISOString(),
+      citationContent: {
+        chunks: ["sparse mixture of experts routing improves capacity"],
+        graphs: [
+          {
+            entities: [{ name: "mixture_of_experts", entityType: "concept", files: [], observations: [{ text: "cached content", source: url }] }],
+            relations: [],
+          },
+        ],
+        resolved: true,
       },
     });
     const fetcher = okFetcher();
@@ -211,5 +217,93 @@ describe("CitationEvidenceProcessor", () => {
     const g = (await proc.process("paper.pdf", "paper.pdf", [{ raw: "[1]", arxivId: "1701.06538" }]))!;
     expect(fetcher.fetch).not.toHaveBeenCalled();
     expect(g.relations).toContainEqual(expect.objectContaining({ to: "arXiv:1701.06538", resolved: true }));
+  });
+
+  // WS-04: a work cited by two docs (with different claims) is fetched once but
+  // JUDGED per (citingDoc, claim) — judge() runs again for the second doc.
+  it("re-judges per citing doc on a cache hit (WS-04), not a single per-URL verdict", async () => {
+    const c = cache();
+    const arxivId = "1701.06538";
+    // Two GROBID contexts for the SAME work — one supported claim, one unsupported.
+    const grobidFor = (claim: string) => ({
+      process: jest.fn(async () => [{ ids: { arxivId, title: "MoE" }, citingClaim: claim, raw: "[1]" }]),
+    });
+    // Mock judge returns a score keyed on the claim text → distinct verdicts.
+    const faithfulness = {
+      check: jest.fn(async (claim: string) => ({
+        score: /FAITHFUL/.test(claim) ? 0.95 : 0.05,
+        supported: /FAITHFUL/.test(claim),
+        checker: "minicheck" as const,
+      })),
+    } as any;
+    const fetcher = okFetcher();
+    const mk = (claim: string) =>
+      new CitationEvidenceProcessor(fetcher, c, resolverArxivOnly, extractMoE, embeddings, stubLogger(), {
+        grobid: grobidFor(claim),
+        faithfulness,
+        uncertainBand: [0.34, 0.67],
+      });
+
+    const gA = (await mk("docA FAITHFUL mixture of experts claim").process("docA.pdf", "docA.pdf", []))!;
+    const gB = (await mk("docB DUBIOUS mixture of experts claim").process("docB.pdf", "docB.pdf", []))!;
+
+    // Fetched exactly once (docB reused docA's cached content) ...
+    expect(fetcher.fetch).toHaveBeenCalledTimes(1);
+    // ... but judged for BOTH docs → different verdicts.
+    expect(faithfulness.check).toHaveBeenCalledTimes(2);
+    const edgeA = gA.relations.find((r) => r.to === `arXiv:${arxivId}`)!;
+    const edgeB = gB.relations.find((r) => r.to === `arXiv:${arxivId}`)!;
+    expect(edgeA.faithfulness).toBe("supported");
+    expect(edgeB.faithfulness).toBe("unsupported");
+  });
+
+  // WS-03: a transient OA-fetch failure (timeout) is NOT cached permanently — it
+  // expires, so a later run retries; a deterministic negative is cached forever.
+  it("does not permanently cache a transient citation-fetch failure (WS-03)", async () => {
+    // Records stamp `fetchedAt` with the real wall-clock; anchor the injected
+    // clock to "now" so we can advance past the TTL relative to that stamp.
+    const clock = { now: Date.now() };
+    const c = new FetchCacheService(path.join(tmp, "cite.jsonl"), stubLogger(), () => clock.now);
+    const timeoutFetcher = { fetch: jest.fn(async () => ({ resolved: false, reason: "timeout", status: 0 })) } as any;
+    const proc = new CitationEvidenceProcessor(timeoutFetcher, c, resolverArxivOnly, extractMoE, embeddings, stubLogger());
+    await proc.process("paper.pdf", "paper.pdf", [{ raw: "[1]", arxivId: "1701.06538" }]);
+
+    const url = "https://arxiv.org/pdf/1701.06538";
+    expect(c.get(url)).toBeDefined(); // cached within the TTL window
+    clock.now += 7 * 60 * 60 * 1000; // advance past the 6h transient TTL
+    expect(c.get(url)).toBeUndefined(); // expired → a later run will retry
+  });
+
+  it("permanently caches a DETERMINISTIC negative citation fetch (WS-03)", async () => {
+    const clock = { now: Date.now() };
+    const c = new FetchCacheService(path.join(tmp, "cite.jsonl"), stubLogger(), () => clock.now);
+    const gatedFetcher = { fetch: jest.fn(async () => ({ resolved: false, reason: "not-allowlisted" })) } as any;
+    const proc = new CitationEvidenceProcessor(gatedFetcher, c, resolverArxivOnly, extractMoE, embeddings, stubLogger());
+    await proc.process("paper.pdf", "paper.pdf", [{ raw: "[1]", arxivId: "1701.06538" }]);
+
+    const url = "https://arxiv.org/pdf/1701.06538";
+    clock.now += 100 * 60 * 60 * 1000; // far past any TTL
+    expect(c.get(url)).toBeDefined(); // deterministic negatives never expire
+  });
+
+  // WS-18: when the faithfulness checker degrades to a keyword fallback (NLI
+  // didn't run), abstain — no label.
+  it("abstains from a faithfulness label when the checker degraded to keyword (WS-18)", async () => {
+    const grobid = {
+      process: jest.fn(async () => [
+        { ids: { arxivId: "1701.06538", title: "MoE" }, citingClaim: "model uses sparse mixture of experts", raw: "[1]" },
+      ]),
+    };
+    // The checker reports a keyword fallback (its NLI model was unavailable).
+    const faithfulness = { check: jest.fn(async () => ({ score: 0.1, supported: false, checker: "keyword" })) } as any;
+    const proc = new CitationEvidenceProcessor(okFetcher(), cache(), resolverArxivOnly, extractMoE, embeddings, stubLogger(), {
+      grobid,
+      faithfulness,
+      uncertainBand: [0.34, 0.67],
+    });
+    const g = (await proc.process("paper.pdf", "paper.pdf", []))!;
+    const edge = g.relations.find((r) => r.to === "arXiv:1701.06538")!;
+    expect(faithfulness.check).toHaveBeenCalled();
+    expect(edge.faithfulness).toBeUndefined(); // abstained, not labeled unsupported
   });
 });
