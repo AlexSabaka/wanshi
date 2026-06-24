@@ -40,8 +40,16 @@ export async function readExif(filePath: string, logger?: Logger): Promise<ExifM
     if (typeof o.latitude === "number" && typeof o.longitude === "number") {
       meta.gps = { lat: o.latitude, lng: o.longitude };
     }
+    // EXIF DateTimeOriginal is LOCAL wall-clock time with no zone. exifr parses it
+    // into a JS Date as if it were the host's local zone; `.toISOString()` then
+    // round-trips it through UTC, shifting the labelled time by the host offset
+    // (a 10:30 capture in UTC+2 becomes "08:30Z" on a UTC host, or "10:30Z" wrongly
+    // claiming UTC). Use OffsetTimeOriginal (EXIF 0x9011) when present to anchor the
+    // offset; otherwise keep the floating local string rather than fabricating a zone.
     const dt = o.DateTimeOriginal ?? o.CreateDate ?? o.ModifyDate;
-    if (dt) meta.dateTaken = dt instanceof Date ? dt.toISOString() : String(dt);
+    const offset = typeof o.OffsetTimeOriginal === "string" ? o.OffsetTimeOriginal.trim() : typeof o.OffsetTime === "string" ? o.OffsetTime.trim() : undefined;
+    const taken = formatExifDateTaken(dt, offset);
+    if (taken) meta.dateTaken = taken;
     const make = typeof o.Make === "string" ? o.Make.trim() : undefined;
     const model = typeof o.Model === "string" ? o.Model.trim() : undefined;
     if (make || model) meta.camera = { ...(make ? { make } : {}), ...(model ? { model } : {}) };
@@ -53,6 +61,37 @@ export async function readExif(filePath: string, logger?: Logger): Promise<ExifM
     logger?.debug(`EXIF read failed for ${filePath}: ${e}`);
     return undefined;
   }
+}
+
+/**
+ * Turn an EXIF capture time (a `Date` exifr decoded from local wall-clock, or a raw
+ * string) plus an optional `±HH:MM` offset into an ISO-8601 `dateTaken` WITHOUT a
+ * host-timezone shift. With an offset we emit `YYYY-MM-DDTHH:MM:SS±HH:MM` (zoned but
+ * never moved); without one we emit the floating local time (`YYYY-MM-DDTHH:MM:SS`,
+ * no `Z`), which is honest about the unknown zone instead of falsely stamping UTC.
+ * Pure + exported for unit testing.
+ */
+export function formatExifDateTaken(dt: unknown, offset?: string): string | undefined {
+  if (dt == null) return undefined;
+  const local = exifLocalString(dt);
+  if (!local) return undefined;
+  if (offset && /^[+-]\d{2}:\d{2}$/.test(offset)) return `${local}${offset}`;
+  return local; // floating local time, no fabricated zone
+}
+
+/** Render a `Date`/string EXIF datetime as a floating local `YYYY-MM-DDTHH:MM:SS` (no zone). */
+function exifLocalString(dt: unknown): string | undefined {
+  if (dt instanceof Date) {
+    if (isNaN(dt.getTime())) return undefined;
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}T${p(dt.getHours())}:${p(dt.getMinutes())}:${p(dt.getSeconds())}`;
+  }
+  const s = String(dt).trim();
+  if (!s) return undefined;
+  // EXIF native form "YYYY:MM:DD HH:MM:SS" → ISO local, no zone.
+  const m = s.match(/^(\d{4})[:-](\d{2})[:-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`;
+  return s;
 }
 
 /**

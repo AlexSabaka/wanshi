@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { readExif, readC2pa } from "./imageMetadata";
+import { readExif, readC2pa, formatExifDateTaken } from "./imageMetadata";
 import { stubLogger } from "../../../../__tests__/helpers";
 
 describe("readExif", () => {
@@ -19,6 +19,38 @@ describe("readExif", () => {
 
   it("returns undefined (no throw) for a missing file", async () => {
     await expect(readExif(path.join(tmp, "ghost.jpg"), stubLogger())).resolves.toBeUndefined();
+  });
+});
+
+// WS-20: EXIF capture time must not round-trip a local-time Date through
+// toISOString() (which shifts by the host UTC offset and falsely labels UTC).
+describe("formatExifDateTaken (WS-20)", () => {
+  it("anchors the offset from OffsetTimeOriginal instead of shifting the clock", () => {
+    // A photo taken at 10:30 local in UTC+2 stays 10:30, now zone-anchored.
+    expect(formatExifDateTaken("2026:06:19 10:30:00", "+02:00")).toBe("2026-06-19T10:30:00+02:00");
+  });
+
+  it("keeps a floating local time (no Z) when no offset tag is present", () => {
+    const out = formatExifDateTaken("2026:06:19 10:30:00");
+    expect(out).toBe("2026-06-19T10:30:00");
+    expect(out).not.toMatch(/Z$/); // never fabricates UTC
+    expect(out).not.toMatch(/[+-]\d{2}:\d{2}$/); // and never fabricates an offset
+  });
+
+  it("renders a Date as local wall-clock without a UTC round-trip", () => {
+    // Build a Date at a known LOCAL wall-clock; the output must echo that clock,
+    // regardless of the host zone — unlike toISOString() which would shift it.
+    const d = new Date(2026, 5, 19, 10, 30, 0); // local 2026-06-19 10:30:00
+    expect(formatExifDateTaken(d)).toBe("2026-06-19T10:30:00");
+  });
+
+  it("ignores a malformed offset rather than appending garbage", () => {
+    expect(formatExifDateTaken("2026:06:19 10:30:00", "bogus")).toBe("2026-06-19T10:30:00");
+  });
+
+  it("returns undefined for a nullish datetime", () => {
+    expect(formatExifDateTaken(undefined)).toBeUndefined();
+    expect(formatExifDateTaken(null)).toBeUndefined();
   });
 });
 
