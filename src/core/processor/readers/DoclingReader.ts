@@ -402,7 +402,9 @@ export class DoclingReader extends FileReader {
   ): Promise<CommandResult> {
     return new Promise((resolve, reject) => {
       const options: SpawnOptions = {
-        stdio: ["pipe", "pipe", "pipe"],
+        // stdin ignored (we send nothing) — match the sibling PDF engines so the
+        // stream can't be left half-open (WS-53).
+        stdio: ["ignore", "pipe", "pipe"],
         env: { ...process.env, PYTHONUNBUFFERED: "1" },
       };
 
@@ -419,26 +421,22 @@ export class DoclingReader extends FileReader {
         stderr += data.toString();
       });
 
-      child.on("close", (code) => {
-        resolve({
-          code: code || 0,
-          stdout,
-          stderr,
-        });
-      });
-
-      child.on("error", (error) => {
-        reject(new Error(`Failed to execute command: ${error.message}`));
-      });
-
-      // Set timeout for long-running processes
+      // Set timeout for long-running processes.
       const timeout = setTimeout(() => {
         child.kill("SIGTERM");
         reject(new Error("Command execution timeout"));
       }, 300000); // 5 minutes timeout
 
-      child.on("close", () => {
+      // Single close handler that clears the timer and resolves (WS-53: the prior
+      // dual close handlers split these two concerns across two listeners).
+      child.on("close", (code) => {
         clearTimeout(timeout);
+        resolve({ code: code || 0, stdout, stderr });
+      });
+
+      child.on("error", (error) => {
+        clearTimeout(timeout);
+        reject(new Error(`Failed to execute command: ${error.message}`));
       });
     });
   }
