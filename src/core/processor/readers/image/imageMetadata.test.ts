@@ -151,6 +151,24 @@ describe("readC2pa", () => {
     expect(res.valid).toBe(false);
   });
 
+  // WS-05 (positive direction): the explicit validation_state must WIN over the
+  // validation_status array. This is the mitigation for the fail-closed residual —
+  // a c2patool build (≥0.9) that emits non-failure status entries can't false-reject
+  // a genuinely valid manifest, because its "Trusted"/"Valid" state short-circuits
+  // the status check. Here a benign-but-not-`success:true` entry would read as a
+  // failure on its own, yet the Trusted state keeps the manifest valid.
+  it("WS-05: honors an explicit validation_state of Trusted over the status array", async () => {
+    const report = JSON.stringify({
+      active_manifest: "m1",
+      manifests: { m1: { signature_info: { issuer: "Acme CA" } } },
+      validation_state: "Trusted",
+      validation_status: [{ code: "claimSignature.insideValidity", url: "self#jumbf" }],
+    });
+    mockSpawn.mockImplementation(fakeC2patool(report, "", 0));
+    const res = await readC2pa(p, "c2patool", stubLogger());
+    expect(res).toMatchObject({ present: true, valid: true, signer: "Acme CA" });
+  });
+
   // WS-44: a c2patool build that exits non-zero on validation failure but still
   // emits validation_status must be present-but-invalid, NOT unavailable.
   it("WS-44: non-zero exit WITH validation_status → present:true, valid:false (not unavailable)", async () => {
