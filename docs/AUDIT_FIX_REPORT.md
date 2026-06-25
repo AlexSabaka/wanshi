@@ -16,10 +16,16 @@ default-ON bug fixes + the architectural KG-04/KG-05. **Handoff:** local commits
   all on default-ON paths, each documented below + diff-checked); every other fix is on an opt-in path, cache/key-only,
   validation-only, or pass-through.
 - **Confirmatory model run** (cheap, ~$0.01 of the OpenRouter budget): see "Validation" below.
+- **Independent validation stream (2026-06-25):** loader family re-checked clean (RE-DocRED false-alarm cleared),
+  the 5 high-risk fixes re-eyeballed both-directions and SOUND, KG-04 verified clean on a real prior-graph run (no
+  stub pollution), + 3 binding tests (586 → 591, falsifiability spot-checked). Full report:
+  `docs/inbox/2026-06-25-cheetah-to-dove-fix-validation-results.md`.
 
 > ⚠️ **Please give the two security fixes a human eyeball before merge** — WS-05 (C2PA fail-open) and WS-15 (SSRF
 > redirect). Both have tests asserting the corrected behavior (tampered manifest → invalid; loopback-redirect →
-> blocked), but trust-gate changes deserve a second pair of eyes.
+> blocked), but trust-gate changes deserve a second pair of eyes. *(Both re-reviewed both-directions in the validation
+> stream — SOUND; two residual notes [C2PA validation_status convention; SSRF hostname-literal vs DNS] deferred to the
+> corpus sweep, neither blocking.)*
 
 ## What landed, by subsystem
 
