@@ -24,8 +24,10 @@
 #   PERDOMAIN  50                         CrossRE per-domain cap
 #   EMB_MODEL  nomic-embed-text           local embeddings (free)
 #   CALIBRATE  (set by PHASE=calibrate)   log wanshi + KGGen wall-clock/sample per cell
+#   BENCH_ROOT (default /app)             repo root holding data/ + scripts/ (native, non-Docker)
+#   RESULTS    (default <BENCH_ROOT>/results)  where reports + SUMMARY.txt land
 set -uo pipefail
-cd /app
+cd "${BENCH_ROOT:-/app}"
 
 MODELS="${MODELS:-gemma3:4b qwen3:8b}"
 DATASETS="${DATASETS:-biored drugprot finred redocred crossre}"
@@ -51,7 +53,7 @@ esac
 OLLAMA_BASE="http://${OLLAMA_HOST:-127.0.0.1:11434}"
 export OLLAMA_API_BASE="${OLLAMA_BASE}"
 PY="${VENV_KGGEN:-/opt/venv-kggen}/bin/python"
-RESULTS=/app/results
+RESULTS="${RESULTS:-$(pwd)/results}"
 mkdir -p "${RESULTS}"
 LOG="${RESULTS}/sweep.log"
 
