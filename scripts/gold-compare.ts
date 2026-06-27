@@ -36,6 +36,7 @@ import { Logger } from '../src/shared';
 import { ProcessingOptions } from '../src/types';
 import { ProcessedFile } from '../src/types/IProcessingService';
 import { KnowledgeGraph } from '../src/types/KnowledgeGraph';
+import { ILLMProvider } from '../src/types/ILLMProvider';
 import { CorpusGlossary } from '../src/types/CorpusProfile';
 import {
   CrossREDataset,
@@ -143,6 +144,27 @@ function parseRelationVocab(raw: string): string[] {
 }
 
 const f3 = (n: number) => n.toFixed(3);
+const round = (n: number, d = 1) => { const p = 10 ** d; return Math.round(n * p) / p; };
+
+/**
+ * related_to-share (H5 collapse signal): fraction of a tool's relations typed as the
+ * `related_to` escape predicate. Meaningful for wanshi (closed vocab → related_to is the
+ * catch-all); high share = the model couldn't commit to a typed predicate. Tolerates both
+ * string[] and bare-string relationType.
+ */
+function relatedToShare(graphs: Map<string, KnowledgeGraph>, ids: string[]): { relations: number; relatedTo: number; share: number } {
+  let relations = 0, relatedTo = 0;
+  for (const id of ids) {
+    const g = graphs.get(id);
+    if (!g) continue;
+    for (const r of g.relations) {
+      relations++;
+      const types = Array.isArray(r.relationType) ? r.relationType : [r.relationType];
+      if (types.some((t) => String(t).toLowerCase() === 'related_to')) relatedTo++;
+    }
+  }
+  return { relations, relatedTo, share: relations ? round(relatedTo / relations, 3) : 0 };
+}
 
 async function loadSamples(
   dataset: string, dataPath: string, domains: string[], perDomain: number, hardLimit: number, logger: Logger,
@@ -254,6 +276,7 @@ program
     const kgBuilder = await container.resolve<KnowledgeGraphBuilder>(TYPES.KnowledgeGraphBuilder);
     const promptManager = (await container.resolve(TYPES.PromptManager)) as PromptManager;
     const embeddingService = await container.resolve<EmbeddingService>(TYPES.EmbeddingService);
+    const llmService = await container.resolve<ILLMProvider>(TYPES.LLMService); // getLastUsage() seam → throughput
 
     logger.info(`gold-compare dataset=${dataset} model=${opts.model} mode=${mode}` +
       (glossary ? ` vocab=${relationVocab!.length} predicates` : ''));
@@ -284,6 +307,8 @@ program
     for (const [id, rec] of wanshiCache) wanshiGraphs.set(id, rec.graph);
 
     let extracted = 0, excluded = 0;
+    let genPromptTok = 0, genCompletionTok = 0;
+    const extractStart = Date.now();
     const todo = samples.filter((s) => !wanshiGraphs.has(s.id));
     logger.info(`wanshi[${mode}]: ${wanshiGraphs.size}/${samples.length} cached, extracting ${todo.length}`);
     for (let i = 0; i < todo.length; i++) {
@@ -304,10 +329,37 @@ program
       }
       appendJsonl(wanshiPath, { id: s.id, graph: kg }, fs);
       wanshiGraphs.set(s.id, kg);
+      const u = llmService.getLastUsage?.(); // last chunk's usage (exact for single-chunk corpora)
+      if (u) { genPromptTok += u.promptTokens ?? 0; genCompletionTok += u.completionTokens ?? 0; }
       extracted++;
       if ((i + 1) % 20 === 0 || i === todo.length - 1) {
         logger.info(`  wanshi ${i + 1}/${todo.length} (new=${extracted} excluded=${excluded})`);
       }
+    }
+
+    // ── Extraction stats (wanshi-side, run-level): conformance + throughput. Persisted to a
+    //    sidecar so the step-3 re-score (wanshi fully cached → extracted=0) keeps the numbers. ──
+    const extractSeconds = (Date.now() - extractStart) / 1000;
+    const statsPath = path.join(cacheDir, `wanshi.${modelSlug}${modeSuffix}.stats.json`);
+    let extractionStats: any;
+    if (extracted > 0) {
+      const attempted = extracted + excluded;
+      extractionStats = {
+        attempted, extracted, excluded,
+        failedChunks: kgBuilder.getFailedChunks().length,
+        // local Ollama has no rate limits → an excluded sample is a JSON-conformance failure
+        conformanceRate: attempted > 0 ? round(extracted / attempted, 3) : null,
+        seconds: round(extractSeconds, 1),
+        completionTokens: genCompletionTok,
+        promptTokens: genPromptTok,
+        completionTokensPerSec: extractSeconds > 0 && genCompletionTok > 0 ? round(genCompletionTok / extractSeconds, 1) : null,
+        note: 'tokens = last chunk per sample (exact for single-chunk corpora; undercounts multi-chunk docs); throughput is rental != M4',
+      };
+      fs.writeFileSync(statsPath, JSON.stringify(extractionStats), 'utf-8');
+    } else if (fs.existsSync(statsPath)) {
+      extractionStats = JSON.parse(fs.readFileSync(statsPath, 'utf-8')); // re-score run: reuse step-1 stats
+    } else {
+      extractionStats = null;
     }
 
     // ── KGGen graphs (from the Python cache, if present) ──
@@ -384,8 +436,18 @@ program
       lines.push(`NOTE: KGGen cache empty — run scripts/kggen-crossre.py --samples ${samplesPath} --out ${kggenPath} then re-run for the two-way table.`);
       lines.push('');
     }
+    const wShare = relatedToShare(wanshiGraphs, scoredIds);
+    lines.push(`wanshi related_to-share: ${f3(wShare.share)} (${wShare.relatedTo}/${wShare.relations} relations)`);
+    if (extractionStats) {
+      lines.push(
+        `wanshi extraction: conformance ${extractionStats.conformanceRate ?? '—'} ` +
+        `(${extractionStats.extracted}/${extractionStats.attempted}, ${extractionStats.failedChunks} failed chunks)  ` +
+        `${extractionStats.completionTokensPerSec ?? '—'} tok/s [rental≠M4]`);
+    }
+    lines.push('');
     console.log(lines.join('\n'));
 
+    const graphsByTool: Record<string, Map<string, KnowledgeGraph>> = { wanshi: wanshiGraphs, kggen: kggenGraphs };
     const report = {
       dataset,
       mode,
@@ -398,6 +460,7 @@ program
       wanshiOk: wanshiIds.length,
       wanshiExcluded: excluded,
       kggenCached: kggenGraphs.size,
+      extraction: extractionStats, // wanshi-side conformance + throughput (H-L3/H-L4 architecture column)
       tools: Object.fromEntries(tools.map(([name, sc]) => [name, {
         nodeEntityCapture: { semantic: sc.nodeEntitySem, exact: sc.nodeEntityExact },
         tripletEndpoint: { semantic: sc.tripletSem, exact: sc.tripletExact },
@@ -405,6 +468,7 @@ program
         ...(sc.perDomainNode ? { perDomainNodeSemantic: Object.fromEntries(sc.perDomainNode) } : {}),
         triplesPerSample: sc.triplesPer,
         entitiesPerSample: sc.entsPer,
+        relatedToShare: relatedToShare(graphsByTool[name], scoredIds), // H5: escape-predicate collapse
       }])),
     };
     fs.writeFileSync(output, JSON.stringify(report, null, 2), 'utf-8');
