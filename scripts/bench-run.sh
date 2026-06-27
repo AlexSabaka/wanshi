@@ -79,7 +79,7 @@ run_cell() {
   log "=== CELL model=${model} ds=${ds} mode=${mode} N=${lim} → ${cache} ==="
 
   # 1) wanshi extract + dump samples.jsonl (+ the wanshi.<slug><mode>.stats.json sidecar)
-  npx ts-node scripts/gold-compare.ts "${common[@]}" "${vocab[@]}" 2>&1 | tee -a "${LOG}" \
+  npx ts-node scripts/gold-compare.ts "${common[@]}" ${vocab[@]+"${vocab[@]}"} 2>&1 | tee -a "${LOG}" \
     || { log "gold-compare(extract) FAILED ${model}/${ds}/${mode} — skipping cell"; return 0; }
 
   # 2) KGGen on the SAME local model (once per model+ds; reused across modes). Timed for calibration.
@@ -99,7 +99,7 @@ run_cell() {
   fi
 
   # 3) re-run → two-way table + JSON report (extraction stats reloaded from the step-1 sidecar)
-  npx ts-node scripts/gold-compare.ts "${common[@]}" "${vocab[@]}" 2>&1 | tee -a "${LOG}" \
+  npx ts-node scripts/gold-compare.ts "${common[@]}" ${vocab[@]+"${vocab[@]}"} 2>&1 | tee -a "${LOG}" \
     || log "gold-compare(score) FAILED ${model}/${ds}/${mode}"
 
   # Calibration: surface wanshi wall-clock/sample (KGGen side is logged above) from the report.
