@@ -70,5 +70,6 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/wanshi-bench:${{ inputs.tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # No gha cache: a ~19 GB image's mode=max export thrashes the 10 GB Actions-cache
+          # limit (one layer took ~18 min on the first build) for ~zero reuse on a one-shot image.
+          provenance: false

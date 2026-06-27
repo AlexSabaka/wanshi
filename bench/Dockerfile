@@ -16,11 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Node deps first (own cache layer). The harness runs via ts-node; install it (+ typescript)
-# globally (separate layer so npm ci stays cached) so the pod never fetches it at run time.
+# Node deps first (own cache layer). --omit=dev drops the test/types toolchain (jest, ts-jest,
+# @types/*) — the harness runs transpile-only (TS_NODE_TRANSPILE_ONLY below), so type defs aren't
+# needed at run time. ts-node (+ typescript) installed globally (separate layer so npm ci stays cached).
 COPY package.json package-lock.json* ./
-RUN npm ci
-RUN npm install -g ts-node typescript
+RUN npm ci --omit=dev && npm cache clean --force
+RUN npm install -g ts-node typescript && npm cache clean --force
 
 # KGGen (LiteLLM-routed) in an isolated venv so its deps never touch the harness.
 RUN python3 -m venv /opt/venv-kggen \
@@ -37,6 +38,7 @@ COPY data ./data
 RUN chmod +x bench/entrypoint.sh scripts/bench-run.sh
 
 ENV VENV_KGGEN=/opt/venv-kggen \
+    TS_NODE_TRANSPILE_ONLY=1 \
     OLLAMA_HOST=127.0.0.1:11434 \
     OLLAMA_API_BASE=http://127.0.0.1:11434 \
     OLLAMA_MAX_LOADED_MODELS=2 \
