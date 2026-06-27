@@ -41,11 +41,16 @@ import {
   CrossREDataset,
   SemEval2010Dataset,
   RedocredDataset,
+  BioREDDataset,
+  SciERDataset,
+  DrugProtDataset,
+  FinREDDataset,
+  CodeDataset,
   ExactMatcher,
   SemanticMatcher,
   MineDataset,
 } from '../src/evaluation';
-import { BenchmarkSample, Triplet } from '../src/evaluation/datasets/IDataset';
+import { BenchmarkSample, IDatasetLoader, Triplet } from '../src/evaluation/datasets/IDataset';
 import { scoreGraph, ToolScore, tripleKey, loadJsonl, appendJsonl } from '../src/evaluation/compare/goldCompare';
 
 const CROSSRE_DOMAINS = ['ai', 'literature', 'music', 'news', 'politics', 'science'];
@@ -61,6 +66,13 @@ const DATASETS: Record<string, DatasetSpec> = {
   semeval:  { defaultDataPath: 'data/semeval/test.jsonl',       hasDomains: false, hasIgnF1: false },
   redocred: { defaultDataPath: 'data/redocred/test_revised.json', hasDomains: false, hasIgnF1: true,
               trainPath: 'data/redocred/train_revised.json' },
+  // Domain corpus-sourcing lane — gold-labeled, document/sentence/file level. Each ships
+  // a data/<ds>/relations.vocab for the H4 closed-schema mode (--relation-vocab @file).
+  biored:   { defaultDataPath: 'data/biored/BioRED/Test.BioC.JSON',                          hasDomains: false, hasIgnF1: false },
+  scier:    { defaultDataPath: 'data/scier/test.jsonl',                                       hasDomains: false, hasIgnF1: false },
+  drugprot: { defaultDataPath: 'data/drugprot/drugprot-gs-training-development/development',  hasDomains: false, hasIgnF1: false },
+  finred:   { defaultDataPath: 'data/finred/test.jsonl',                                      hasDomains: false, hasIgnF1: false },
+  code:     { defaultDataPath: 'data/code/flask',                                             hasDomains: false, hasIgnF1: false },
 };
 
 /** Minimal .env loader (mirrors scripts/benchmark.ts) — no dotenv dep. */
@@ -82,6 +94,7 @@ function buildProcessingOptions(opts: {
   provider: string; model: string; host: string; apiKey?: string;
   embeddingsProvider: string; embeddingsModel: string; embeddingsHost: string;
   promptVersion: string; openPredicate: boolean; strictVocabulary: boolean;
+  maxTokens?: number;
 }): ProcessingOptions {
   return parseConfig({
     input: 'benchmark',
@@ -93,6 +106,10 @@ function buildProcessingOptions(opts: {
       ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
       temperature: 0, repeatPenalty: 1.1, contextLength: 8192, seed: 42,
       promptVersion: opts.promptVersion,
+      // Guardrail: cap output tokens so a model that degenerates into runaway
+      // repetition truncates fast instead of generating to its 32k/64k ceiling
+      // (a ~10-min hang per doc). jsonrepair still salvages the partial graph.
+      ...(opts.maxTokens ? { maxTokens: opts.maxTokens } : {}),
     },
     embeddings: {
       provider: opts.embeddingsProvider, model: opts.embeddingsModel, host: opts.embeddingsHost,
@@ -145,7 +162,17 @@ async function loadSamples(
     return samples;
   }
   const limit = hardLimit > 0 ? hardLimit : Number.MAX_SAFE_INTEGER;
-  const loader = dataset === 'semeval' ? new SemEval2010Dataset() : new RedocredDataset();
+  const loaders: Record<string, IDatasetLoader> = {
+    semeval: new SemEval2010Dataset(),
+    redocred: new RedocredDataset(),
+    biored: new BioREDDataset(),
+    scier: new SciERDataset(),
+    drugprot: new DrugProtDataset(),
+    finred: new FinREDDataset(),
+    code: new CodeDataset(),
+  };
+  const loader = loaders[dataset];
+  if (!loader) throw new Error(`No loader registered for dataset '${dataset}'`);
   const samples = await loader.load(dataPath, limit);
   logger.info(`${dataset}: ${samples.length} samples loaded from ${dataPath}`);
   return samples;
@@ -162,8 +189,8 @@ async function loadTrainIgnoreKeys(trainPath: string, logger: Logger): Promise<S
 
 const program = new Command('gold-compare');
 program
-  .description('Gold-labeled two-way: wanshi vs KGGen (same model) on crossre | semeval | redocred')
-  .requiredOption('--dataset <name>', 'crossre | semeval | redocred')
+  .description('Gold-labeled two-way: wanshi vs KGGen (same model) on crossre | semeval | redocred | biored | scier | drugprot | finred | code')
+  .requiredOption('--dataset <name>', 'crossre | semeval | redocred | biored | scier | drugprot | finred | code')
   .option('--model <name>', 'Model id (same for both tools)', 'deepseek/deepseek-v4-pro')
   .option('--provider <name>', 'Generation provider: ollama | openai', 'openai')
   .option('--host <url>', 'OpenAI-compatible base URL', 'https://openrouter.ai/api/v1')
@@ -179,13 +206,14 @@ program
   .option('--embeddings-host <url>', 'Embeddings host', 'http://localhost:11434')
   .option('--match-threshold <n>', 'Semantic match threshold', '0.80')
   .option('--prompt-version <ver>', 'wanshi prompt version', 'v5')
+  .option('--max-tokens <n>', 'Cap output tokens — guardrail against runaway generation', '8192')
   .option('--cache-dir <dir>', 'Cache dir (defaults data/<dataset>/compare)')
   .option('--output <path>', 'Two-way JSON report path')
   .action(async (opts) => {
     loadDotEnv();
     const dataset = opts.dataset as string;
     const spec = DATASETS[dataset];
-    if (!spec) { console.error(`Unknown dataset: ${dataset}. Use crossre | semeval | redocred.`); process.exit(1); }
+    if (!spec) { console.error(`Unknown dataset: ${dataset}. Use one of: ${Object.keys(DATASETS).join(' | ')}.`); process.exit(1); }
 
     const perDomain = parseInt(opts.perDomain, 10) || 50;
     const hardLimit = parseInt(opts.limit, 10) || 0;
@@ -219,6 +247,7 @@ program
       embeddingsHost: opts.embeddingsHost, promptVersion: opts.promptVersion, openPredicate,
       // A supplied closed schema (H4) is STRICT — exactly those predicates, base NOT unioned.
       strictVocabulary: !!relationVocab,
+      maxTokens: parseInt(opts.maxTokens, 10) || undefined,
     });
     const container = ContainerFactory.createContainer({ processingOptions });
     const logger = await container.resolve<Logger>(TYPES.Logger);
