@@ -79,4 +79,26 @@ describe("WebReferenceProcessor", () => {
     const proc = new WebReferenceProcessor({ fetch: jest.fn() } as any, cache(), jest.fn(), stubLogger());
     expect(await proc.process("doc.md", [{ target: "./a.md", kind: "markdown" }], "s")).toBeNull();
   });
+
+  // WS-03: a transient fetch failure (timeout) is marked transient so it expires;
+  // a deterministic negative is cached permanently.
+  it("marks a transient web fetch failure so the cache expires it (WS-03)", async () => {
+    const clock = { now: Date.now() }; // records stamp fetchedAt with wall-clock
+    const c = new FetchCacheService(path.join(tmp, "c.jsonl"), stubLogger(), () => clock.now);
+    const fetcher = { fetch: jest.fn(async () => ({ resolved: false, reason: "timeout", status: 0 })) } as any;
+    const proc = new WebReferenceProcessor(fetcher, c, jest.fn(), stubLogger());
+
+    await proc.process("doc.md", [{ target: URL, kind: "url" }], "scope");
+    expect(c.get(URL)?.transient).toBe(true);
+    clock.now += 7 * 60 * 60 * 1000; // past the 6h transient TTL
+    expect(c.get(URL)).toBeUndefined(); // expired → a later run retries
+  });
+
+  it("does NOT mark a deterministic web fetch negative as transient (WS-03)", async () => {
+    const c = cache();
+    const fetcher = { fetch: jest.fn(async () => ({ resolved: false, reason: "not-allowlisted" })) } as any;
+    const proc = new WebReferenceProcessor(fetcher, c, jest.fn(), stubLogger());
+    await proc.process("doc.md", [{ target: URL, kind: "url" }], "scope");
+    expect(c.get(URL)?.transient).toBeUndefined(); // permanent
+  });
 });

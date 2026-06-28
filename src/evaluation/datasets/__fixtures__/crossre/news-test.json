@@ -1,0 +1,2 @@
+{"doc_key":"news-test-1","sentence":["Org","funds","Proj"],"ner":[[0,0,"org"],[2,2,"proj"]],"relations":[[0,0,2,2,"funds","Exp",false,false]]}
+{"doc_key":"news-test-2","sentence":["City","hosts","Event"],"ner":[[0,0,"loc"],[2,2,"evt"]],"relations":[[0,0,2,2,"hosts","Exp",false,false]]}

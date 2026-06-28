@@ -109,6 +109,24 @@ describe("buildImageMetaGraph (CV detection)", () => {
     expect(image(g).observations.some((o: any) => o.sourceAdapter === "cv-detection" && o.text.includes("person ×2"))).toBe(true);
   });
 
+  it("emits the detection box as a bbox: locator on the depicts observation (WS-45)", () => {
+    const g = buildImageMetaGraph(
+      pfMeta({
+        cvDetection: {
+          objects: [
+            // lower-score box first; the top-scoring box must win the locator
+            { label: "dog", score: 0.6, box: { xmin: 9, ymin: 9, xmax: 9, ymax: 9 } },
+            { label: "dog", score: 0.91, box: { xmin: 10.4, ymin: 20.6, xmax: 110, ymax: 220 } },
+          ],
+        },
+      }),
+      "/corpus"
+    )!;
+    const dog = g.entities.find((e) => e.name === "dog")!;
+    // rounded pixel coords of the top-scoring (0.91) detection
+    expect(dog.observations[0].locator).toBe("bbox:10,21,110,220");
+  });
+
   it("returns null when cvDetection has no objects", () => {
     expect(buildImageMetaGraph(pfMeta({ cvDetection: { objects: [] } }), "/corpus")).toBeNull();
   });

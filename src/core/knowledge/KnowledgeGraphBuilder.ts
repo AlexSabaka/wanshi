@@ -210,10 +210,13 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
    * The *deterministic* extraction inputs other than the chunk's own text (KG-07),
    * folded into the checkpoint key's `extra` so toggling any of them between
    * `--resume` runs re-extracts the affected chunks instead of silently reusing a
-   * graph built under different settings: the grounding signature (Phase 5), the
-   * rendered system prompt (which already encodes the resolved entity/relation
-   * vocabulary + domain examples → the "schema shape"), the corpus glossary, and
-   * the classifier classes.
+   * graph built under different settings: the grounding signature (Phase 5, now
+   * including `escalateAbove`+`host`), the rendered system prompt (which already
+   * encodes the resolved entity/relation vocabulary + domain examples → the "schema
+   * shape"), the corpus glossary, and the classifier classes. Also `strictVocabulary`
+   * + `openPredicate`: these change the resolved Zod *enum* (glossary REPLACES vs.
+   * augments the base sets / drops the enum entirely) **without** changing the
+   * system-prompt string, so they'd be invisible to the key otherwise (KG-07).
    *
    * Deliberately EXCLUDES the chunk's retrieved context: retrieval pulls from the
    * graph built by *prior* (temperature>0, non-deterministic) extractions, so it
@@ -233,6 +236,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       systemPrompt,
       glossary ? JSON.stringify(glossary) : '',
       contentClasses ? JSON.stringify(contentClasses) : '',
+      this.strictVocabulary ? 'strict' : '',
+      this.openPredicate ? 'open' : '',
     ]) {
       h.update(part);
       h.update('\x00');
@@ -642,7 +647,9 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     const keptRel: typeof kg.relations = [];
     for (const r of kg.relations) {
       const claim = verbalizeRelation(r.from, r.relationType, r.to);
-      const v = await this.groundingChecker.check(claim, source);
+      // Pass the edge endpoints so a checker's keyword pre-filter can require both
+      // are actually present in the source (a predicate-only overlap mustn't pass).
+      const v = await this.groundingChecker.check(claim, source, [r.from, r.to]);
       const decision = v.supported ? 'accept' : drop ? 'drop' : 'flag';
       if (trace.enabled && extractionId) {
         this.traceGrounding(extractionId, 'relation', `${r.from}→${r.to}`, claim, v.score, decision,
@@ -717,7 +724,7 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
     trace.emit({
       stage: 'extract', type: 'extraction',
       extractionId: ctx.extractionId, chunkId: ctx.chunkId, file: ctx.filePath, chunkIndex: ctx.chunkIndex,
-      model: this.model, promptVersion: this.promptVersion, attempt: 0,
+      model: this.model, promptVersion: this.promptVersion,
       checkpointHit: ctx.checkpointHit, entityMentions, relationMentions,
       ...(ctx.usage ? { usage: ctx.usage } : {}),
       ...(ctx.failed ? { failed: true } : {}),
@@ -782,7 +789,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       totalChunks,
       retrievedContext,
       contentClasses,
-      corpusGlossary: glossary
+      corpusGlossary: glossary,
+      strictVocabulary: this.strictVocabulary
     });
 
     return this.generateKnowledgeGraph(
@@ -816,7 +824,8 @@ export class KnowledgeGraphBuilder implements IKnowledgeGraphBuilder {
       chunkContent: content,
       retrievedContext,
       contentClasses,
-      corpusGlossary: glossary
+      corpusGlossary: glossary,
+      strictVocabulary: this.strictVocabulary
     });
 
     return this.generateKnowledgeGraph(

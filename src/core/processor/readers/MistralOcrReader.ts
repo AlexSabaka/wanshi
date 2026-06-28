@@ -57,7 +57,7 @@ export class MistralOcrReader extends FileReader {
       this.logger.warn(
         `Mistral OCR engine selected but no API key (set readers.mistral.apiKey or $MISTRAL_API_KEY); falling back to pdf2json for ${filePath}`
       );
-      return this.fallback.read(filePath);
+      return this.readWithFallback(filePath);
     }
 
     try {
@@ -65,6 +65,15 @@ export class MistralOcrReader extends FileReader {
       const { pages, cached } = await this.ocr(filePath);
       const usable = pages.filter((p) => p.markdown.trim());
       if (usable.length === 0) throw new Error("Mistral OCR returned no page text");
+
+      // WS-54: empty pages are silently dropped; surface that as a warning + a
+      // `pagesDropped` signal so a partial OCR isn't mistaken for a complete read.
+      const pagesDropped = pages.length - usable.length;
+      if (pagesDropped > 0) {
+        this.logger.warn(
+          `Mistral OCR dropped ${pagesDropped}/${pages.length} empty page(s) for ${filePath}`
+        );
+      }
 
       const chunks: ChunkResult[] = [];
       let offset = 0;
@@ -89,6 +98,8 @@ export class MistralOcrReader extends FileReader {
           mistralModel: this.opts.model,
           mistralCached: cached,
           pageCount: usable.length,
+          totalPages: pages.length,
+          pagesDropped,
           processingTimeMs: Date.now() - startTime,
           status: "success",
         },
@@ -97,8 +108,25 @@ export class MistralOcrReader extends FileReader {
       this.logger.warn(
         `Mistral OCR engine failed for ${filePath} (${error.message}); falling back to pdf2json`
       );
-      return this.fallback.read(filePath);
+      return this.readWithFallback(filePath);
     }
+  }
+
+  /**
+   * Delegate to the pdf2json fallback and stamp ITS adapterId on the returned
+   * chunks so per-engine provenance reflects what actually produced the text
+   * (pdf2json), not this engine (WS-11).
+   */
+  private async readWithFallback(filePath: string): Promise<FileReadResult> {
+    const fallbackResult = await this.fallback.read(filePath);
+    const fallbackAdapter = this.fallback.adapterId();
+    return {
+      ...fallbackResult,
+      chunks: fallbackResult.chunks.map((c) => ({
+        ...c,
+        provenance: { ...c.provenance, sourceAdapter: fallbackAdapter },
+      })),
+    };
   }
 
   /** OCR the PDF (or reuse the sidecar). Throws on any API failure. */

@@ -9,20 +9,20 @@
 
 > A local-first CLI that reads ten thousand things — code, docs, PDFs, audio, transcripts — and builds one knowledge graph that remembers where every fact came from.
 
-`wanshi` extracts entities and relations from a file tree and merges them into a single graph. It runs on local models via [Ollama](https://ollama.ai) by default, or any OpenAI-compatible endpoint. Facts carry provenance and a bi-temporal axis, an inline grounding gate filters ungrounded claims, and the graph is a drop-in producer for the MCP memory server, Graphiti, and KBLaM/LoRA training exports.
+`wanshi` extracts entities and relations from a file tree and merges them into a single graph. It runs on local models via [Ollama](https://ollama.ai) by default, or any OpenAI-compatible endpoint. Facts carry provenance and a bi-temporal axis, an optional grounding gate can flag or drop ungrounded claims, and the graph is a drop-in producer for the MCP memory server, Graphiti, and KBLaM/LoRA training exports.
 
 It's a working CLI and a research platform in equal measure — the long game is domain-tuned extraction feeding knowledge injection into small local models.
 
 ---
 
-> **Command shorthand:** examples below write `wanshi` for the run command. Until the npm package ships, that's `npx ts-node ./src/index.ts` (dev) or `node ./dist/index.js` (built). Once published, it's literally `wanshi`.
+> **Command shorthand:** examples below write `wanshi` for the run command. Installed from npm (`@wanshi-kg/wanshi`) that's literally `wanshi`; from a source checkout it's `npm start --` (i.e. `npx ts-node ./src/cli/index.ts`) in dev, or `node ./dist/cli/index.js` after `npm run build`.
 
 ## What's distinctive
 
 Most text→KG tools stop at "extract triples." `wanshi` is built around the parts that come after:
 
-- **Provenance, not just facts.** Every observation records its `source`/`speaker` and a Graphiti-style bi-temporal axis (`validAt`/`invalidAt` for world-time, `createdAt`/`expiredAt` for system-time). The same fact from two speakers stays as two attributed observations, never one flattened string.
-- **A grounding gate.** Each extracted fact is scored against its source chunk and can be flagged or dropped before it reaches the output — keyword overlap as a cheap pre-filter, with an optional local NLI checker (MiniCheck) for the uncertain cases. It won't record what it can't verify against the source.
+- **Provenance, not just facts.** Every observation records its `source`/`speaker` and a Graphiti-style bi-temporal axis (`validAt`/`invalidAt` for world-time, `createdAt`/`expiredAt` for system-time; `validAt` comes from timestamped readers, and `invalidAt`/`expiredAt` are written when merge-time supersession is enabled). The same fact from two speakers stays as two attributed observations, never one flattened string.
+- **A grounding gate (opt-in).** Each extracted fact can be scored against its source chunk and flagged or dropped before it reaches the output — keyword overlap as a cheap pre-filter, with an optional local NLI checker (MiniCheck) for the uncertain cases. Enabled (`--grounding flag|drop`), it won't record what it can't verify against the source — but it's `disabled` by default.
 - **Closed-vocabulary extraction.** An optional corpus pre-pass builds a glossary of canonical entity/relation types, which then *constrains* extraction — so a large corpus doesn't fragment into hundreds of one-off types.
 - **Transcript-aware ingestion.** Speaker-labeled transcripts and chat exports are split into speaker-pure chunks, so a speaker becomes per-fact provenance rather than a polluting entity.
 - **Memory-store interop.** `mcp-jsonl` output is byte-compatible with the official [MCP memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) — point it at the file and query your graph from Claude Code/Desktop. No store to build.
@@ -435,8 +435,8 @@ Tests use Jest (`npm test`); mock the LLM via `ILLMProvider` for network-free un
 
 ```bash
 git clone https://github.com/wanshi-kg/wanshi && cd wanshi && npm install
-npx ts-node ./src/index.ts --config config.yaml   # run directly
-npm run build && node ./dist/index.js --config config.yaml   # or build first
+npm start -- --config config.yaml                            # run directly (ts-node ./src/cli/index.ts)
+npm run build && node ./dist/cli/index.js --config config.yaml   # or build first
 ```
 
 See `examples/kg-mail-assistant/` for a full integration (Gmail OAuth + Telegram bot + continuous email→KG pipeline) and programmatic usage via `ContainerFactory`.

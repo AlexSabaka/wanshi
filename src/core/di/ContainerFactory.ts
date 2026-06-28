@@ -16,6 +16,7 @@ import { IContentClassifier } from "../processor/classifier";
 import { LlmContentClassifier } from "../processor/classifier/LlmContentClassifier";
 import { ObjectDetectionService } from "../cv/ObjectDetectionService";
 import { configureDomainGate } from "../knowledge/vocabulary";
+import { resolveOutputPath } from "../../shared/utils";
 import { createHash } from "crypto";
 import { trace } from "../trace";
 import { meter } from "../cost";
@@ -94,6 +95,14 @@ export class ContainerFactory {
       mixedDomain: processingOptions.classifier?.mixedDomainThreshold,
     });
 
+    // Resolve the final graph path ONCE so every sidecar (trace, cost, …) hangs
+    // off the same extension-rewritten stem the export writer uses, not the raw
+    // `--output` value (KG-11 / WS-59). When output ext already matches the
+    // format this is a no-op, so a default run stays byte-identical.
+    const resolvedOutputPath = processingOptions.output
+      ? resolveOutputPath(processingOptions.output, processingOptions.export?.format ?? "")
+      : undefined;
+
     // Configure the run-global debug trace singleton (observe-only; off by default).
     // Mint a runId from time + a config digest so each run's trace is identifiable.
     const traceCfg = processingOptions.trace ?? { enabled: false };
@@ -106,8 +115,9 @@ export class ContainerFactory {
         .slice(0, 8);
     trace.configure({
       enabled: !!traceCfg.enabled,
-      path: traceCfg.path || (processingOptions.output ? `${processingOptions.output}.trace.jsonl` : undefined),
+      path: traceCfg.path || (resolvedOutputPath ? `${resolvedOutputPath}.trace.jsonl` : undefined),
       runId,
+      resumed: !!processingOptions.resume?.enabled,
     });
 
     // Configure the run-global cost meter singleton (off by default; logger attached
@@ -118,7 +128,7 @@ export class ContainerFactory {
       maxCost: costCfg.maxCost,
       currency: costCfg.currency || "USD",
       prices: costCfg.prices ?? {},
-      ledgerPath: costCfg.ledgerPath || (processingOptions.output ? `${processingOptions.output}.cost.json` : undefined),
+      ledgerPath: costCfg.ledgerPath || (resolvedOutputPath ? `${resolvedOutputPath}.cost.json` : undefined),
     });
 
     // Register configuration
@@ -383,7 +393,7 @@ export class ContainerFactory {
         case "docling":
           logger.info(`PDF engine: docling`);
           factory.registerReader(
-            new DoclingReader(undefined, undefined, undefined, "./temp", chunker, logger, [".pdf"])
+            new DoclingReader(undefined, undefined, undefined, "./temp", chunker, logger, [".pdf"], pdf2json)
           );
           break;
         case "marker": {
@@ -652,6 +662,7 @@ export class ContainerFactory {
           maxBytes: w.maxBytes,
           relevanceCheck: w.relevanceCheck,
           robots: w.robots,
+          failClosed: w.failClosed,
         },
         llm,
         logger
@@ -769,8 +780,13 @@ export class ContainerFactory {
       // toggling the gate between --resume runs re-extracts affected chunks
       // (disabled ⇒ empty signature == legacy key, preserving old checkpoints).
       const g = options.grounding;
+      // KG-07: include `escalateAbove` (the minicheck short-circuit threshold) and
+      // `host` so toggling either across --resume re-extracts affected chunks
+      // instead of reusing a graph gated under a different threshold/endpoint.
       const groundingSignature =
-        g.mode === "disabled" ? "" : `${g.mode}|${g.checker}|${g.minScore}|${g.model}`;
+        g.mode === "disabled"
+          ? ""
+          : `${g.mode}|${g.checker}|${g.minScore}|${g.model}|${g.escalateAbove}|${g.host ?? ""}`;
       let groundingChecker: IGroundingChecker | undefined;
       if (g.mode !== "disabled" && g.checker === "minicheck") {
         const { MiniCheckGroundingChecker } = await import(
@@ -849,7 +865,7 @@ export class ContainerFactory {
 
       // Return a wrapper that implements the interface
       return {
-        merge: async (graphs) => {
+        merge: async (graphs, knownExternalEndpointNames) => {
           const records: import("../knowledge/MergeRecord").MergeRecord[] = [];
           const wantMergeLog = options.inspection.emitMergeLog;
           // The merge-log seam doubles as the trace merge-decision source: fold each
@@ -891,6 +907,7 @@ export class ContainerFactory {
               enableSimilarityMerging: options.merging.enableSimilarityMerging,
               contradictionChecker,
               onMergeRecord,
+              knownExternalEndpointNames,
             },
             embeddingService,
             logger

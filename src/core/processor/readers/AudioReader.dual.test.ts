@@ -151,7 +151,7 @@ describe("AudioReader — dual engine", () => {
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("falling back to the whisper engine"));
     expect(mockNodewhisper).toHaveBeenCalled();
-    expect(res.metadata?.asrEngine).toBeUndefined(); // whisper path, not dual
+    expect(res.metadata?.asrEngine).toBe("whisper"); // whisper path stamps its own engine tag
     expect(res.metadata?.whisperModel).toBe("medium");
     expect(res.chunks.map((c) => c.content).join(" ")).toContain("fallback transcript text");
   });

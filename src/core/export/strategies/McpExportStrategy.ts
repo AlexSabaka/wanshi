@@ -42,13 +42,23 @@ export class McpExportStrategy implements IExportStrategy {
         // MCP memory server stores observations as bare strings.
         observations: (entity.observations || []).map(obsText),
       })),
-      relations: graph.relations.map((relation) => ({
-        from: relation.from,
-        to: relation.to,
-        relationType: Array.isArray(relation.relationType)
-          ? relation.relationType.join(",")
-          : relation.relationType,
-      })),
+      relations: graph.relations.map((relation) => {
+        const mcp: MCPKnowledgeGraph["relations"][number] = {
+          from: relation.from,
+          to: relation.to,
+          relationType: Array.isArray(relation.relationType)
+            ? relation.relationType.join(",")
+            : relation.relationType,
+        };
+        // Carry reference/faithfulness provenance as edge properties when present
+        // (WS-36). Only set when defined so plain LLM edges are byte-identical.
+        if (relation.resolved !== undefined) mcp.resolved = relation.resolved;
+        if (relation.faithfulness !== undefined) mcp.faithfulness = relation.faithfulness;
+        if (relation.faithfulnessScore !== undefined)
+          mcp.faithfulnessScore = relation.faithfulnessScore;
+        if (relation.supportingSpan !== undefined) mcp.supportingSpan = relation.supportingSpan;
+        return mcp;
+      }),
     };
   }
 

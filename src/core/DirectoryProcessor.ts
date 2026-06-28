@@ -97,6 +97,16 @@ export class DirectoryProcessor implements IDirectoryProcessor {
   constructor(private container: DIContainer) {}
 
   /**
+   * Names of entities that live outside this run's extracted set but are legitimate
+   * edge endpoints (KG-04): the loaded prior-graph entities + corpus-glossary
+   * `entityNames`, both already fed to retrieval so the v5 prompt points relations at
+   * them by name. Computed in `processFiles` (where both are in scope) and consumed by
+   * `mergeGraphs` so a compliant cross-run edge isn't dropped as a true dangler. Empty
+   * on the common default run (no prior graph, no glossary) ⇒ merge is byte-identical.
+   */
+  private knownExternalEndpointNames: Set<string> = new Set<string>();
+
+  /**
    * Process a directory and generate knowledge graphs
    */
   async processDirectory(options: ProcessingOptions): Promise<void> {
@@ -156,11 +166,8 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         relations: finalKG.relations.length,
       });
       this.logSuccess(finalKG, outputPath, logger);
-      // Cost meter: exact end-of-run tally + persist the resume-safe cumulative ledger.
-      if (meter.enabled) {
-        logger.info(meter.summary());
-        meter.persistLedger();
-      }
+      // Cost meter: exact end-of-run tally (persisting the ledger happens in finally).
+      if (meter.enabled) logger.info(meter.summary());
       progress.emit({
         type: "done",
         entities: finalKG.entities.length,
@@ -175,6 +182,11 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         message: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      // WS-23: persist the resume-safe cumulative ledger even when a step after
+      // extraction (merge/canon/export) crashes — otherwise this run's spend is
+      // lost from the cumulative total. persistLedger is best-effort/never-throws.
+      if (meter.enabled) meter.persistLedger();
     }
   }
 
@@ -219,11 +231,29 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     // Load a prior output graph (if any) to seed retrieval CONTEXT only. It must
     // NOT enter the merge set: re-merging already-merged output into a fresh run
     // double-counts entities/observations on a plain (no --resume) re-run.
-    const priorGraphs = await this.loadPriorGraphs(options.output, logger);
+    // KG-11: the writer rewrites the output extension to match the export format
+    // (getOutputPath), so seed from that same path — else `output: kg.json` +
+    // `format: jsonl` looks for a non-existent kg.json and silently seeds nothing.
+    const priorGraphs = await this.loadPriorGraphs(
+      this.getOutputPath(options.output, options.export.format),
+      logger
+    );
 
     // Optional corpus analysis pre-pass: build/load a corpus-specific glossary
     // (and cached per-file classification) once, before extraction.
     const corpusProfile = await this.buildCorpusProfile(files, options, logger);
+
+    // KG-04: the names retrieval can surface but merge won't re-extract — prior-graph
+    // entities + corpus-glossary entityNames. A v5-compliant edge pointing at one of
+    // these (by name, not re-emitted) must survive the dangling-edge gate; this set is
+    // threaded to mergeGraphs. Empty when there's no prior graph and no glossary (the
+    // common default), so the merge stays byte-identical to before.
+    const externalNames = new Set<string>();
+    for (const g of priorGraphs) {
+      for (const e of g.entities) externalNames.add(e.name);
+    }
+    for (const name of corpusProfile?.glossary.entityNames ?? []) externalNames.add(name);
+    this.knownExternalEndpointNames = externalNames;
 
     const fileProcessor = await this.container.resolve<IFileProcessor>(
       TYPES.FileProcessor
@@ -532,7 +562,8 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       options.description,
       processedFile.metadata?.classes,
       corpusProfile?.glossary,
-      options.pipeline.extraction.openPredicate
+      options.pipeline.extraction.openPredicate,
+      options.pipeline.extraction.strictVocabulary
     );
 
     const graphs = await kgBuilder.build(
@@ -601,7 +632,8 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         options.description,
         pf.metadata?.classes,
         corpusProfile?.glossary,
-        options.pipeline.extraction.openPredicate
+        options.pipeline.extraction.openPredicate,
+        options.pipeline.extraction.strictVocabulary
       );
       return kgBuilder.build(pf, systemPrompt, undefined, corpusProfile?.glossary);
     };
@@ -659,7 +691,8 @@ export class DirectoryProcessor implements IDirectoryProcessor {
         options.description,
         pf.metadata?.classes,
         corpusProfile?.glossary,
-        options.pipeline.extraction.openPredicate
+        options.pipeline.extraction.openPredicate,
+        options.pipeline.extraction.strictVocabulary
       );
       const graphs = await kgBuilder.build(pf, systemPrompt, undefined, corpusProfile?.glossary);
       return { chunks, graphs };
@@ -774,7 +807,10 @@ export class DirectoryProcessor implements IDirectoryProcessor {
       TYPES.KnowledgeGraphMerger
     );
 
-    return await merger.merge(graphs);
+    // KG-04: pass the prior-graph + glossary names so a v5-compliant edge pointing at a
+    // retrieved (not re-emitted) entity survives the dangling-edge gate. Empty set ⇒
+    // no behavior change.
+    return await merger.merge(graphs, this.knownExternalEndpointNames);
   }
 
   /**
@@ -792,7 +828,7 @@ export class DirectoryProcessor implements IDirectoryProcessor {
     const transforms: GraphTransform[] = [
       new GroundingTransform(),
       new Canonicalizer(),
-      new RelationFilterTransform(), // after canon: endpoints are canonical before pairing
+      new RelationFilterTransform(), // run order is governed by pipeline.stages, not this array (relationFilter is listed after canonicalization there)
     ];
 
     const ctx: TransformContext = {
