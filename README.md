@@ -6,6 +6,9 @@
   <img alt="wanshi" src="docs/assets/readme-banner-light.png">
 </picture>
 
+[![npm version](https://img.shields.io/npm/v/@wanshi-kg/wanshi)](https://www.npmjs.com/package/@wanshi-kg/wanshi)
+[![CI](https://github.com/wanshi-kg/wanshi/actions/workflows/ci.yml/badge.svg)](https://github.com/wanshi-kg/wanshi/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > A local-first CLI that reads ten thousand things — code, docs, PDFs, audio, transcripts — and builds one knowledge graph that remembers where every fact came from.
 
@@ -162,144 +165,43 @@ wanshi --export-only -i ./knowledge-graph.json --export-format kblam -o ./kb.jso
 
 ## CLI reference
 
-### Core
+The most-used flags are below. Run **`wanshi --help`** for the full list and **`wanshi schema`** for the complete, authoritative config (generated from the Zod schema, so it never drifts from the code); the prose reference lives in [`website/docs/reference/cli.md`](website/docs/reference/cli.md).
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
 | `-i, --input <path>` | `.` | Input directory |
-| `-f, --filter <glob>` | `**/*` | Include pattern |
-| `-e, --exclude <glob...>` | — | Exclude patterns |
 | `-o, --output <path>` | `knowledge-graph.json` | Output file |
-| `-d, --description <text>` | — | Content description for LLM context |
-| `--config <file>` | — | YAML/JSON config file |
-
-### LLM
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
+| `-f, --filter` / `-e, --exclude <glob…>` | `**/*` | Include / exclude patterns |
+| `--config <file>` | — | YAML/JSON config (recommended; nested shape — `wanshi schema`) |
 | `--provider <name>` | `ollama` | `ollama` or `openai` (any OpenAI-compatible endpoint) |
-| `-m, --model <name>` | `llama3.2` | Ollama tag or provider model id |
-| `-h, --host <url>` | `http://localhost:11434` | Ollama host, or OpenAI-compatible base URL |
-| `--api-key <key>` | — | Falls back to `$OPENAI_API_KEY` / `$WANSHI_API_KEY` (or `$KG_API_KEY`, legacy) |
-| `--temperature <n>` | `0.1` | Sampling temperature |
-| `--repeat-penalty <n>` | `1.1` | Ollama only (>1.0 discourages repetition) |
-| `--context-length <n>` | `8192` | Context window (Ollama only) |
-| `--max-tokens <n>` | provider default | Raise (or lower `--chunk-size`) if graph JSON truncates mid-output |
-| `--seed <n>` | — | Reproducibility seed (Ollama only) |
-| `-s, --system <prompt\|path>` | — | Custom system prompt or template path |
-
-### Embeddings (independent from generation)
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--embeddings-provider <name>` | `ollama` | `ollama` or `openai` |
-| `--embeddings-model <name>` | `nomic-embed-text` | Embeddings model |
-| `--embeddings-host <url>` | `http://localhost:11434` | Host / base URL |
-| `--embeddings-max-input-chars <n>` | `1024` | Truncate embedding inputs (safe for 512-token models; raise for cloud) |
-
-### Processing & retrieval
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--chunking <mode>` | `enabled` | `enabled\|disabled\|auto` |
+| `-m, --model <name>` | `llama3.2` | Generation model |
+| `-h, --host <url>` | `localhost:11434` | Ollama host / OpenAI base URL |
+| `--embeddings-model <name>` | `nomic-embed-text` | Embeddings model (chosen independently from generation) |
 | `-c, --chunk-size <n>` | `2000` | Max chunk size (chars) |
-| `--overlap-size <n>` | `100` | Chunk overlap |
-| `--retrieval <mode>` | `enabled` | `enabled\|disabled\|auto` |
-| `--retrieval-limit <n>` | `3` | Retrieved context entities per chunk |
-| `--retrieval-scope <mode>` | `chunk` | `chunk` (per-chunk) or `file` (once, reused) |
-| `--json-strategy <mode>` | `structural` | `structural` (split on JSON structure) or `raw` |
-
-### Media & classification
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--asr <mode>` | `enabled` | `enabled\|disabled\|auto` |
-| `--whisper-model <name>` | `medium` | `tiny\|base\|small\|medium\|large` |
-| `--language <lang>` | `auto` | Language code or `auto` |
-| `--translate` | `false` | Translate audio to English |
-| `--images <mode>` | `auto` | `enabled\|disabled\|auto` (vision model required) |
-| `--pdf-engine <engine>` | `pdf2json` | `pdf2json\|tesseract\|docling\|marker\|chandra\|mistral` — PDF reading engine; hardware-aware ladder tesseract (CPU/WASM) → pdf2json → docling → marker → chandra (handwriting VLM) → mistral (cloud). Non-default engines degrade to `pdf2json` on failure |
-| `--asr-engine <engine>` | `whisper` | `whisper\|dual` — `dual` = vendored Python VAD + Parakeet/Whisper dual-STT + diarization (Apple-Silicon) |
-| `--classifier <mode>` | `disabled` | `disabled\|heuristic\|llm\|cascade` — drives domain prompt hints and scopes `entityType` to a per-domain enum *(experimental)* |
-| `--trace` | `false` | Emit a structured decision run-trace to `<output>.trace.jsonl` *(debug/observability)* |
-
-### Merging, grounding, corpus glossary
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--entity-similarity-threshold <n>` | `0.9` | Jaro-Winkler entity dedup (0–1) |
-| `--observation-similarity-threshold <n>` | `0.9` | Embedding similarity (0–1) |
-| `--enable-similarity-merging` | `true` | Enable entity deduplication |
-| `--grounding <mode>` | `disabled` | `disabled` · `flag` (annotate `grounded`/`groundingScore`) · `drop` (remove below threshold) |
-| `--grounding-min-score <n>` | `0.5` | Min grounding score; also gates which facts the `lora` export keeps |
-| `--corpus-profiling <mode>` | `disabled` | Pre-pass that builds an authoritative corpus glossary (closed vocab under v5) *(experimental)* |
-| `--prompt-version <version>` | `v5` | `v5` (closed-vocab + topology hygiene) or `v4.5` (legacy) |
-
-### Export, resume, logging
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--export-format <format>` | `json` | `json\|jsonl\|mcp-jsonl\|dot\|kblam\|lora\|graphiti` |
-| `--export-only` | `false` | Convert an existing graph (`--input`) to `--export-format` — no extraction |
+| `--export-format <fmt>` | `json` | `json·jsonl·mcp-jsonl·dot·kblam·lora·graphiti` |
+| `--export-only` | `false` | Convert an existing graph — no extraction |
 | `--resume` | `false` | Checkpoint chunks; skip done ones on re-run |
-| `--checkpoint <path>` | `<output>.checkpoint.jsonl` | Checkpoint sidecar |
-| `-L, --log-level <level>` | `info` | `debug\|info\|warning\|error` |
-| `-l, --log-file <path>` | — | Write logs to file |
-| `-w, --watch` | `false` | Watch mode |
+| `--grounding <mode>` | `disabled` | `flag` / `drop` ungrounded facts (opt-in) |
+| `--pdf-engine <engine>` | `pdf2json` | `pdf2json·tesseract·docling·marker·chandra·mistral` |
+| `-w, --watch` | `false` | Update the graph as files change |
 
-> Document-outline injection (`readers.outline`) and DOT styling (`export.dot`) are config-only (no CLI flags) — see the config schema.
-
-### References & citations (opt-in; network only for web/citation fetch)
-
-Turn the references a document already contains into deterministic edges — and, opt-in, fetch the cited work to make a citation evidence-bearing. All default **off** (offline, byte-identical run).
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--reference-links` | `false` | Resolve internal links + `[[wikilinks]]` → `links_to` edges |
-| `--reference-citations` | `false` | Parse bibliographies + inline ids → `cites` edges |
-| `--reference-follow` | `false` | Follow resolved internal links to discover & ingest more files |
-| `--reference-web` | `false` | Fetch external links (allowlist + robots + budget gated) → `references` edges |
-| `--reference-citation-fetch` | `false` | Fetch a cited work's OA full text, then span-select + grounding-check the citing claim |
-| `--reference-title-resolver` | `false` | Resolve id-less citations via Crossref → Semantic Scholar → OpenAlex |
-| `--grobid` / `--grobid-url <url>` | `false` | Link in-text citations to their claim sentence via a local GROBID service |
-| `--unpaywall-email <email>` | — | Unpaywall polite-pool email for DOI→OA (or `$UNPAYWALL_EMAIL`) |
-| `--strip-references` | `false` | Quarantine a document's trailing bibliography before extraction |
-
-### Cost & token metering
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--cost` | `false` | Meter token usage + USD cost (rough pre-run estimate + exact end-of-run tally) |
-| `--max-cost <n>` | — | Hard spend cap — graceful stop + checkpoint when exceeded (auto-enables `--cost`) |
-| `--cost-ledger <path>` | `<output>.cost.json` | Resume-safe cumulative cost ledger |
-
-### Image enrichment & CV (opt-in; augments the vision read, never replaces it)
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--exif` | `false` | EXIF → GPS `location`, capture-time `validAt`, camera/author facts |
-| `--c2pa` | `false` | C2PA content credentials → a fact-not-verdict trust observation |
-| `--object-detection` | `false` | CV detector pre-pass → a VLM context line + `depicts` edges |
-| `--detection-mode <mode>` | `closed` | `closed` (COCO-80) or `zero-shot` (open-vocab labels) |
-
-### Structured-source adapters
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--sqlite` | `false` | Map a `.db`/`.sqlite` directly to graph — tables → types, rows → entities, FKs → edges (no LLM) |
-
-> **More flags.** AST seeding (`--ast`), corpus tuning (`--corpus-top-terms`, `--corpus-profile-path`),
-> dual-ASR backends (`--asr-models`, `--num-speakers`), PDF-engine tuning (`--marker-use-llm`,
-> `--tesseract-lang`, `--chandra-method`), grounding internals (`--grounding-checker`,
-> `--grounding-model`, `--supersession`), and `--trace-path` round out the surface. Run
-> **`wanshi schema`** to print the complete, authoritative option set — it's generated from the Zod
-> config schema, so it never drifts from the code.
+**Opt-in subsystems** — all default **off** (an otherwise byte-identical, offline run): reference + citation resolution (`--reference-links`, `--reference-citations`, `--reference-web`, `--reference-citation-fetch`, plus GROBID / Unpaywall / title-resolver), image enrichment (`--exif`, `--c2pa`, `--object-detection`), structured-source adapters (`--sqlite`), AST code seeding (`--ast`), the dual-STT ASR engine (`--asr-engine dual`), and cost metering (`--cost` / `--max-cost`). Run `wanshi --help` for each.
 
 ## Output formats
 
-### JSON (`json`)
+Pick with `--export-format`:
 
-Observations are **objects**, not bare strings — each carries provenance and the bi-temporal axis. The LLM emits plain text; `wanshi` stamps the metadata deterministically from what it knows about the chunk. Unknown fields are omitted; legacy string-observation graphs still load.
+| Format | What it's for |
+| ------ | ------------- |
+| `json` (default) | Full graph; observations are **objects** carrying provenance + the bi-temporal axis |
+| `jsonl` | Streamable JSON Lines |
+| `mcp-jsonl` | Byte-compatible with the [MCP memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) — point it at the file, query from Claude. No store to build |
+| `dot` | Styled GraphViz (colors, legend, clustering — config-only `export.dot:`); render `dot -Tsvg graph.dot -o graph.svg` |
+| `kblam` | Microsoft [KBLaM](https://github.com/microsoft/KBLaM) `(entity, property, value)` triples for knowledge-token training |
+| `lora` | Chat SFT examples, **quality-filtered** (drops facts below `--grounding-min-score`) |
+| `graphiti` | `add_triplet`-shaped `{ nodes, edges }` for a [Graphiti](https://github.com/getzep/graphiti) temporal graph |
+
+The default `json` keeps observations as provenance-stamped **objects** — the LLM emits plain text; `wanshi` stamps `source`/`speaker` and the bi-temporal axis deterministically from what it knows about each chunk:
 
 ```json
 {
@@ -308,11 +210,8 @@ Observations are **objects**, not bare strings — each carries provenance and t
       "name": "knowledge_graph_builder",
       "entityType": "class",
       "observations": [
-        {
-          "text": "Extracts entities and relations from file content using an LLM",
-          "source": "src/core/knowledge/KnowledgeGraphBuilder.ts",
-          "createdAt": "2026-06-05T15:57:59.856Z"
-        }
+        { "text": "Extracts entities and relations from file content using an LLM",
+          "source": "src/core/knowledge/KnowledgeGraphBuilder.ts", "createdAt": "2026-06-05T15:57:59.856Z" }
       ],
       "files": ["src/core/knowledge/KnowledgeGraphBuilder.ts"]
     },
@@ -320,13 +219,9 @@ Observations are **objects**, not bare strings — each carries provenance and t
       "name": "SPEAKER_01",
       "entityType": "person",
       "observations": [
-        {
-          "text": "Explains that a Naïve Bayes classifier assumes word independence",
-          "speaker": "SPEAKER_01",
-          "source": "Olga Lesson P.parakeet.txt",
-          "validAt": "2026-05-28T00:00:00Z",
-          "createdAt": "2026-06-05T15:57:59.856Z"
-        }
+        { "text": "Explains that a Naïve Bayes classifier assumes word independence",
+          "speaker": "SPEAKER_01", "source": "Olga Lesson P.parakeet.txt",
+          "validAt": "2026-05-28T00:00:00Z", "createdAt": "2026-06-05T15:57:59.856Z" }
       ],
       "files": ["Olga Lesson P.parakeet.txt"]
     }
@@ -337,37 +232,7 @@ Observations are **objects**, not bare strings — each carries provenance and t
 }
 ```
 
-### MCP-compatible JSONL (`mcp-jsonl`)
-
-```jsonl
-{"type":"entity","name":"knowledge_graph_builder","entityType":"class","observations":["Extracts entities and relations from file content using an LLM"]}
-{"type":"relation","from":"knowledge_graph_builder","to":"ollama_service","relationType":"uses,depends_on"}
-```
-
-### GraphViz DOT (`dot`)
-
-Styled, colored graph (one node per entity, colored edges per relation type, legend, config summary). Render with `dot -Tsvg graph.dot -o graph.svg` (or `neato`/`fdp`/`sfdp`/`circo`/`twopi`). Styling is config-only under `export.dot:` — layout, `rankdir`, `colorScheme` (`default\|scientific\|code\|minimal`), clustering by type or file, etc.
-
-### KBLaM triples (`kblam`)
-
-JSONL in the shape Microsoft [KBLaM](https://github.com/microsoft/KBLaM)'s `dataset_generation` ingests — **one `(entity, property, value)` per line**, each with the derived `Q`/`A`/`key_string` it encodes into a knowledge token. Property names are distinct per entity (relations contribute their predicate as the property), and keys are unique per `(name, property)` so rectangular-attention lookup is unambiguous.
-
-```jsonl
-{"name":"Recursion","property":"definition","value":"a function that calls itself","Q":"What is the definition of Recursion?","A":"The definition of Recursion is a function that calls itself.","key_string":"the definition of Recursion"}
-{"name":"Recursion","property":"terminates_at","value":"BaseCase","Q":"What is the terminates_at of Recursion?","A":"The terminates_at of Recursion is BaseCase.","key_string":"the terminates_at of Recursion"}
-```
-
-### LoRA / SFT (`lora`)
-
-Chat-format instruction examples derived from the same triples, **quality-filtered**: observations whose grounding score is below `--grounding-min-score` are dropped, so only grounded facts become training data.
-
-```jsonl
-{"messages":[{"role":"user","content":"What is the definition of Recursion?"},{"role":"assistant","content":"The definition of Recursion is a function that calls itself."}]}
-```
-
-### Graphiti (`graphiti`)
-
-`add_triplet`-shaped `{ nodes, edges }` for ingestion into a [Graphiti](https://github.com/getzep/graphiti) temporal graph — entities → nodes (summary from observations), relations → `UPPER_SNAKE` edges with stable uuids. Per-fact valid-time rides along in the `json`/`kblam` exports.
+Per-format shapes + examples (KBLaM / LoRA / Graphiti / DOT): [`website/docs/guides/output-formats.md`](website/docs/guides/output-formats.md).
 
 ## Local model guidance
 
@@ -383,15 +248,16 @@ Quality/speed trade-off for local selection. For measured numbers see the benchm
 
 Default embeddings: `nomic-embed-text`.
 
-The table above is qualitative guidance. For measured, comparative numbers (wanshi vs KGGen on gold-labeled datasets) see **[Benchmarks](#benchmarks)** below — note those run on **cloud** models; local-model benchmarks are planned.
+The table above is qualitative guidance. For measured, comparative numbers (wanshi vs KGGen on gold-labeled datasets) see **[Benchmarks](#benchmarks)** below — both a cloud arm and a **local (M4 + L4) arm**.
 
 ## Benchmarks
 
-> **Scope & honesty (read first).** Every number here is **cloud inference via OpenRouter** —
-> **local-model (offline-first) benchmarks are planned and not yet run** (see [What's not yet
-> measured](#whats-not-yet-measured)). Comparative baselines are **re-scored under one identical
-> harness, not the published figures**. The document-level result rests on **one dataset** so far.
-> **MINE** is a recall-only, LLM-judge-mediated axis, reported as *context*, not a load-bearing claim.
+> **Scope & honesty (read first).** Cloud numbers are **OpenRouter inference**; the
+> **local (offline-first) arm is now measured too** — see [Local arm](#local-arm-offline-first).
+> Comparative baselines are **re-scored under one identical harness**
+> ([pre-registered methodology](docs/benchmark/SCORING.md)), not the published figures. The
+> document-level result rests on **one dataset** so far. **MINE** is a recall-only, LLM-judge-mediated
+> axis, reported as *context*, not a load-bearing claim.
 
 wanshi vs **KGGen** (its real Python package), **same model for both tools**, on gold-labeled datasets.
 The fair cross-tool metric is **entity-capture F1** (did the tool recover the gold entities) — both
@@ -462,13 +328,29 @@ npx ts-node scripts/gold-compare.ts --dataset redocred --limit 100 \
 # add --relation-vocab @data/redocred/compare/relation-vocab.txt for the schema-aware (H4) cell
 ```
 
+### Local arm (offline-first)
+
+The deployment-target floor is now measured: wanshi vs KGGen on the **same local Ollama model**
+(`gemma3:4b`, `qwen3:8b`), gold corpora, on a **16 GB M4 laptop** *and* a rented **L4 GPU**. The
+precision-collapse holds at the 4B *local* tier — biored KGGen node-precision **0.26**, matching the
+cloud's ~0.24 — so the precision-stability claim is **model-invariant across 4B→70B and three hardware
+tiers**, not just cloud.
+
+| `gemma3:4b` · biored | wanshi node-F1 | KGGen node-F1 | conformance | throughput |
+| -------------------- | -------------- | ------------- | ----------- | ---------- |
+| M4 (16 GB laptop) | 0.49 | 0.39 | 1.000 | ~25 tok/s |
+| L4 (rented GPU) | 0.49 | 0.39 | 1.000 | ~63 tok/s |
+
+**Quality is hardware-independent** — M4 and L4 node-F1 differ only by sampling noise, and JSON-conformance
+is **1.000** on both dense models — at **~40% of the rental GPU's throughput**. wanshi wins node-F1 in
+**8/8 M4 cells and 11/12 L4 cells** (sole loss: redocred/qwen3:8b). *(qwen3:8b runs on 16 GB only
+serialized; a full 8B comparison sweep isn't a realistic laptop workload.)*
+
 ### What's not yet measured
 
-- **Local-model (offline-first) benchmarks** — the deployment-target floor (`gemma3:4b`-class) is *owed*;
-  every number above is cloud inference. This is the next benchmark priority. *(An earlier indicative
-  n=20 single-domain run hinted small `gemma3:4b` ≈ larger Gemmas on entity extraction — to be confirmed
-  in the local arm.)*
 - **A second document-level dataset** (SciERC / BioRED) to close the single-dataset caveat on claim (a).
+- **A clean wanshi-alone cell + the redocred/qwen3:8b document cell** (the one local loss) on that second
+  corpus — to settle whether the doc-level arc weakens at 8B or it's noise.
 
 ## Quality metrics
 
