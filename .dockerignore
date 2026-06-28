@@ -1,0 +1,19 @@
+# Keep the build context lean. The 11GB REBEL set is NOT a gold benchmark — never ship it.
+# NB: patterns are anchored where needed so we don't accidentally drop source dirs
+# (an unanchored **/compare would exclude src/evaluation/compare/).
+.git
+node_modules
+**/node_modules
+data/rebel
+data/*/compare
+/results
+/temp
+.venv-kggen
+*.log
+*.checkpoint.jsonl
+*.corpus-profile.json
+*.fetch-cache.jsonl
+*.cost.json
+*.trace.jsonl
+.env
+.DS_Store
