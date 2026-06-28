@@ -22,6 +22,29 @@ const opts = {
 };
 
 describe("KnowledgeMerger — provenance & bi-temporal", () => {
+  it("keeps same-name config-typed file artifacts from different projects distinct (KG-13)", async () => {
+    const cfg = (file: string): KnowledgeGraph => ({
+      entities: [
+        {
+          name: "package.json",
+          entityType: "config",
+          files: [file],
+          observations: [{ text: `config at ${file}`, source: file, createdAt: "2026-01-01T00:00:00Z" }],
+        },
+      ],
+      relations: [],
+    });
+    const merged = await mergeKnowledgeGraphs(
+      [cfg("proj-a/package.json"), cfg("proj-b/package.json")],
+      opts,
+      stubEmbed,
+      stubLogger()
+    );
+    // Before KG-13, `config` wasn't a file-identity type, so the two distinct
+    // package.json artifacts fused (bare-name fast path + fuzzy JW 1.0). Now they stay apart.
+    expect(merged.entities.filter((e) => e.entityType === "config")).toHaveLength(2);
+  });
+
   it("keeps per-source attribution: two sources asserting one fact → two observations", async () => {
     const g1: KnowledgeGraph = {
       entities: [
@@ -273,6 +296,127 @@ describe("KnowledgeMerger — cross-file linking (KG-04)", () => {
     );
 
     expect(merged.relations).toHaveLength(0);
+    expect(stats[0]).toEqual({ crossFileEdges: 0, droppedDanglingEdges: 1 });
+  });
+});
+
+describe("KnowledgeMerger — cross-RUN edge linking (KG-04 knownExternalEndpointNames)", () => {
+  it("keeps an edge pointing at a known external (prior-graph / glossary) name and materializes a stub endpoint", async () => {
+    // The v5 contract for the cross-RUN case: this run extracts only "Orchestrator"
+    // and points an edge at "Graph Store" — an entity that lives in the prior graph /
+    // glossary (fed to retrieval), NOT re-emitted this run. Before the fix this edge
+    // died at the global dangling gate (entityMap is current-run only).
+    const g: KnowledgeGraph = {
+      entities: [mkEnt("Orchestrator", "service", "a.txt")],
+      relations: [{ from: "Orchestrator", to: "Graph Store", relationType: ["produces"] }],
+    };
+
+    const stats: MergeStats[] = [];
+    const merged = await mergeKnowledgeGraphs(
+      [g],
+      {
+        ...opts,
+        onMergeStats: (s) => stats.push(s),
+        knownExternalEndpointNames: new Set(["Graph Store"]),
+      },
+      stubEmbed,
+      stubLogger()
+    );
+
+    // Edge survives...
+    expect(merged.relations).toHaveLength(1);
+    expect(merged.relations[0]).toMatchObject({ from: "Orchestrator", to: "Graph Store" });
+    expect(stats[0].droppedDanglingEdges).toBe(0);
+    // ...and a lightweight stub endpoint exists, with NO fabricated observations.
+    const stub = merged.entities.find((e) => e.name === "Graph Store");
+    expect(stub).toBeDefined();
+    expect(stub!.observations).toHaveLength(0);
+    expect(stub!.entityType).toBe("other");
+  });
+
+  it("does NOT clobber a real same-name entity into a stub when it's also in the external set", async () => {
+    // The subtle mixed-graph case: "Graph Store" is BOTH a real entity extracted
+    // this run (with observations) AND a name in the external set. materializeExternalStub
+    // checks entityMap.has() FIRST, so the real entity wins — no stub overwrites its
+    // facts, and the cross-file edge connects to the real node.
+    const gReal: KnowledgeGraph = {
+      entities: [
+        {
+          name: "Graph Store",
+          entityType: "service",
+          files: ["b.txt"],
+          observations: [{ text: "stores the merged graph", source: "b.txt", createdAt: "2026-01-01T00:00:00Z" }],
+        },
+      ],
+      relations: [],
+    };
+    const gEdge: KnowledgeGraph = {
+      entities: [mkEnt("Orchestrator", "service", "a.txt")],
+      relations: [{ from: "Orchestrator", to: "Graph Store", relationType: ["produces"] }],
+    };
+
+    const stats: MergeStats[] = [];
+    const merged = await mergeKnowledgeGraphs(
+      [gReal, gEdge],
+      { ...opts, onMergeStats: (s) => stats.push(s), knownExternalEndpointNames: new Set(["Graph Store"]) },
+      stubEmbed,
+      stubLogger()
+    );
+
+    // Exactly ONE "Graph Store" — the real one, facts intact, NOT a type:"other" stub.
+    const gs = merged.entities.filter((e) => e.name === "Graph Store");
+    expect(gs).toHaveLength(1);
+    expect(gs[0].entityType).toBe("service");
+    expect(gs[0].observations).toHaveLength(1);
+    // The edge survives and is NOT counted as a dropped dangler.
+    expect(merged.relations).toContainEqual(expect.objectContaining({ from: "Orchestrator", to: "Graph Store" }));
+    expect(stats[0].droppedDanglingEdges).toBe(0);
+  });
+
+  it("still drops an edge whose endpoint is in NEITHER entityMap NOR the external set (no fabrication)", async () => {
+    const g: KnowledgeGraph = {
+      entities: [mkEnt("Orchestrator", "service", "a.txt")],
+      relations: [{ from: "Orchestrator", to: "Hallucinated", relationType: ["produces"] }],
+    };
+
+    const stats: MergeStats[] = [];
+    const merged = await mergeKnowledgeGraphs(
+      [g],
+      {
+        ...opts,
+        onMergeStats: (s) => stats.push(s),
+        // External set names a DIFFERENT entity; "Hallucinated" is in neither set.
+        knownExternalEndpointNames: new Set(["Graph Store"]),
+      },
+      stubEmbed,
+      stubLogger()
+    );
+
+    expect(merged.relations).toHaveLength(0);
+    expect(merged.entities.find((e) => e.name === "Hallucinated")).toBeUndefined();
+    expect(stats[0].droppedDanglingEdges).toBe(1);
+  });
+
+  it("with an empty external set, a dangling edge to an unknown name is still dropped (default unchanged)", async () => {
+    const g: KnowledgeGraph = {
+      entities: [mkEnt("Orchestrator", "service", "a.txt")],
+      relations: [{ from: "Orchestrator", to: "Nonexistent", relationType: ["produces"] }],
+    };
+
+    const stats: MergeStats[] = [];
+    const merged = await mergeKnowledgeGraphs(
+      [g],
+      {
+        ...opts,
+        onMergeStats: (s) => stats.push(s),
+        knownExternalEndpointNames: new Set<string>(),
+      },
+      stubEmbed,
+      stubLogger()
+    );
+
+    expect(merged.relations).toHaveLength(0);
+    expect(merged.entities.find((e) => e.name === "Nonexistent")).toBeUndefined();
     expect(stats[0]).toEqual({ crossFileEdges: 0, droppedDanglingEdges: 1 });
   });
 });

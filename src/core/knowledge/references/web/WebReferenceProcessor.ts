@@ -3,7 +3,7 @@ import { Entity, KnowledgeGraph, Observation, Relation } from "../../../../types
 import { Logger } from "../../../../shared";
 import { isExternalTarget, RawLink } from "../../../processor/readers/referenceExtraction";
 import { GatedFetcher } from "./GatedFetcher";
-import { FetchCacheService } from "./FetchCacheService";
+import { FetchCacheService, isTransientFetchReason } from "./FetchCacheService";
 
 /** Extract a KG from a staged (fetched) page — injected so this stays decoupled
  * from the prompt/builder machinery and unit-testable with a stub. */
@@ -94,6 +94,10 @@ export class WebReferenceProcessor {
       graph = this.buildContribution(citingRel, url, false, [], undefined, fetchedAt);
     }
 
+    // WS-03: don't permanently cache a transient failure (timeout/5xx/429/network);
+    // mark it so the cache expires it. Resolved fetches + deterministic negatives
+    // are cached indefinitely.
+    const transient = !r.resolved && isTransientFetchReason(r.reason);
     await this.cache.append({
       url,
       resolved: r.resolved,
@@ -102,6 +106,7 @@ export class WebReferenceProcessor {
       contentType: r.contentType,
       fetchedAt,
       graph,
+      ...(transient ? { transient: true } : {}),
     });
     return graph;
   }

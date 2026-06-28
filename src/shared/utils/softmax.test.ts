@@ -35,4 +35,21 @@ describe("softmax", () => {
   it("returns [] for empty input", () => {
     expect(softmax([])).toEqual([]);
   });
+
+  it("falls back to uniform on a NaN score (does not silently mask it)", () => {
+    const out = softmax([1, NaN, 3]);
+    out.forEach((x) => expect(x).toBeCloseTo(1 / 3, 10));
+    expect(sum(out)).toBeCloseTo(1, 10);
+    expect(out.every(Number.isFinite)).toBe(true);
+  });
+
+  it("falls back to uniform on an Infinity score", () => {
+    const pos = softmax([Infinity, 0]);
+    pos.forEach((x) => expect(x).toBeCloseTo(1 / 2, 10));
+    expect(pos.every(Number.isFinite)).toBe(true);
+
+    const neg = softmax([-Infinity, 0, 5]);
+    neg.forEach((x) => expect(x).toBeCloseTo(1 / 3, 10));
+    expect(neg.every(Number.isFinite)).toBe(true);
+  });
 });

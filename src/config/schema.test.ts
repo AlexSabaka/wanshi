@@ -68,8 +68,38 @@ describe("config schema", () => {
     expect(c.filter).toEqual(["**/*.ts"]);
   });
 
+  it("treats a bare/empty outline maxDepth as omitted, not 0 (WS-32)", () => {
+    // omitted -> undefined -> the generator's own default (byte-identical default run)
+    expect(parseConfig({}).readers.outline.maxDepth).toBeUndefined();
+    expect(parseConfig({ readers: { outline: { maxDepth: null as any } } }).readers.outline.maxDepth).toBeUndefined();
+    expect(parseConfig({ readers: { outline: { maxDepth: "" as any } } }).readers.outline.maxDepth).toBeUndefined();
+    // an explicit value is preserved (incl. a deliberate 0)
+    expect(parseConfig({ readers: { outline: { maxDepth: 4 } } }).readers.outline.maxDepth).toBe(4);
+    expect(parseConfig({ readers: { outline: { maxDepth: 0 } } }).readers.outline.maxDepth).toBe(0);
+  });
+
+  it("maps a bare/empty numeric value to the default, not 0 (WS-19)", () => {
+    // A YAML `size:` parses to null; an empty CLI value to "". Both must fall
+    // through to the default rather than coercing to 0.
+    expect(parseConfig({ chunking: { size: "" as any } }).chunking.size).toBe(2000);
+    expect(parseConfig({ chunking: { size: null as any } }).chunking.size).toBe(2000);
+    expect(parseConfig({ chunking: { overlap: "" as any } }).chunking.overlap).toBe(100);
+    // a real 0 is a legitimate value and is preserved
+    expect(parseConfig({ chunking: { overlap: 0 } }).chunking.overlap).toBe(0);
+    // valid strings/numbers still coerce
+    expect(parseConfig({ retrieval: { limit: "7" } }).retrieval.limit).toBe(7);
+  });
+
   it("rejects an out-of-vocab enum value", () => {
     expect(() => parseConfig({ llm: { provider: "bogus" } })).toThrow(ConfigError);
+  });
+
+  it("rejects an inverted or out-of-range citation uncertainBand (WS-35)", () => {
+    const band = (b: number[]) => ({ references: { citations: { fetch: { uncertainBand: b } } } });
+    expect(() => parseConfig(band([0.7, 0.3]))).toThrow(ConfigError); // inverted
+    expect(() => parseConfig(band([-0.1, 0.5]))).toThrow(ConfigError); // lo < 0
+    expect(() => parseConfig(band([0.5, 1.5]))).toThrow(ConfigError); // hi > 1
+    expect(parseConfig(band([0.3, 0.7])).references.citations.fetch.uncertainBand).toEqual([0.3, 0.7]);
   });
 
   it("rejects a legacy flat key and names the new nested path", () => {
@@ -162,7 +192,11 @@ describe("config schema", () => {
       "extraction",
       "grounding",
       "canonicalization",
+      "relationFilter",
     ]);
+    // relationFilter is in the default stage list (WS-14) but defaults to mode:"off",
+    // so a default run is unchanged — the transform is a no-op when off.
+    expect(c.pipeline.relationFilter.mode).toBe("off");
     // Extraction defaults to the closed vocabulary (open-predicate is opt-in).
     expect(c.pipeline.extraction.enabled).toBe(true);
     expect(c.pipeline.extraction.openPredicate).toBe(false);

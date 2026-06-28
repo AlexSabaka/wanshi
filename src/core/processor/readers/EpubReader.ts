@@ -117,7 +117,10 @@ export class EpubReader extends FileReader {
 
   private async xhtmlToChapter(xhtml: string): Promise<{ title?: string; text: string }> {
     const $ = cheerio.load(xhtml);
-    const title = ($("title").first().text() || $("h1").first().text() || "").trim() || undefined;
+    // Prefer the body heading (the chapter title) over <head><title>, which in
+    // most EPUBs holds the *book* title repeated on every spine document.
+    const title =
+      ($("h1").first().text() || $("h2").first().text() || $("title").first().text() || "").trim() || undefined;
     const { convert } = await import("html-to-text");
     return { title, text: convert(xhtml, EPUB_HTML_OPTIONS) };
   }

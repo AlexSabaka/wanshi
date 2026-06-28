@@ -40,8 +40,16 @@ export async function readExif(filePath: string, logger?: Logger): Promise<ExifM
     if (typeof o.latitude === "number" && typeof o.longitude === "number") {
       meta.gps = { lat: o.latitude, lng: o.longitude };
     }
+    // EXIF DateTimeOriginal is LOCAL wall-clock time with no zone. exifr parses it
+    // into a JS Date as if it were the host's local zone; `.toISOString()` then
+    // round-trips it through UTC, shifting the labelled time by the host offset
+    // (a 10:30 capture in UTC+2 becomes "08:30Z" on a UTC host, or "10:30Z" wrongly
+    // claiming UTC). Use OffsetTimeOriginal (EXIF 0x9011) when present to anchor the
+    // offset; otherwise keep the floating local string rather than fabricating a zone.
     const dt = o.DateTimeOriginal ?? o.CreateDate ?? o.ModifyDate;
-    if (dt) meta.dateTaken = dt instanceof Date ? dt.toISOString() : String(dt);
+    const offset = typeof o.OffsetTimeOriginal === "string" ? o.OffsetTimeOriginal.trim() : typeof o.OffsetTime === "string" ? o.OffsetTime.trim() : undefined;
+    const taken = formatExifDateTaken(dt, offset);
+    if (taken) meta.dateTaken = taken;
     const make = typeof o.Make === "string" ? o.Make.trim() : undefined;
     const model = typeof o.Model === "string" ? o.Model.trim() : undefined;
     if (make || model) meta.camera = { ...(make ? { make } : {}), ...(model ? { model } : {}) };
@@ -53,6 +61,37 @@ export async function readExif(filePath: string, logger?: Logger): Promise<ExifM
     logger?.debug(`EXIF read failed for ${filePath}: ${e}`);
     return undefined;
   }
+}
+
+/**
+ * Turn an EXIF capture time (a `Date` exifr decoded from local wall-clock, or a raw
+ * string) plus an optional `±HH:MM` offset into an ISO-8601 `dateTaken` WITHOUT a
+ * host-timezone shift. With an offset we emit `YYYY-MM-DDTHH:MM:SS±HH:MM` (zoned but
+ * never moved); without one we emit the floating local time (`YYYY-MM-DDTHH:MM:SS`,
+ * no `Z`), which is honest about the unknown zone instead of falsely stamping UTC.
+ * Pure + exported for unit testing.
+ */
+export function formatExifDateTaken(dt: unknown, offset?: string): string | undefined {
+  if (dt == null) return undefined;
+  const local = exifLocalString(dt);
+  if (!local) return undefined;
+  if (offset && /^[+-]\d{2}:\d{2}$/.test(offset)) return `${local}${offset}`;
+  return local; // floating local time, no fabricated zone
+}
+
+/** Render a `Date`/string EXIF datetime as a floating local `YYYY-MM-DDTHH:MM:SS` (no zone). */
+function exifLocalString(dt: unknown): string | undefined {
+  if (dt instanceof Date) {
+    if (isNaN(dt.getTime())) return undefined;
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}T${p(dt.getHours())}:${p(dt.getMinutes())}:${p(dt.getSeconds())}`;
+  }
+  const s = String(dt).trim();
+  if (!s) return undefined;
+  // EXIF native form "YYYY:MM:DD HH:MM:SS" → ISO local, no zone.
+  const m = s.match(/^(\d{4})[:-](\d{2})[:-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`;
+  return s;
 }
 
 /**
@@ -86,6 +125,18 @@ export async function readC2pa(
       // c2patool exits non-zero with "No claim found" when the asset has no
       // credential — a real fact (absent), distinct from the tool being missing.
       if (/no (claim|manifest|provenance|c2pa)/i.test(`${stderr}\n${stdout}`)) return { present: false };
+      // Some c2patool builds/versions exit non-zero when validation FAILS yet still
+      // emit the manifest-store report (with validation_status) on stdout. A present
+      // manifest that failed crypto checks is "present-but-invalid" (untrustworthy),
+      // NOT "unavailable" (unreadable) — parse it so we don't lose the signal.
+      if (/validation_status|validation_state/i.test(`${stdout}\n${stderr}`)) {
+        try {
+          const parsed = parseC2pa(JSON.parse(stdout));
+          if (parsed.present) return parsed;
+        } catch {
+          /* fall through to unavailable */
+        }
+      }
       logger?.debug(`c2patool exited ${code} for ${filePath}: ${stderr.trim().slice(-200)}`);
       return { present: false, unavailable: true };
     }
@@ -109,10 +160,28 @@ function parseC2pa(json: any): C2paMetadata {
   const sigInfo = (m as any)?.signature_info ?? {};
   const signer = typeof sigInfo.issuer === "string" ? sigInfo.issuer : typeof sigInfo.common_name === "string" ? sigInfo.common_name : undefined;
   const vstatus: any[] = Array.isArray(json?.validation_status) ? json.validation_status : [];
-  const valid = vstatus.every((v) => !/error|invalid|fail/i.test(String(v?.code ?? "")));
+  const valid = isC2paValid(json, vstatus);
   // C2PA's AI-generation indicator (digitalSourceType …trainedAlgorithmicMedia).
   const aiGenerated = /trainedAlgorithmicMedia/i.test(JSON.stringify(json));
   return { present: true, valid, signer, aiGenerated };
+}
+
+/**
+ * Decide C2PA validity FAIL-CLOSED. The old check passed whenever no status `code`
+ * contained the substrings `error`/`invalid`/`fail` — but the real C2PA failure codes
+ * (`signingCredential.untrusted`, `assertion.dataHash.mismatch`, `timeStamp.mismatch`,
+ * …) contain NONE of those, so a tampered manifest read as valid. We now use explicit
+ * signals: the report's own `validation_state` (c2patool ≥0.9: `Trusted`/`Valid` vs
+ * `Invalid`) when present; otherwise treat a `validation_status` array — which by
+ * convention lists only FAILURES — as invalid if it has any entry that isn't an
+ * explicit `success: true` (covers both the `success` boolean and code-only entries).
+ */
+function isC2paValid(json: any, vstatus: any[]): boolean {
+  const state = typeof json?.validation_state === "string" ? json.validation_state.toLowerCase() : undefined;
+  if (state) return state === "trusted" || state === "valid";
+  if (vstatus.length === 0) return true; // no reported problems
+  // Any entry that is not explicitly a success marker is a failure (fail-closed).
+  return vstatus.every((v) => v?.success === true);
 }
 
 /** Spawn a CLI with captured output + timeout; rejects on launch error (ENOENT). */

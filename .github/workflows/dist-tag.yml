@@ -1,0 +1,43 @@
+name: npm dist-tag
+
+# Manage npm dist-tags for @wanshi-kg/wanshi WITHOUT re-publishing a version.
+# Use to re-point a tag (e.g. move `next` onto the current release) or drop a
+# stale tag. Auth is the NPM_TOKEN secret (no interactive login).
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "add (point tag at a version) or rm (delete the tag)"
+        type: choice
+        options: [add, rm]
+        default: add
+      version:
+        description: "version to tag (ignored when action=rm), e.g. 0.2.0"
+        type: string
+        default: "0.2.0"
+      tag:
+        description: "the dist-tag to set / remove"
+        type: string
+        default: "next"
+
+jobs:
+  dist-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Apply dist-tag
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.action }}" = "rm" ]; then
+            npm dist-tag rm "@wanshi-kg/wanshi" "${{ inputs.tag }}"
+          else
+            npm dist-tag add "@wanshi-kg/wanshi@${{ inputs.version }}" "${{ inputs.tag }}"
+          fi
+      - name: Show resulting dist-tags
+        run: npm dist-tag ls "@wanshi-kg/wanshi"

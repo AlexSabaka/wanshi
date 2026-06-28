@@ -58,6 +58,27 @@ describe("EpubReader", () => {
     expect(c1).not.toContain("<h1>");
   });
 
+  it("WS-47: chapter title is the body heading, not the <head><title> book title", async () => {
+    // Every spine doc repeats the BOOK title in <head><title>; the real chapter
+    // heading lives in the body <h1>. The prepended `# <title>` must use the h1.
+    const bookTitle = "The Whole Book Title";
+    const chapA = `<html><head><title>${bookTitle}</title></head><body><h1>The First Real Chapter</h1><p>Owls at dawn.</p></body></html>`;
+    const chapB = `<html><head><title>${bookTitle}</title></head><body><h1>The Second Real Chapter</h1><p>Strays at dusk.</p></body></html>`;
+    const zip = new AdmZip();
+    zip.addFile("META-INF/container.xml", Buffer.from(CONTAINER));
+    zip.addFile("OEBPS/content.opf", Buffer.from(OPF));
+    zip.addFile("OEBPS/chap1.xhtml", Buffer.from(chapA));
+    zip.addFile("OEBPS/chap2.xhtml", Buffer.from(chapB));
+    const p = path.join(tmp, "titled.epub");
+    zip.writeZip(p);
+
+    const res = await reader().read(p);
+    const c1 = res.chunks[0].content;
+    // The prepended chapter heading is the body h1, not the book title.
+    expect(c1.startsWith("# The First Real Chapter")).toBe(true);
+    expect(c1).not.toMatch(/^#\s*The Whole Book Title/m); // book title not used as the chapter title
+  });
+
   it("returns no chunks (no throw) for a .epub that is not a zip", async () => {
     const p = path.join(tmp, "broken.epub");
     fs.writeFileSync(p, "this is plainly not a zip archive");

@@ -18,6 +18,11 @@ export class DoclingReader extends FileReader {
   private maxFileSize: number;
   private maxPages: number;
   private tempDir: string;
+  // Optional graceful fallback (the pre-built pdf2json reader, wired in
+  // ContainerFactory exactly like the sibling PDF engines). On any failure the
+  // catch delegates to it instead of returning `{chunks:[]}` (which silently
+  // cascades to an empty graph + zero exit — the "empty looks like success" trap).
+  private fallback?: FileReader;
 
   constructor(
     pythonExecutable = "python3",
@@ -29,7 +34,8 @@ export class DoclingReader extends FileReader {
     // When used as the `pdfEngine`, pass `[".pdf"]` so Docling claims only PDFs
     // (office/markdown/etc. stay with their dedicated readers). Defaults to the
     // full Docling format set for the standalone "docling for everything" use.
-    extensions?: string[]
+    extensions?: string[],
+    fallback?: FileReader
   ) {
     super(
       extensions ?? [
@@ -64,6 +70,7 @@ export class DoclingReader extends FileReader {
     this.maxFileSize = maxFileSize;
     this.maxPages = maxPages;
     this.tempDir = tempDir;
+    this.fallback = fallback;
     this.ensureTempDir();
   }
 
@@ -140,6 +147,24 @@ export class DoclingReader extends FileReader {
         `Failed to process document with Docling ${filePath}: ${error.message}`
       );
 
+      // Graceful degradation: if a fallback (pdf2json) was wired, use it instead
+      // of returning an empty result that masquerades as success. Stamp the
+      // fallback's adapterId so per-engine provenance is correct (WS-11).
+      if (this.fallback) {
+        this.logger.warn(
+          `Docling engine failed for ${filePath} (${error.message}); falling back to pdf2json`
+        );
+        const fallbackResult = await this.fallback.read(filePath);
+        const fallbackAdapter = this.fallback.adapterId();
+        return {
+          ...fallbackResult,
+          chunks: fallbackResult.chunks.map((c) => ({
+            ...c,
+            provenance: { ...c.provenance, sourceAdapter: fallbackAdapter },
+          })),
+        };
+      }
+
       return {
         chunks: [],
         metadata: {
@@ -210,8 +235,6 @@ export class DoclingReader extends FileReader {
         doclingOutput,
         result.stdout
       );
-
-      fs.writeFile("debug_output_text.txt", processedResult.content);
 
       // Cleanup
       await this.cleanup(outputPath);
@@ -379,7 +402,9 @@ export class DoclingReader extends FileReader {
   ): Promise<CommandResult> {
     return new Promise((resolve, reject) => {
       const options: SpawnOptions = {
-        stdio: ["pipe", "pipe", "pipe"],
+        // stdin ignored (we send nothing) — match the sibling PDF engines so the
+        // stream can't be left half-open (WS-53).
+        stdio: ["ignore", "pipe", "pipe"],
         env: { ...process.env, PYTHONUNBUFFERED: "1" },
       };
 
@@ -396,26 +421,22 @@ export class DoclingReader extends FileReader {
         stderr += data.toString();
       });
 
-      child.on("close", (code) => {
-        resolve({
-          code: code || 0,
-          stdout,
-          stderr,
-        });
-      });
-
-      child.on("error", (error) => {
-        reject(new Error(`Failed to execute command: ${error.message}`));
-      });
-
-      // Set timeout for long-running processes
+      // Set timeout for long-running processes.
       const timeout = setTimeout(() => {
         child.kill("SIGTERM");
         reject(new Error("Command execution timeout"));
       }, 300000); // 5 minutes timeout
 
-      child.on("close", () => {
+      // Single close handler that clears the timer and resolves (WS-53: the prior
+      // dual close handlers split these two concerns across two listeners).
+      child.on("close", (code) => {
         clearTimeout(timeout);
+        resolve({ code: code || 0, stdout, stderr });
+      });
+
+      child.on("error", (error) => {
+        clearTimeout(timeout);
+        reject(new Error(`Failed to execute command: ${error.message}`));
       });
     });
   }

@@ -20,8 +20,17 @@ import { z } from "zod";
 
 // ── small helpers ──────────────────────────────────────────────────────────
 
-/** A number field with a default; coerces CLI strings + YAML numbers. */
-const num = (def: number) => z.coerce.number().default(def);
+/**
+ * A number field with a default; coerces CLI strings + YAML numbers. A bare
+ * `key:` in YAML parses to `null` (and an empty CLI value to `""`); both map to
+ * the default rather than coercing to 0 (WS-19) — the preprocess runs before
+ * `z.coerce.number()`, and the inner `.default()` then fills the undefined.
+ */
+const num = (def: number) =>
+  z.preprocess(
+    (v) => (v === "" || v === null ? undefined : v),
+    z.coerce.number().default(def)
+  );
 
 /** Accept a single string or an array of strings; normalize to an array. */
 const stringList = (def: string[]) =>
@@ -314,7 +323,9 @@ const JupyterReaderSchema = z
 const OutlineSchema = z
   .object({
     enabled: z.boolean().default(true).describe("Generate a per-file structural outline and inject it into the prompt"),
-    maxDepth: z.coerce.number().optional().describe("Limit outline nesting depth"),
+    maxDepth: z
+      .preprocess((v) => (v === "" || v === null ? undefined : v), z.coerce.number().optional())
+      .describe("Limit outline nesting depth; omit (or a bare/empty value) defers to the generator's default rather than coercing to 0 (WS-32)"),
     includeLineNumbers: z.boolean().default(false).describe("Include line numbers in the outline"),
     includePrivate: z.boolean().default(false).describe("Include private/internal members"),
     includeComments: z.boolean().default(false).describe("Include comments"),
@@ -502,6 +513,9 @@ const ReferencesSchema = z
             uncertainBand: z
               .tuple([z.coerce.number(), z.coerce.number()])
               .default([0.34, 0.67])
+              .refine(([lo, hi]) => lo >= 0 && hi <= 1 && lo <= hi, {
+                message: "uncertainBand must satisfy 0 <= lo <= hi <= 1",
+              })
               .describe("[lo, hi]: support score ≤lo ⇒ unsupported, ≥hi ⇒ supported, between ⇒ uncertain"),
             cachePath: z
               .string()
@@ -576,6 +590,12 @@ const ReferencesSchema = z
           .default(true)
           .describe("LLM relevance pre-check on title/meta before the extraction pass"),
         robots: z.boolean().default(true).describe("Respect robots.txt Disallow rules"),
+        failClosed: z
+          .boolean()
+          .default(false)
+          .describe(
+            "When a robots.txt fetch or the LLM relevance check ERRORS, block the fetch (fail-closed) instead of allowing it (fail-open, the default — preserves backward-compatible behavior)"
+          ),
         cachePath: z
           .string()
           .optional()
@@ -705,6 +725,7 @@ const DEFAULT_STAGES = [
   "extraction",
   "grounding",
   "canonicalization",
+  "relationFilter", // WS-14: was missing, so the registered transform never ran
 ];
 
 const StageToggleSchema = z

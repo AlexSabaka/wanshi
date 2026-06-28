@@ -78,8 +78,13 @@ export class CrossREDataset implements IDatasetLoader {
     const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
     const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
+    // WS-01: `limit` is THIS file's remaining budget. Guard against how many rows
+    // this file has contributed (out.length - startLen), not the cumulative array
+    // size — otherwise once file 1 fills `out`, every later domain file breaks on
+    // its first iteration and a finite --limit collapses to a single domain.
+    const startLen = out.length;
     for await (const line of rl) {
-      if (out.length >= limit) break;
+      if (out.length - startLen >= limit) break;
       const trimmed = line.trim();
       if (!trimmed) continue;
 

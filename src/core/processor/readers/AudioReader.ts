@@ -310,6 +310,7 @@ export class AudioReader extends FileReader {
 
       // Build transcription metadata
       const transcriptionMetadata = {
+        asrEngine: "whisper",
         whisperModel: this.options.modelName,
         detectedLanguage: (content as any).language || "unknown",
         transcriptionConfidence: (content as any).confidence || null,

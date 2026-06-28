@@ -1,0 +1,75 @@
+name: Build benchmark image (GHCR)
+
+# Builds the local-model benchmark image (wanshi vs KGGen on Ollama) for linux/amd64
+# and pushes it to GHCR. Corpora are license-restricted + gitignored, so they are NOT
+# in this public repo — they come from a PRIVATE companion repo (default
+# <owner>/wanshi-bench-data) checked out with the BENCH_DATA_TOKEN secret. Set
+# include_corpora=false to build a data-free image (then upload corpora to the pod).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag"
+        type: string
+        default: latest
+      include_corpora:
+        description: "Bake corpora from the private data repo"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout harness (this branch)
+        uses: actions/checkout@v5
+
+      - name: Checkout private corpora
+        if: ${{ inputs.include_corpora }}
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.repository_owner }}/wanshi-bench-data
+          token: ${{ secrets.BENCH_DATA_TOKEN }}
+          path: _corpora
+
+      - name: Stage corpora into data/
+        if: ${{ inputs.include_corpora }}
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          if [ -f _corpora/corpora.tar.zst ]; then
+            sudo apt-get update && sudo apt-get install -y zstd
+            tar -I zstd -xf _corpora/corpora.tar.zst -C .
+          elif [ -d _corpora/data ]; then
+            cp -a _corpora/data/. data/
+          else
+            echo "::warning::no corpora.tar.zst or data/ in the private repo — building data-free"
+          fi
+
+      - name: Ensure data/ exists (data-free build)
+        run: mkdir -p data
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push (linux/amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: bench/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/wanshi-bench:${{ inputs.tag }}
+          # No gha cache: a ~19 GB image's mode=max export thrashes the 10 GB Actions-cache
+          # limit (one layer took ~18 min on the first build) for ~zero reuse on a one-shot image.
+          provenance: false

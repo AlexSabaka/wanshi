@@ -20,6 +20,12 @@ import { Detection } from "../../../types/IObjectDetector";
  */
 
 const IMAGE = "image";
+
+/** Render a detection box as a compact `bbox:` locator (pixel coords, rounded). */
+function bboxLocator(box: Detection["box"]): string {
+  return `bbox:${Math.round(box.xmin)},${Math.round(box.ymin)},${Math.round(box.xmax)},${Math.round(box.ymax)}`;
+}
+
 // EXIF is a deterministic read but the tags are editable/strippable, so it is
 // high- but not perfect-confidence; the cryptographic C2PA read scores higher.
 const EXIF_CONFIDENCE = 0.9;
@@ -118,14 +124,17 @@ export function buildImageMetaGraph(processedFile: ProcessedFile, inputRoot: str
   // CV object detection — each detected class → an `object` entity + a `depicts`
   // edge; confidence is the detector's own score (2a "may be stated plainly").
   if (cvDetection && cvDetection.objects.length) {
-    const byLabel = new Map<string, { count: number; score: number }>();
+    const byLabel = new Map<string, { count: number; score: number; box: Detection["box"] }>();
     for (const o of cvDetection.objects) {
       const cur = byLabel.get(o.label);
       if (cur) {
         cur.count++;
-        cur.score = Math.max(cur.score, o.score);
+        if (o.score > cur.score) {
+          cur.score = o.score;
+          cur.box = o.box; // keep the box of the top-scoring detection for this label
+        }
       } else {
-        byLabel.set(o.label, { count: 1, score: o.score });
+        byLabel.set(o.label, { count: 1, score: o.score, box: o.box });
       }
     }
     const ranked = [...byLabel.entries()].sort((a, b) => b[1].count - a[1].count);
@@ -134,7 +143,9 @@ export function buildImageMetaGraph(processedFile: ProcessedFile, inputRoot: str
     image.observations.push(obs(`CV object detection: ${summary}`, "cv-detection", topScore));
     for (const [label, v] of ranked) {
       ensure(label, "object", [
-        obs(`Detected in image via cv-detection (count ${v.count}, top score ${v.score.toFixed(2)})`, "cv-detection", v.score),
+        obs(`Detected in image via cv-detection (count ${v.count}, top score ${v.score.toFixed(2)})`, "cv-detection", v.score, {
+          locator: bboxLocator(v.box),
+        }),
       ]);
       edge(label, "depicts");
     }
