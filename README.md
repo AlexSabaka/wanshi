@@ -15,7 +15,11 @@ It's a working CLI and a research platform in equal measure — the long game is
 
 ---
 
-> **Command shorthand:** examples below write `wanshi` for the run command. Installed from npm (`@wanshi-kg/wanshi`) that's literally `wanshi`; from a source checkout it's `npm start --` (i.e. `npx ts-node ./src/cli/index.ts`) in dev, or `node ./dist/cli/index.js` after `npm run build`.
+> **Command shorthand:** examples below write `wanshi` for the run command — the global CLI once you've run `npm i -g @wanshi-kg/wanshi`. From a source checkout it's `npm start --` (i.e. `npx ts-node ./src/cli/index.ts`) in dev, or `node ./dist/cli/index.js` after `npm run build`.
+
+## Contents
+
+[What's distinctive](#whats-distinctive) · [Supported inputs](#supported-inputs) · [Install](#install) · [Quick start](#quick-start) · [CLI reference](#cli-reference) · [Output formats](#output-formats) · [Local model guidance](#local-model-guidance) · [Quality metrics](#quality-metrics) · [Architecture](#architecture) · [Development](#development)
 
 ## What's distinctive
 
@@ -25,6 +29,7 @@ Most text→KG tools stop at "extract triples." `wanshi` is built around the par
 - **A grounding gate (opt-in).** Each extracted fact can be scored against its source chunk and flagged or dropped before it reaches the output — keyword overlap as a cheap pre-filter, with an optional local NLI checker (MiniCheck) for the uncertain cases. Enabled (`--grounding flag|drop`), it won't record what it can't verify against the source — but it's `disabled` by default.
 - **Closed-vocabulary extraction.** An optional corpus pre-pass builds a glossary of canonical entity/relation types, which then *constrains* extraction — so a large corpus doesn't fragment into hundreds of one-off types.
 - **Transcript-aware ingestion.** Speaker-labeled transcripts and chat exports are split into speaker-pure chunks, so a speaker becomes per-fact provenance rather than a polluting entity.
+- **Beyond plain text.** A structured source can map straight to graph — a SQLite `.db` becomes tables→types, rows→entities, foreign-keys→edges with no LLM — and a document's own links and citations become deterministic edges, optionally fetching the cited work to ground the claim.
 - **Memory-store interop.** `mcp-jsonl` output is byte-compatible with the official [MCP memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) — point it at the file and query your graph from Claude Code/Desktop. No store to build.
 - **Training-data exports.** Emit KBLaM `(entity, property, value)` triples or quality-filtered LoRA/SFT chat examples straight from a graph.
 - **Resumable runs.** Per-chunk checkpoints survive interrupts and exhausted API credits; re-run the same command to continue.
@@ -35,9 +40,15 @@ Most text→KG tools stop at "extract triples." `wanshi` is built around the par
 | ------ | ---------- | -------- |
 | Text / source code | `.txt`, `.ts`, `.js`, `.py`, `.go`, `.rs`, … | Direct / code-aware extraction |
 | Markdown | `.md` | Markdown-aware parsing |
+| LaTeX | `.tex` | De-TeX'd to readable prose; `\cite{}` keys feed the citation pipeline |
+| EPUB | `.epub` | Unzipped and parsed per chapter (adm-zip + cheerio + html-to-text) |
+| Jupyter | `.ipynb` | Cell-aware (markdown narrative + fenced code); cell outputs opt-in |
 | Transcripts | speaker-labeled `*.parakeet.txt`/`*.whisper.txt`, transcript/turn JSON, Claude/ChatGPT exports | Speaker-pure chunks with per-fact `speaker`/`occurredAt` |
+| Email | `.eml`, `.mbox` | Per-message turns (sender → `speaker`, `Date` → `validAt`); thread-aware; quoted replies stripped |
+| Chat exports | WhatsApp `.txt`, Telegram/Discord/Slack `.json` | Per-message speaker-pure turns via a per-platform parser |
+| Subtitles | `.srt`, `.vtt` | Caption text (timecodes/styling stripped); VTT `<v>` voice tags → speakers |
 | JSON | `.json`, `.jsonl`, `.geojson` | Structure-aware chunking (splits on JSON structure, never mid-object) |
-| PDF | `.pdf` | Page text (`pdf2json`), or a richer engine via `--pdf-engine docling\|marker\|mistral` |
+| PDF | `.pdf` | Page text (`pdf2json`), or a richer engine via `--pdf-engine tesseract\|docling\|marker\|chandra\|mistral` |
 | Office | `.docx`, `.xlsx`, `.pptx` | Via officeparser |
 | HTML / RTF | `.html`, `.htm`, `.rtf` | cheerio / RTF parsing |
 | Images | `.jpg`, `.png`, `.gif`, `.webp`, `.tiff`, `.heic`, `.avif` | Vision model required |
@@ -48,14 +59,20 @@ Most text→KG tools stop at "extract triples." `wanshi` is built around the par
 Requires **Node.js 18+** and **[Ollama](https://ollama.ai)** running locally (needed for the default local generation + embeddings path; optional only if you point *both* at an OpenAI-compatible provider).
 
 ```bash
-git clone https://github.com/wanshi-kg/wanshi
-cd wanshi
-npm install
+# Install the published CLI (gives you the `wanshi` command)
+npm install -g @wanshi-kg/wanshi
 
 # Default local models
 ollama pull llama3.2                 # generation
-ollama pull nomic-embed-text   # embeddings
+ollama pull nomic-embed-text         # embeddings
+```
 
+Or run from a source checkout (for development / contributing):
+
+```bash
+git clone https://github.com/wanshi-kg/wanshi
+cd wanshi
+npm install
 npm run build   # optional; ts-node works directly
 ```
 
@@ -163,7 +180,7 @@ wanshi --export-only -i ./knowledge-graph.json --export-format kblam -o ./kb.jso
 | `--provider <name>` | `ollama` | `ollama` or `openai` (any OpenAI-compatible endpoint) |
 | `-m, --model <name>` | `llama3.2` | Ollama tag or provider model id |
 | `-h, --host <url>` | `http://localhost:11434` | Ollama host, or OpenAI-compatible base URL |
-| `--api-key <key>` | — | Falls back to `$OPENAI_API_KEY` / `$WANSHI_API_KEY` |
+| `--api-key <key>` | — | Falls back to `$OPENAI_API_KEY` / `$WANSHI_API_KEY` (or `$KG_API_KEY`, legacy) |
 | `--temperature <n>` | `0.1` | Sampling temperature |
 | `--repeat-penalty <n>` | `1.1` | Ollama only (>1.0 discourages repetition) |
 | `--context-length <n>` | `8192` | Context window (Ollama only) |
@@ -201,7 +218,7 @@ wanshi --export-only -i ./knowledge-graph.json --export-format kblam -o ./kb.jso
 | `--language <lang>` | `auto` | Language code or `auto` |
 | `--translate` | `false` | Translate audio to English |
 | `--images <mode>` | `auto` | `enabled\|disabled\|auto` (vision model required) |
-| `--pdf-engine <engine>` | `pdf2json` | `pdf2json\|docling\|marker\|mistral` — PDF reading engine (non-default engines degrade to `pdf2json` on failure) |
+| `--pdf-engine <engine>` | `pdf2json` | `pdf2json\|tesseract\|docling\|marker\|chandra\|mistral` — PDF reading engine; hardware-aware ladder tesseract (CPU/WASM) → pdf2json → docling → marker → chandra (handwriting VLM) → mistral (cloud). Non-default engines degrade to `pdf2json` on failure |
 | `--asr-engine <engine>` | `whisper` | `whisper\|dual` — `dual` = vendored Python VAD + Parakeet/Whisper dual-STT + diarization (Apple-Silicon) |
 | `--classifier <mode>` | `disabled` | `disabled\|heuristic\|llm\|cascade` — drives domain prompt hints and scopes `entityType` to a per-domain enum *(experimental)* |
 | `--trace` | `false` | Emit a structured decision run-trace to `<output>.trace.jsonl` *(debug/observability)* |
@@ -231,6 +248,52 @@ wanshi --export-only -i ./knowledge-graph.json --export-format kblam -o ./kb.jso
 | `-w, --watch` | `false` | Watch mode |
 
 > Document-outline injection (`readers.outline`) and DOT styling (`export.dot`) are config-only (no CLI flags) — see the config schema.
+
+### References & citations (opt-in; network only for web/citation fetch)
+
+Turn the references a document already contains into deterministic edges — and, opt-in, fetch the cited work to make a citation evidence-bearing. All default **off** (offline, byte-identical run).
+
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `--reference-links` | `false` | Resolve internal links + `[[wikilinks]]` → `links_to` edges |
+| `--reference-citations` | `false` | Parse bibliographies + inline ids → `cites` edges |
+| `--reference-follow` | `false` | Follow resolved internal links to discover & ingest more files |
+| `--reference-web` | `false` | Fetch external links (allowlist + robots + budget gated) → `references` edges |
+| `--reference-citation-fetch` | `false` | Fetch a cited work's OA full text, then span-select + grounding-check the citing claim |
+| `--reference-title-resolver` | `false` | Resolve id-less citations via Crossref → Semantic Scholar → OpenAlex |
+| `--grobid` / `--grobid-url <url>` | `false` | Link in-text citations to their claim sentence via a local GROBID service |
+| `--unpaywall-email <email>` | — | Unpaywall polite-pool email for DOI→OA (or `$UNPAYWALL_EMAIL`) |
+| `--strip-references` | `false` | Quarantine a document's trailing bibliography before extraction |
+
+### Cost & token metering
+
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `--cost` | `false` | Meter token usage + USD cost (rough pre-run estimate + exact end-of-run tally) |
+| `--max-cost <n>` | — | Hard spend cap — graceful stop + checkpoint when exceeded (auto-enables `--cost`) |
+| `--cost-ledger <path>` | `<output>.cost.json` | Resume-safe cumulative cost ledger |
+
+### Image enrichment & CV (opt-in; augments the vision read, never replaces it)
+
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `--exif` | `false` | EXIF → GPS `location`, capture-time `validAt`, camera/author facts |
+| `--c2pa` | `false` | C2PA content credentials → a fact-not-verdict trust observation |
+| `--object-detection` | `false` | CV detector pre-pass → a VLM context line + `depicts` edges |
+| `--detection-mode <mode>` | `closed` | `closed` (COCO-80) or `zero-shot` (open-vocab labels) |
+
+### Structured-source adapters
+
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `--sqlite` | `false` | Map a `.db`/`.sqlite` directly to graph — tables → types, rows → entities, FKs → edges (no LLM) |
+
+> **More flags.** AST seeding (`--ast`), corpus tuning (`--corpus-top-terms`, `--corpus-profile-path`),
+> dual-ASR backends (`--asr-models`, `--num-speakers`), PDF-engine tuning (`--marker-use-llm`,
+> `--tesseract-lang`, `--chandra-method`), grounding internals (`--grounding-checker`,
+> `--grounding-model`, `--supersession`), and `--trace-path` round out the surface. Run
+> **`wanshi schema`** to print the complete, authoritative option set — it's generated from the Zod
+> config schema, so it never drifts from the code.
 
 ## Output formats
 
@@ -415,18 +478,25 @@ Importable evaluators in `src/quality/` (also wired into `npm run benchmark`): *
 
 ```text
 src/
-├── cli/          # Commander.js CLI (process/watch/export; --export-only)
+├── cli/           # Commander.js CLI (process/watch/export; --export-only)
+├── config/        # Single nested Zod schema — defaults, validation, `wanshi schema`
 ├── core/
-│   ├── di/        # Async DI container + service registrations
-│   ├── processor/ # File readers (transcript, JSON, PDF, Office, audio, …) + chunking + classifiers
-│   ├── checkpoint/# Per-chunk resume sidecar
-│   ├── llm/       # Ollama / OpenAI-compatible providers, embeddings, Handlebars prompts
-│   ├── knowledge/ # KG building (LLM+Zod, provenance + grounding gate), 3-level merge, vector search
-│   └── export/    # Strategy pattern: json, jsonl, mcp-jsonl, dot, kblam, lora, graphiti
-├── quality/      # Importable metrics (structural, semantic, factual, consistency, composite)
-├── evaluation/   # Benchmark harness (CrossRE / REBEL / RE-DocRED)
-├── types/        # Interfaces and data models
-└── shared/       # Logger, graceful shutdown, utilities (Jaro-Winkler, cosine, config)
+│   ├── di/         # Async DI container + service registrations
+│   ├── processor/  # File readers (transcript, email, chat, PDF/OCR, audio, …) + chunking + classifiers + AST seed
+│   ├── corpus/     # Corpus pre-pass: term frequency + LLM glossary (closed vocab)
+│   ├── checkpoint/ # Per-chunk resume sidecar
+│   ├── llm/        # Ollama / OpenAI-compatible providers, embeddings, Handlebars prompts
+│   ├── knowledge/  # KG build (LLM+Zod, provenance + grounding gate), 3-level merge, canon, references, images, vector search
+│   ├── adapters/   # Structured-emit adapters (SQLite → graph fragments, no LLM)
+│   ├── cv/         # Object-detection pre-pass (a signal for the model, not a verdict)
+│   ├── cost/       # Token/cost metering + `--max-cost` cap
+│   ├── trace/      # Debug run-trace sidecar (observability, off by default)
+│   ├── pipeline/   # Post-merge transform stages
+│   └── export/     # Strategy pattern: json, jsonl, mcp-jsonl, dot, kblam, lora, graphiti
+├── quality/       # Importable metrics (structural, semantic, factual, consistency, composite)
+├── evaluation/    # Benchmark harness (CrossRE / REBEL / RE-DocRED / SemEval-2010 T8 / MINE)
+├── types/         # Interfaces and data models
+└── shared/        # Logger, graceful shutdown, utilities (Jaro-Winkler, cosine, config)
 ```
 
 Tests use Jest (`npm test`); mock the LLM via `ILLMProvider` for network-free unit tests.
@@ -439,7 +509,7 @@ npm start -- --config config.yaml                            # run directly (ts-
 npm run build && node ./dist/cli/index.js --config config.yaml   # or build first
 ```
 
-See `examples/kg-mail-assistant/` for a full integration (Gmail OAuth + Telegram bot + continuous email→KG pipeline) and programmatic usage via `ContainerFactory`.
+See [`examples/`](examples/) for integrations — `kg-telegram-sink` (Telegram → graph bot with an A/B canon config) and the legacy `kg-mail-assistant` (Gmail OAuth + email→KG prototype, reference-only) — plus programmatic usage via `ContainerFactory`.
 
 ## Acknowledgments
 

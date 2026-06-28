@@ -41,7 +41,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error:
-          "Could not load the config schema from the wanshi CLI. Build the backend (`npm run build` in the repo root), or set WANSHI_CMD.",
+          "Could not load the config schema from the wanshi CLI. Build it (`npm run build` in the repo root), make `ts-node` available to run from source, or set WANSHI_CMD.",
         detail: err instanceof Error ? err.message : String(err),
       },
       { status: 500 }

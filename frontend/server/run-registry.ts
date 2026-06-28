@@ -2,12 +2,13 @@ import { spawn, type ChildProcess } from "node:child_process"
 import { EventEmitter } from "node:events"
 import { createInterface } from "node:readline"
 import { randomUUID } from "node:crypto"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { buildKgConfig, type KgGenConfig } from "@/lib/kg-options"
 import { getPath, setPath } from "@/lib/config-schema"
 import { getStoredRun, listStoredRuns, recordRun } from "@/server/run-store"
+import { tracePathFor } from "@/server/trace-loader"
 import type {
   LogLine,
   ProgressEvent,
@@ -58,14 +59,21 @@ export function repoCwd(): string {
   return process.env.WANSHI_CWD || path.resolve(process.cwd(), "..")
 }
 /**
- * How to launch the CLI. Defaults to the built binary — a single node process,
- * so one SIGINT reaches the CLI's graceful-shutdown handler directly. (An `npx`
- * wrapper would forward the signal too, double-counting it into a force-quit.)
- * Requires `npm run build` in the repo root; override with WANSHI_CMD to point
- * at a ts-node invocation if you prefer running from source.
+ * How to launch the CLI. Resolution order:
+ *  1. `WANSHI_CMD` (explicit override), else
+ *  2. the built binary `node dist/index.js` when `dist/` exists — a single node
+ *     process, so one SIGINT reaches the CLI's graceful-shutdown handler directly
+ *     (an `npx` wrapper would forward the signal too, double-counting it), else
+ *  3. run from source via `ts-node --transpile-only src/index.ts` (still a single
+ *     process) so the frontend works without a prior `npm run build`.
  */
 export function launchCmd(): string[] {
-  return (process.env.WANSHI_CMD || "node dist/index.js").split(/\s+/)
+  if (process.env.WANSHI_CMD) return process.env.WANSHI_CMD.split(/\s+/)
+  const root = repoCwd()
+  if (existsSync(path.join(root, "dist", "index.js"))) return ["node", "dist/index.js"]
+  const localTsNode = path.join(root, "node_modules", ".bin", "ts-node")
+  const bin = existsSync(localTsNode) ? localTsNode : "ts-node"
+  return [bin, "--transpile-only", "src/index.ts"]
 }
 
 /**
@@ -139,6 +147,65 @@ export function getRunOutput(id: string): string | undefined {
   const record = runs.get(id)
   if (record) return record.summary.output ?? record.resolvedOutput
   return getStoredRun(id)?.summary.output
+}
+
+/**
+ * Resolve a run's debug-trace sidecar path on disk.
+ *
+ * The CLI writes its sidecars (`<output>.trace.jsonl`, checkpoint, cost,
+ * corpus-profile) next to the *configured* output path — but the export step
+ * rewrites that output's extension to match `export.format`
+ * (`DirectoryProcessor.getOutputPath`: `foo.jsonl` + format `json` → `foo.json`),
+ * and the *rewritten* path is what the `export`/`done` progress event reports as
+ * `summary.output`. So when the configured extension disagrees with the export
+ * format, the trace base differs from `summary.output` in its final extension
+ * (`…graph.jsonl.trace.jsonl` on disk vs. `…graph.json.trace.jsonl` derived).
+ *
+ * Honor an explicit `trace.path`; otherwise rebuild the configured base by
+ * swapping the (resolved) output's extension back to the configured one — the
+ * exact inverse of the CLI's rewrite — and probe candidates so a run where the
+ * two already agree still resolves. Returns the first existing candidate, or the
+ * primary candidate when none exist (so a genuine 404 still names a sane path).
+ */
+export function getRunTracePath(id: string): string | undefined {
+  const found = getRunConfig(id)
+  if (!found) return undefined
+  const explicit = cfgStr(found.config, "trace.path")
+  if (explicit) return resolveAgainstRunDir(explicit)
+
+  const resolvedOutput = getRunOutput(id)
+  if (!resolvedOutput) return undefined
+
+  const candidates: string[] = []
+  const configuredOutput = cfgStr(found.config, "output")
+  if (configuredOutput) {
+    const cfgExt = path.extname(configuredOutput)
+    const curExt = path.extname(resolvedOutput)
+    if (cfgExt && cfgExt !== curExt) {
+      // Inverse of getOutputPath's `.replace(/\.[^.]+$/, '.<format>')`.
+      candidates.push(resolvedOutput.replace(/\.[^.]+$/, cfgExt))
+    }
+  }
+  candidates.push(resolvedOutput)
+
+  for (const base of candidates) {
+    const traced = tracePathFor(base)
+    if (existsSync(traced)) return traced
+  }
+  return tracePathFor(candidates[0])
+}
+
+/**
+ * Resolve a run's input directory the way the CLI did (absolute as-is, else
+ * relative to the CLI's cwd). This is the sandbox base for the source view: a
+ * fact's `source` path is only readable if it resolves to within this tree.
+ */
+export function getRunInputDir(id: string): string | undefined {
+  const found = getRunConfig(id)
+  if (!found) return undefined
+  const input = cfgStr(found.config, "input")
+  if (!input) return undefined
+  return resolveAgainstRunDir(input)
 }
 
 /** The full config needed to re-run or re-export a past run. */

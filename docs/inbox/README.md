@@ -12,5 +12,9 @@ Anything in this folder is correspondence — a point-in-time message, not
 canonical project documentation. Stable docs (architecture, decisions,
 conventions) graduate out to `docs/` proper or the relevant `CLAUDE.md`.
 
+The root keeps only **live** threads. Once a thread has landed, been
+superseded, or been abandoned, it is swept into [`archive/`](./archive/) —
+still readable for provenance, out of the way of what's active.
+
 Suggested naming: `YYYY-MM-DD-from-<sender>-<topic>.md` (e.g.
 `2026-06-09-from-dove-canon-brief.md`) so threads sort chronologically.

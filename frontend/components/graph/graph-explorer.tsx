@@ -6,10 +6,12 @@ import { Eye, EyeOff, Maximize2, RotateCcw, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { GraphDetailPanel, type Neighbor } from "@/components/graph/graph-detail-panel"
+import { SourceView } from "@/components/source/source-view"
 import { entityTypeCounts, toForceData } from "@/lib/graph-stats"
 import { colorForType } from "@/lib/graph-colors"
 import { cn } from "@/lib/utils"
-import type { Entity, ForceData, ForceNode, KnowledgeGraph } from "@/types"
+import type { SourceTarget } from "@/hooks/use-source"
+import type { Entity, ForceData, ForceNode, KnowledgeGraph, Observation } from "@/types"
 
 const ForceGraph = dynamic(() => import("@/components/graph/force-graph"), {
   ssr: false,
@@ -34,7 +36,14 @@ function endpointId(end: unknown): string {
   return typeof end === "object" && end !== null ? (end as { id: string }).id : (end as string)
 }
 
-export function GraphExplorer({ graph }: { graph: KnowledgeGraph }) {
+export function GraphExplorer({
+  graph,
+  runId,
+}: {
+  graph: KnowledgeGraph
+  /** Threaded to the node inspector to enable "view lineage" (trace inspector). */
+  runId?: string
+}) {
   const isDark = useIsDark()
   const containerRef = useRef<HTMLDivElement>(null)
   const graphRef = useRef<any>(undefined) // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -45,6 +54,7 @@ export function GraphExplorer({ graph }: { graph: KnowledgeGraph }) {
   const [hoverId, setHoverId] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [labels, setLabels] = useState(true)
+  const [sourceTarget, setSourceTarget] = useState<SourceTarget | null>(null)
 
   const entityMap = useMemo(() => {
     const m = new Map<string, Entity>()
@@ -101,7 +111,13 @@ export function GraphExplorer({ graph }: { graph: KnowledgeGraph }) {
   useEffect(() => {
     setSelectedId(null)
     setHiddenTypes(new Set())
+    setSourceTarget(null)
   }, [graph])
+
+  function viewSource(o: Observation) {
+    if (!o.source) return
+    setSourceTarget({ source: o.source, locator: o.locator, fuzzyText: o.text })
+  }
 
   const selectedEntity = selectedId ? entityMap.get(selectedId) : undefined
   const selectedNode = selectedId
@@ -114,6 +130,11 @@ export function GraphExplorer({ graph }: { graph: KnowledgeGraph }) {
       entityType: entityMap.get(name)?.entityType ?? "(unresolved)",
     }))
   }, [selectedId, adjacency, entityMap])
+
+  const incidentRelations = useMemo(() => {
+    if (!selectedId) return []
+    return graph.relations.filter((r) => r.from === selectedId || r.to === selectedId)
+  }, [selectedId, graph])
 
   function focusNode(name: string) {
     const node = data.nodes.find(
@@ -269,8 +290,22 @@ export function GraphExplorer({ graph }: { graph: KnowledgeGraph }) {
             entity={selectedEntity}
             entityType={selectedEntity?.entityType ?? selectedNode?.entityType ?? "(unresolved)"}
             neighbors={neighbors}
+            relations={incidentRelations}
+            runId={runId}
             onClose={() => setSelectedId(null)}
             onSelectNeighbor={focusNode}
+            onViewSource={runId ? viewSource : undefined}
+          />
+        </div>
+      )}
+
+      {/* source / provenance view — opposite the inspector, claim next to original */}
+      {runId && sourceTarget && (
+        <div className="pointer-events-none absolute bottom-3 left-3 top-16 flex">
+          <SourceView
+            runId={runId}
+            target={sourceTarget}
+            onClose={() => setSourceTarget(null)}
           />
         </div>
       )}
