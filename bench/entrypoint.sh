@@ -55,10 +55,20 @@ self_terminate() {
     return 0
   fi
   echo "[entrypoint] sweep finished (rc=${rc}); self-${mode} pod ${pid} to stop billing…"
+  local terminated=0
   case "${mode}" in
-    remove) runpodctl remove pod "${pid}" 2>/dev/null || runpodctl pod delete "${pid}" 2>/dev/null || true ;;
-    *)      runpodctl stop   pod "${pid}" 2>/dev/null || runpodctl pod stop   "${pid}" 2>/dev/null || true ;;
+    remove)
+      runpodctl remove pod "${pid}" >/dev/null 2>&1 && terminated=1
+      [ "${terminated}" -eq 1 ] || runpodctl pod delete "${pid}" >/dev/null 2>&1 && terminated=1
+      ;;
+    *)
+      runpodctl stop pod "${pid}" >/dev/null 2>&1 && terminated=1
+      [ "${terminated}" -eq 1 ] || runpodctl pod stop "${pid}" >/dev/null 2>&1 && terminated=1
+      ;;
   esac
+  if [ "${terminated}" -ne 1 ]; then
+    echo "[entrypoint] WARNING: failed to self-${mode} pod ${pid}; STOP/REMOVE MANUALLY to stop billing! (rc=${rc})" >&2
+  fi
 }
 trap self_terminate EXIT
 
