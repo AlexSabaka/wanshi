@@ -35,6 +35,36 @@ is **calibrate one cell, then run the highest-value block first.**
    - *(Recommended)* attach a **network volume** at `/root/.ollama` so pulled models persist across stop/restart, and
      mount **`/app/results`** on the volume so reports survive a dead pod.
    - **No API key needed** for the local arm.
+   - **Self-terminate (credit guard).** The entrypoint stops the pod when the sweep finishes, via `SELF_TERMINATE`
+     (RunPod injects a pre-authenticated, pod-scoped `runpodctl` + `$RUNPOD_POD_ID` — no key setup):
+     - `stop` *(default)* — halts **GPU billing**, keeps the pod + disk so you can restart briefly and pull
+       `/app/results`. Safe default; a few cents/day of stopped-disk storage remains.
+     - `remove` — deletes the pod entirely (**zero** residual billing). Use **only** with `/app/results` on a
+       network volume (reports survive the delete).
+     - `off` — leave it running (local/debug).
+     It fires on **every** exit (success, cell failure, or crash); the sweep is resumable, so even an accidental
+     restart re-reaches the end and stops again — the pod can't restart-loop the budget away.
+
+## RWKV-7 g1g — architecture arc (`PHASE=rwkv`) 🧬
+
+A second **architecture** alongside the gemma3/qwen3 *size* gradients: RWKV-7 g1g is a linear-attention RNN, served
+as `mollysama/rwkv-7-g1g` GGUF through the **same** Ollama path, so its rows drop straight into the same table. Arc =
+**1.5b · 2.9b · 7.2b** (13.3b **parked** — failed JSON conformance locally on a suspected malformed chat template in
+that quant, not a capacity limit; more VRAM won't fix a template bug). KGGen runs per cell and self-degrades to a
+wanshi-only row where the small model can't satisfy its structured parse (as gemma3:1b did).
+
+```
+# Launch env on the pod (network-volume variant → remove on finish):
+PHASE=rwkv
+SELF_TERMINATE=remove          # or `stop` if /app/results is NOT on a volume
+# (equivalently, omit PHASE and set:)
+# MODELS="mollysama/rwkv-7-g1g:1.5b mollysama/rwkv-7-g1g:2.9b mollysama/rwkv-7-g1g:7.2b"
+# DATASETS="biored drugprot finred crossre"  MODES="closed vocab"  LIMIT=40
+```
+
+**GPU sizing / budget.** The whole arc fits a small-VRAM box — 7.2b GGUF is 4.6 GB, +nomic ~0.3 GB, so a **16 GB**
+class GPU (A4000/4080, ~$0.20–0.30/h) is plenty and cheaper than the L4; pick the cheapest available that fits. With
+~$4, do **1.5b → 2.9b → 7.2b** in that order (resumable) so a budget-out still leaves a complete small-end gradient.
 
 ## The phased sweep (ordered by value — buy later phases only if calibration allows)
 
@@ -48,6 +78,7 @@ Drive each phase with the `PHASE` env (a preset that sets MODELS/DATASETS/MODES/
 | **`gradient`** | {gemma3:1b, gemma3:4b, gemma3:12b} × biored × {closed, vocab} × N=40 | **H-L2** capability gradient (does the gap grow or shrink as the local model scales?) |
 | **`docarc`** | {gemma3:4b, qwen3:8b} × redocred × {closed, vocab} × N=30 | the doc-level precision arc at small scale |
 | **`continuity`** | gemma3:4b × crossre × {closed, vocab} × N=20 | general-benchmark continuity (per-domain-stratified → WS-01-safe) |
+| **`rwkv`** 🧬 | {1.5b, 2.9b, 7.2b} g1g × {biored, drugprot, finred, crossre} × {closed, vocab} × N=40 | **architecture arc** — RWKV-7 g1g is a linear-attention **RNN**, not a transformer. Does wanshi's closed-vocab precision discipline transfer off-transformer, and does the same size-gradient shape hold? Slots into the gemma3/qwen3 table (same Ollama GGUF path). |
 
 ```
 # Phase 0 — sanity, then calibrate and READ the timing before going further:

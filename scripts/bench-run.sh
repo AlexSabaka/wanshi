@@ -12,6 +12,10 @@
 #   PHASE=gradient    {gemma3:1b,gemma3:4b,gemma3:12b} × biored × {closed,vocab} × N=40   H-L2 gradient
 #   PHASE=docarc      {gemma3:4b,qwen3:8b} × redocred × {closed,vocab} × N=30   doc-level precision arc
 #   PHASE=continuity  gemma3:4b × crossre × {closed,vocab} × N=20    general-benchmark continuity
+#   PHASE=rwkv        {1.5b,2.9b,7.2b} g1g × {biored,drugprot,finred,crossre} × {closed,vocab} × N=40
+#                     ↑ RWKV-7 g1g architecture arc (linear-attention RNN, not a transformer) — does
+#                       wanshi's closed-vocab precision discipline transfer off-transformer? 13.3b parked
+#                       (suspected malformed chat template in that quant, not a capacity limit).
 # A PHASE preset is authoritative (sets MODELS/DATASETS/MODES/LIMIT). For a custom run, omit
 # PHASE and set the four vars directly.
 #
@@ -46,6 +50,7 @@ case "${PHASE:-}" in
   2|gradient)    MODELS="gemma3:1b gemma3:4b gemma3:12b"; DATASETS="biored"; MODES="closed vocab"; LIMIT=40 ;;
   docarc)        MODELS="gemma3:4b qwen3:8b"; DATASETS="redocred"; MODES="closed vocab"; REDOCRED_LIMIT=30 ;;
   3|continuity)  MODELS="gemma3:4b"; DATASETS="crossre"; MODES="closed vocab"; LIMIT=20 ;;
+  rwkv)          MODELS="mollysama/rwkv-7-g1g:1.5b mollysama/rwkv-7-g1g:2.9b mollysama/rwkv-7-g1g:7.2b"; DATASETS="biored drugprot finred crossre"; MODES="closed vocab"; LIMIT=40 ;;
   ""|default)    ;;  # no preset → env/defaults above
   *)             echo "[bench-run] unknown PHASE='${PHASE}' — using env/defaults" >&2 ;;
 esac
