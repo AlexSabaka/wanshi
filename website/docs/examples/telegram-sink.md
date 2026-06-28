@@ -6,7 +6,7 @@ description: A Telegram bot that folds forwarded content into a live mcp-jsonl g
 
 # kg-telegram-sink
 
-> Source: [`examples/kg-telegram-sink/`](https://github.com/AlexSabaka/wanshi/tree/master/examples/kg-telegram-sink) in the repo.
+> Source: [`examples/kg-telegram-sink/`](https://github.com/wanshi-kg/wanshi/tree/master/examples/kg-telegram-sink) in the repo.
 
 A Telegram bot you use as a **personal content sink**: forward it articles, videos, posts, files or contacts, and it continuously folds them into a **knowledge graph in `mcp-jsonl`** that you wire into **Claude Desktop's memory MCP server** — so you can watch, live, what wanshi extracts well and badly.
 

@@ -125,6 +125,6 @@ logging:
 ## Inspecting the schema
 
 ```bash
-node ./dist/index.js schema          # pretty-printed JSON Schema + UI groups
-node ./dist/index.js schema --json   # compact single line
+node ./dist/cli/index.js schema          # pretty-printed JSON Schema + UI groups
+node ./dist/cli/index.js schema --json   # compact single line
 ```

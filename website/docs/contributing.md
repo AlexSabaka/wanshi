@@ -7,12 +7,12 @@ description: Run wanshi from source, plus acknowledgments and license.
 # Development
 
 ```bash
-git clone https://github.com/AlexSabaka/wanshi && cd wanshi && npm install
-npx ts-node ./src/index.ts --config config.yaml   # run directly
-npm run build && node ./dist/index.js --config config.yaml   # or build first
+git clone https://github.com/wanshi-kg/wanshi && cd wanshi && npm install
+npx ts-node ./src/cli/index.ts --config config.yaml   # run directly
+npm run build && node ./dist/cli/index.js --config config.yaml   # or build first
 ```
 
-See [`examples/`](https://github.com/AlexSabaka/wanshi/tree/master/examples) for integrations — `kg-telegram-sink` (Telegram → graph bot with an A/B canon config) and the legacy `kg-mail-assistant` (Gmail OAuth + email→KG prototype, reference-only) — plus programmatic usage via `ContainerFactory`. A few are written up under **[Examples](./examples/overview.md)**.
+See [`examples/`](https://github.com/wanshi-kg/wanshi/tree/master/examples) for integrations — `kg-telegram-sink` (Telegram → graph bot with an A/B canon config) and the legacy `kg-mail-assistant` (Gmail OAuth + email→KG prototype, reference-only) — plus programmatic usage via `ContainerFactory`. A few are written up under **[Examples](./examples/overview.md)**.
 
 ## Acknowledgments
 
@@ -24,4 +24,4 @@ See [`examples/`](https://github.com/AlexSabaka/wanshi/tree/master/examples) for
 
 ## License
 
-MIT — see [LICENSE](https://github.com/AlexSabaka/wanshi/blob/master/LICENSE).
+MIT — see [LICENSE](https://github.com/wanshi-kg/wanshi/blob/master/LICENSE).

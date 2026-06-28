@@ -6,7 +6,7 @@ description: Train a small local model to absorb wanshi's facts — LoRA via MLX
 
 # kg-injection — knowledge-injection spike (wanshi Phase 9)
 
-> Source: [`examples/kg-injection/`](https://github.com/AlexSabaka/wanshi/tree/master/examples/kg-injection) in the repo.
+> Source: [`examples/kg-injection/`](https://github.com/wanshi-kg/wanshi/tree/master/examples/kg-injection) in the repo.
 
 Train a small local model to **absorb wanshi's extracted facts** and measure whether it can recover them (recall), decline on absent ones (refusal), and stay healthy (perplexity) — the ROADMAP's north-star milestone. First arm: **LoRA SFT via MLX on `Qwen/Qwen3-0.6B`**, on the 16 GB M4.
 

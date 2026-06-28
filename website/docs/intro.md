@@ -13,7 +13,7 @@ description: wanshi — a local-first CLI that turns a file tree into one proven
 It's a working CLI and a research platform in equal measure — the long game is domain-tuned extraction feeding knowledge injection into small local models.
 
 :::note Command shorthand
-The examples throughout these docs write `wanshi` for the run command. Until the npm package ships, that's `npx ts-node ./src/index.ts` (dev) or `node ./dist/index.js` (built). Once published, it's literally `wanshi`.
+The examples throughout these docs write `wanshi` for the run command — install it globally with `npm install -g @wanshi-kg/wanshi`. From a source checkout (dev) it's `npm start --` (i.e. `npx ts-node ./src/cli/index.ts`), or `node ./dist/cli/index.js` after `npm run build`.
 :::
 
 ## What's distinctive

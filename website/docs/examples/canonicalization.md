@@ -6,7 +6,7 @@ description: A/B-test whether type sprawl comes from extraction order or a missi
 
 # Canonicalization experiment (Experiment 1)
 
-> Source: [`examples/canon/`](https://github.com/AlexSabaka/wanshi/tree/master/examples/canon) in the repo.
+> Source: [`examples/canon/`](https://github.com/wanshi-kg/wanshi/tree/master/examples/canon) in the repo.
 
 Tests whether wanshi's entity-/relation-type **sprawl** comes from *extraction order* or from the **absence of a global merge pass** — by bolting a global canonicalization stage onto the existing schema-first pipeline and measuring.
 
@@ -14,9 +14,9 @@ Tests whether wanshi's entity-/relation-type **sprawl** comes from *extraction o
 
 | Arm | config | canonicalization |
 | --- | --- | --- |
-| `baseline` | [`baseline.yaml`](https://github.com/AlexSabaka/wanshi/blob/master/examples/canon/baseline.yaml) | disabled (current pipeline, fresh numbers) |
-| `canon_embed` | [`canon_embed.yaml`](https://github.com/AlexSabaka/wanshi/blob/master/examples/canon/canon_embed.yaml) | embeddings clustering |
-| `canon_hybrid` *(optional)* | [`canon_hybrid.yaml`](https://github.com/AlexSabaka/wanshi/blob/master/examples/canon/canon_hybrid.yaml) | embeddings + LLM adjudication of borderline pairs |
+| `baseline` | [`baseline.yaml`](https://github.com/wanshi-kg/wanshi/blob/master/examples/canon/baseline.yaml) | disabled (current pipeline, fresh numbers) |
+| `canon_embed` | [`canon_embed.yaml`](https://github.com/wanshi-kg/wanshi/blob/master/examples/canon/canon_embed.yaml) | embeddings clustering |
+| `canon_hybrid` *(optional)* | [`canon_hybrid.yaml`](https://github.com/wanshi-kg/wanshi/blob/master/examples/canon/canon_hybrid.yaml) | embeddings + LLM adjudication of borderline pairs |
 
 All three are pinned identical (corpus, seed `1337`, model, embedding model) so the A/B isolates the canonicalization variable. Only the `pipeline.canonicalization` block differs. Outputs land in `kg_tests/canon/` (gitignored).
 
