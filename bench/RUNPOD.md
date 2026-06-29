@@ -83,3 +83,46 @@ pod (same volume) and it skips cached cells.
   mode) — it does not re-run per mode.
 - Throughput is **rental speed ≠ M4 speed**; the M4 feasibility/OOM floor is a separate, still-owed run.
 - The gold CrossRE cell is domain-stratified (`--per-domain 50`), so it is unaffected by the WS-01 loader bug.
+
+## Self-terminate (STOP THE POD — the budget guard)
+
+The entrypoint stops the pod when the run finishes, via `SELF_TERMINATE` (RunPod injects a
+pre-authenticated, pod-scoped `runpodctl` + `$RUNPOD_POD_ID` — no key setup). The trap is armed
+**before** Ollama starts, so even a startup failure self-terminates instead of letting RunPod
+restart-loop the pod (the prior ~$6 idle-loop). Modes:
+- `stop` *(default)* — halt GPU billing, keep the pod + disk so you can restart and pull `/app/results`.
+- `remove` — delete the pod entirely (**zero** residual billing). Use **only** with `/app/results` on a
+  network volume so reports survive.
+- `off` — leave it running (local/debug).
+
+## Specialist arc — Phase 1 (wanshi-only, lineage-controlled) 🧬
+
+Each domain-fine-tuned model AND ITS EXACT BASE on its home corpus, **wanshi-only** (no KGGen) — so
+`specialist − base` isolates the tuning effect (size/family/arch held fixed). Driven by the
+`scripts/targeted-run.sh` heterogeneous PAIRS runner (`RUN_MODE=targeted` selects it over the KGGen
+sweep). The baked default lineup (override with `PAIRS="<tag>|<dataset> …"`):
+
+| corpus | base (control) | specialist(s) |
+|---|---|---|
+| finred | `qwen3:8b` (Qwen3-8B) | ODA-Fin-SFT-8B · ODA-Fin-RL-8B (self-quantized GGUF) |
+| code | `hf.co/unsloth/Qwen3.5-9B-GGUF:Q4_K_M` · `qwen2.5-coder:7b` · `qwen2.5:7b-instruct` | OmniCoder-9B · WhiteRabbitNeo-V3-7B |
+
+8 models × {closed, vocab} = 16 wanshi-only cells, ~3–4 h, ~$1.50–2 on an L4. Launch env:
+```
+RUN_MODE=targeted   N=40   CTX=8192
+SELF_TERMINATE=remove          # /app/results MUST be on a network volume
+```
+Reports land in `/app/results/<model-slug>__<dataset>__<mode>.log` + `run.log`. The pod's specialist
+re-runs should reproduce the M4 numbers within noise (ODA-Fin-SFT ≈ 0.508/0.506, OmniCoder ≈
+0.195/0.188, WhiteRabbitNeo ≈ 0.144/0.138) — a cross-environment consistency check.
+
+> **Lineage notes:** WhiteRabbitNeo's true base is **Qwen2.5-Coder-7B** (via DeepHat-V1-7B), not generic
+> Qwen2.5-7B — both controls are run (`qwen2.5-coder:7b` for the clean delta, `qwen2.5:7b-instruct` for
+> the cybersec-vs-generic reference). ODA-Fin-RL is RL-on-SFT (its base is the SFT model) and ships no
+> GGUF — quantize locally (llama.cpp) + upload to `hf.co/alexsabaka/ODA-Fin-RL-8B-GGUF:Q4_K_M`. The
+> OmniCoder base `Qwen3.5-9B` is multimodal — smoke it before the full run.
+
+**Phase 2 (KGGen gradient tops)** uses the default dispatch (no `PAIRS`/`RUN_MODE`) — the existing
+`bench-run.sh`: `MODELS="gemma3:12b qwen3:8b" DATASETS="biored finred" MODES="closed vocab" LIMIT=40`.
+Calibrate one cell first (`MODELS=gemma3:12b DATASETS=biored LIMIT=5 CALIBRATE=1`); qwen3 thinking-mode
+KGGen ran ~10 min/sample locally → if brutal, run the qwen3:8b top wanshi-only via the pairs path.

@@ -95,7 +95,7 @@ function buildProcessingOptions(opts: {
   provider: string; model: string; host: string; apiKey?: string;
   embeddingsProvider: string; embeddingsModel: string; embeddingsHost: string;
   promptVersion: string; openPredicate: boolean; strictVocabulary: boolean;
-  maxTokens?: number;
+  maxTokens?: number; contextLength?: number;
 }): ProcessingOptions {
   return parseConfig({
     input: 'benchmark',
@@ -105,7 +105,7 @@ function buildProcessingOptions(opts: {
     llm: {
       provider: opts.provider, model: opts.model, host: opts.host,
       ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
-      temperature: 0, repeatPenalty: 1.1, contextLength: 8192, seed: 42,
+      temperature: 0, repeatPenalty: 1.1, contextLength: opts.contextLength ?? 8192, seed: 42,
       promptVersion: opts.promptVersion,
       // Guardrail: cap output tokens so a model that degenerates into runaway
       // repetition truncates fast instead of generating to its 32k/64k ceiling
@@ -229,6 +229,7 @@ program
   .option('--match-threshold <n>', 'Semantic match threshold', '0.80')
   .option('--prompt-version <ver>', 'wanshi prompt version', 'v5')
   .option('--max-tokens <n>', 'Cap output tokens — guardrail against runaway generation', '8192')
+  .option('--ctx <n>', 'Model context length (Ollama num_ctx) — raise for verbose/reasoning models', '8192')
   .option('--cache-dir <dir>', 'Cache dir (defaults data/<dataset>/compare)')
   .option('--output <path>', 'Two-way JSON report path')
   .action(async (opts) => {
@@ -270,6 +271,7 @@ program
       // A supplied closed schema (H4) is STRICT — exactly those predicates, base NOT unioned.
       strictVocabulary: !!relationVocab,
       maxTokens: parseInt(opts.maxTokens, 10) || undefined,
+      contextLength: parseInt(opts.ctx, 10) || undefined,
     });
     const container = ContainerFactory.createContainer({ processingOptions });
     const logger = await container.resolve<Logger>(TYPES.Logger);

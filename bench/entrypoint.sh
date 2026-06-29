@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Container entrypoint: resolve corpora → start Ollama → run the sweep.
+# Container entrypoint: arm self-terminate → resolve corpora → start Ollama → dispatch the run.
 # Corpora delivery is flexible (the bake-vs-upload choice stays reversible):
 #   1. baked   — data/ already populated in the image (private image)
 #   2. tar     — CORPORA_TAR=/path/to/corpora.tar.zst  (uploaded to the pod)
@@ -7,6 +7,39 @@
 set -uo pipefail
 APP=/app
 cd "$APP"
+
+# Self-terminate so an idle/broken GPU pod doesn't burn credits (the budget guard).
+# RunPod injects a pre-authenticated, pod-scoped runpodctl + the $RUNPOD_POD_ID env into
+# every pod (custom images included), so no API key is needed. SELF_TERMINATE:
+#   stop   (default) — halt GPU billing, KEEP the pod + its disk so you can restart
+#                      briefly and pull /app/results. Safe default.
+#   remove           — delete the pod entirely. Use ONLY when /app/results is on a
+#                      network volume (results survive); stops ALL billing.
+#   off              — leave the pod running (local/debug).
+# Armed BEFORE Ollama starts so even a startup failure (the `exit 1` below) self-terminates
+# instead of leaving RunPod to restart-loop the pod (the ~$6 idle-loop guard). Fires on EVERY
+# exit; the run is resumable, so an accidental restart re-reaches the end and stops again.
+self_terminate() {
+  local rc=$?
+  local mode="${SELF_TERMINATE:-stop}"
+  if [ "${mode}" = "off" ]; then echo "[entrypoint] SELF_TERMINATE=off — pod left running (rc=${rc})"; return 0; fi
+  local pid="${RUNPOD_POD_ID:-}"
+  if [ -z "${pid}" ]; then echo "[entrypoint] no \$RUNPOD_POD_ID (not a RunPod pod?) — skip self-terminate (rc=${rc})"; return 0; fi
+  if ! command -v runpodctl >/dev/null 2>&1; then
+    echo "[entrypoint] runpodctl not found — installing (fallback)…"
+    curl -fsSL cli.runpod.net | bash >/dev/null 2>&1 || true
+  fi
+  if ! command -v runpodctl >/dev/null 2>&1; then
+    echo "[entrypoint] WARNING: runpodctl unavailable — STOP/REMOVE pod ${pid} MANUALLY to stop billing! (rc=${rc})" >&2
+    return 0
+  fi
+  echo "[entrypoint] run finished (rc=${rc}); self-${mode} pod ${pid} to stop billing…"
+  case "${mode}" in
+    remove) runpodctl remove pod "${pid}" 2>/dev/null || runpodctl pod delete "${pid}" 2>/dev/null || true ;;
+    *)      runpodctl stop   pod "${pid}" 2>/dev/null || runpodctl pod stop   "${pid}" 2>/dev/null || true ;;
+  esac
+}
+trap self_terminate EXIT
 
 have_corpora() { [ -f data/semeval/test.jsonl ] || [ -d data/crossre/crossre_data ] || [ -f data/finred/test.jsonl ]; }
 
@@ -33,38 +66,13 @@ for i in $(seq 1 60); do
 done
 echo "[entrypoint] ollama up: $(curl -fsS "${base}/api/version")"
 
-# Self-terminate after the sweep so an idle GPU pod doesn't burn credits (the
-# budget guard). RunPod injects a pre-authenticated, pod-scoped runpodctl + the
-# $RUNPOD_POD_ID env into every pod (custom images included), so no API key is
-# needed. Controlled by SELF_TERMINATE:
-#   stop   (default) — halt GPU billing, KEEP the pod + its disk so you can
-#                      restart briefly and pull /app/results. Safe default.
-#   remove           — delete the pod entirely. Use ONLY when /app/results is on
-#                      a network volume (results survive); stops ALL billing.
-#   off              — leave the pod running (local/debug).
-# Fires on EVERY exit (success, cell failure, or crash) via the EXIT trap; the
-# sweep is resumable, so even an accidental restart re-reaches the end and stops.
-self_terminate() {
-  local rc=$?
-  local mode="${SELF_TERMINATE:-stop}"
-  if [ "${mode}" = "off" ]; then echo "[entrypoint] SELF_TERMINATE=off — pod left running (rc=${rc})"; return 0; fi
-  local pid="${RUNPOD_POD_ID:-}"
-  if [ -z "${pid}" ]; then echo "[entrypoint] no \$RUNPOD_POD_ID (not a RunPod pod?) — skip self-terminate (rc=${rc})"; return 0; fi
-  if ! command -v runpodctl >/dev/null 2>&1; then
-    echo "[entrypoint] runpodctl not found — installing (fallback)…"
-    curl -fsSL cli.runpod.net | bash >/dev/null 2>&1 || true
-  fi
-  if ! command -v runpodctl >/dev/null 2>&1; then
-    echo "[entrypoint] WARNING: runpodctl unavailable — STOP/REMOVE pod ${pid} MANUALLY to stop billing! (rc=${rc})" >&2
-    return 0
-  fi
-  echo "[entrypoint] sweep finished (rc=${rc}); self-${mode} pod ${pid} to stop billing…"
-  case "${mode}" in
-    remove) runpodctl remove pod "${pid}" 2>/dev/null || runpodctl pod delete "${pid}" 2>/dev/null || true ;;
-    *)      runpodctl stop   pod "${pid}" 2>/dev/null || runpodctl pod stop   "${pid}" 2>/dev/null || true ;;
-  esac
-}
-trap self_terminate EXIT
-
-echo "[entrypoint] starting sweep (SELF_TERMINATE=${SELF_TERMINATE:-stop} on completion)…"
-"${APP}/scripts/bench-run.sh"
+# Dispatch: the wanshi-only PAIRS runner (Phase-1 specialist arc) when PAIRS or
+# RUN_MODE=targeted is set; else the KGGen cross-product sweep (Phase 2, default).
+# Both run under the self_terminate EXIT trap armed above.
+if [ -n "${PAIRS:-}" ] || [ "${RUN_MODE:-}" = "targeted" ]; then
+  echo "[entrypoint] targeted (wanshi-only pairs) → scripts/targeted-run.sh (SELF_TERMINATE=${SELF_TERMINATE:-stop})"
+  "${APP}/scripts/targeted-run.sh"
+else
+  echo "[entrypoint] sweep → scripts/bench-run.sh (SELF_TERMINATE=${SELF_TERMINATE:-stop})"
+  "${APP}/scripts/bench-run.sh"
+fi
