@@ -37,7 +37,7 @@ trap 'kill $MEMPID 2>/dev/null' EXIT
 
 echo "[targeted] START $(date) N=$N RES=$RES" | tee -a "$RES/run.log"
 cd "$REPO"
-echo "[targeted] pulling embeddings ${EMB_MODEL}…" | tee -a "$RES/run.log"
+echo "[targeted] pulling embeddings ${EMB_MODEL}..." | tee -a "$RES/run.log"
 ollama pull "$EMB_MODEL" 2>&1 | tail -1 | tee -a "$RES/run.log"
 
 run_cell() {
@@ -65,7 +65,7 @@ run_cell() {
 
 for pair in $PAIRS; do
   model="${pair%%|*}"; ds="${pair##*|}"
-  echo "[targeted] pulling $model…" | tee -a "$RES/run.log"
+  echo "[targeted] pulling ${model}..." | tee -a "$RES/run.log"
   ollama pull "$model" 2>&1 | tail -1 | tee -a "$RES/run.log"
   ollama show "$model" >/dev/null 2>&1 || { echo "[targeted] MODEL UNRESOLVED: $model — skipping (finding)" | tee -a "$RES/run.log"; continue; }
   for mode in closed vocab; do run_cell "$model" "$ds" "$mode"; done
