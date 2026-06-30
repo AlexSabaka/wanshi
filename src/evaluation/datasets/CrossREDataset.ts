@@ -62,7 +62,9 @@ export class CrossREDataset implements IDatasetLoader {
     const stat = fs.statSync(dataPath);
     if (stat.isDirectory()) {
       return fs.readdirSync(dataPath)
-        .filter(f => f.endsWith('.json'))
+        // Skip dotfiles — macOS AppleDouble `._*.json` sidecars endsWith `.json` and would be
+        // parsed as garbage on Linux (same class of bug as DrugProt's `_abstracs.tsv` match).
+        .filter(f => f.endsWith('.json') && !f.startsWith('.'))
         .sort()
         .map(f => path.join(dataPath, f));
     }

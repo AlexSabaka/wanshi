@@ -13,7 +13,12 @@ done
 echo "packing: ${args[*]}"
 # Pipe tar → zstd (portable): `tar -I 'zstd -19 -T0'` is a GNU-tar-ism that macOS bsdtar
 # parses as a literal program name "zstd -19 -T0" and fails. pipefail catches a tar error.
-tar --no-xattrs -cf - "${args[@]}" | zstd -19 -T0 -o "${OUT}" -f
+# --exclude '._*'/.DS_Store: data/ lives on an exFAT external drive where macOS materializes
+# resource forks as real AppleDouble `._*` sidecar files. `--no-xattrs` does NOT drop them
+# (they're files, not xattrs); unexcluded they leak into the image and break readdir-based
+# loaders on Linux (`._foo.tsv` endsWith `_foo.tsv`, sorts first → 0 samples). See
+# DrugProtDataset.resolveSplitFiles.
+tar --no-xattrs --exclude '._*' --exclude '.DS_Store' -cf - "${args[@]}" | zstd -19 -T0 -o "${OUT}" -f
 ls -lh "${OUT}"
 echo "done → ${OUT}"
 echo "extract: zstd -dc ${OUT} | tar -xf - -C <dest>   (yields data/<set>/…)"

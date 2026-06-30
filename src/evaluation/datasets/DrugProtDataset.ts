@@ -22,7 +22,12 @@ function readTsv(filePath: string): string[][] {
 
 /** Locate the three split TSVs inside a directory by their suffixes. */
 function resolveSplitFiles(dir: string): { abstracts: string; entities: string; relations: string } {
-  const files = fs.readdirSync(dir);
+  // Skip dotfiles — crucially macOS AppleDouble `._*` sidecars, which appear when data/
+  // lives on a non-HFS volume (exFAT external drive) and leak into a tarball. `._foo.tsv`
+  // also endsWith `_foo.tsv`, and on Linux readdir lists it *before* the real file, so an
+  // unfiltered `.find(endsWith)` reads the 4 KB binary sidecar → 0 samples (Linux-only;
+  // macOS readdir order masked it). Pairs with pack-corpora.sh's `--exclude=._*`.
+  const files = fs.readdirSync(dir).filter((f) => !f.startsWith('.'));
   const find = (suffix: string): string => {
     const f = files.find((x) => x.endsWith(suffix));
     if (!f) throw new Error(`DrugProt: no *${suffix} in ${dir}`);
